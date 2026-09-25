@@ -1,0 +1,569 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-25T21:04:01+00:00",
+  "title": "Design System: In-Tray & Tickler",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Label Yellow",
+        "dark": "#f2cf2a",
+        "tonalRamp": [
+          "#1a0500",
+          "#3f1b00",
+          "#5e3b00",
+          "#7f5c00",
+          "#a27f00",
+          "#c6a200",
+          "#ebc700",
+          "#ffef8e"
+        ]
+      },
+      "accent-ink": {
+        "role": "primary",
+        "displayName": "Accent Ink",
+        "dark": "#141414",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "manila": {
+        "role": "secondary",
+        "displayName": "Manila Edge",
+        "dark": "#9a7f45",
+        "tonalRamp": [
+          "#1d0300",
+          "#3a1e00",
+          "#593c00",
+          "#7b5c00",
+          "#9d7e2f",
+          "#c1a154",
+          "#e6c578",
+          "#ffeb9c"
+        ]
+      },
+      "manila-2": {
+        "role": "secondary",
+        "displayName": "Manila Face",
+        "dark": "#2e2a20",
+        "tonalRamp": [
+          "#140900",
+          "#2f2402",
+          "#4d4120",
+          "#6d603e",
+          "#8e815e",
+          "#b2a480",
+          "#d6c8a3",
+          "#fceec7"
+        ]
+      },
+      "manila-ink": {
+        "role": "secondary",
+        "displayName": "Manila Ink",
+        "dark": "#efe0b8",
+        "tonalRamp": [
+          "#160800",
+          "#322200",
+          "#504018",
+          "#705f38",
+          "#928058",
+          "#b5a37a",
+          "#dac79d",
+          "#ffedc1"
+        ]
+      },
+      "tape": {
+        "role": "secondary",
+        "displayName": "Label Tape",
+        "dark": "#0a0a0b",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "tape-ink": {
+        "role": "secondary",
+        "displayName": "Tape Caps",
+        "dark": "#efeee9",
+        "tonalRamp": [
+          "#0b0b08",
+          "#252522",
+          "#42423e",
+          "#61615d",
+          "#83837e",
+          "#a5a5a1",
+          "#c9c9c5",
+          "#efefea"
+        ]
+      },
+      "stamp": {
+        "role": "tertiary",
+        "displayName": "Rubber-Stamp Red",
+        "dark": "#ec6d57",
+        "tonalRamp": [
+          "#2d0000",
+          "#5f0000",
+          "#860000",
+          "#ad2a16",
+          "#d5513b",
+          "#fe765e",
+          "#ff9b81",
+          "#ffd0bc"
+        ]
+      },
+      "pen": {
+        "role": "tertiary",
+        "displayName": "Pen Navy",
+        "dark": "#e3dccb",
+        "tonalRamp": [
+          "#040822",
+          "#1b2340",
+          "#374060",
+          "#556081",
+          "#7681a4",
+          "#98a4c9",
+          "#bbc8ee",
+          "#e0edff"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Office Paper",
+        "dark": "#16171a",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#242526",
+          "#414243",
+          "#606162",
+          "#818383",
+          "#a3a5a6",
+          "#c7c9ca",
+          "#edeff0"
+        ]
+      },
+      "sheet": {
+        "role": "neutral",
+        "displayName": "Fresh Sheet",
+        "dark": "#1c1d21",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242526",
+          "#414243",
+          "#606162",
+          "#818283",
+          "#a4a5a6",
+          "#c8c9ca",
+          "#edeeef"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "dark": "#eae8e1",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#242527",
+          "#414244",
+          "#606164",
+          "#818285",
+          "#a4a5a8",
+          "#c8c9cc",
+          "#edeef1"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Ink Secondary",
+        "dark": "#b9bbbd",
+        "tonalRamp": [
+          "#080b10",
+          "#21252b",
+          "#3e4248",
+          "#5d6268",
+          "#7d8389",
+          "#a0a6ad",
+          "#c4cad1",
+          "#e9eff7"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Ink Tertiary",
+        "dark": "#93979c",
+        "tonalRamp": [
+          "#080b10",
+          "#21252b",
+          "#3e4249",
+          "#5d6268",
+          "#7e838a",
+          "#a0a5ad",
+          "#c4cad1",
+          "#e9eff7"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "dark": "#2b2d32",
+        "tonalRamp": [
+          "#0a0c0a",
+          "#242623",
+          "#414240",
+          "#60625f",
+          "#818380",
+          "#a4a6a3",
+          "#c8cac7",
+          "#edefec"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Rule Strong",
+        "dark": "#3d4046",
+        "tonalRamp": [
+          "#090c0a",
+          "#232624",
+          "#404340",
+          "#5f6260",
+          "#808381",
+          "#a2a6a3",
+          "#c6cac7",
+          "#ebf0ed"
+        ]
+      },
+      "steel": {
+        "role": "neutral",
+        "displayName": "Steel Drawer",
+        "dark": "#202226",
+        "tonalRamp": [
+          "#0a0c0b",
+          "#232625",
+          "#404342",
+          "#5f6261",
+          "#808382",
+          "#a3a6a5",
+          "#c7cac9",
+          "#ecefee"
+        ]
+      },
+      "steel-2": {
+        "role": "neutral",
+        "displayName": "Steel Shade",
+        "dark": "#2c2f35",
+        "tonalRamp": [
+          "#090c0b",
+          "#232625",
+          "#3f4342",
+          "#5f6261",
+          "#7f8382",
+          "#a2a6a5",
+          "#c6cac9",
+          "#ebefee"
+        ]
+      },
+      "steel-ink": {
+        "role": "neutral",
+        "displayName": "Steel Ink",
+        "dark": "#d6d7d6",
+        "tonalRamp": [
+          "#090b0f",
+          "#222529",
+          "#3f4246",
+          "#5e6166",
+          "#7f8387",
+          "#a2a5aa",
+          "#c6c9cf",
+          "#ebeff4"
+        ]
+      },
+      "tick": {
+        "role": "neutral",
+        "displayName": "Tick Grey",
+        "dark": "#262e37",
+        "tonalRamp": [
+          "#080c0e",
+          "#222628",
+          "#3f4346",
+          "#5e6265",
+          "#7e8387",
+          "#a1a6a9",
+          "#c5cace",
+          "#eaeff3"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "View titles only."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Detail title field, empty-state titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Rows, fields, rail, detail text; tabular numerals."
+      },
+      "body-sheet": {
+        "displayName": "Body Sheet",
+        "purpose": "Captured text on the Clarify source sheet, max 68ch."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "Meta, counts, status line."
+      },
+      "label-tape": {
+        "displayName": "Label Tape",
+        "purpose": "Label-maker tape, small."
+      },
+      "label-tape-md": {
+        "displayName": "Label Tape (md)",
+        "purpose": "Label-maker tape for section and tray labels."
+      },
+      "label-caps": {
+        "displayName": "Label Caps",
+        "purpose": "Column heads, pane heads, field labels, plain group labels (12-13px, 0.06-0.08em, uppercase)."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "In-tray count (30px; 22px mobile) and review tallies (40px)."
+      }
+    },
+    "shadows": [
+      {
+        "name": "tape-drop",
+        "value": "0 1px 1.5px rgb(0 0 0 / 0.28)",
+        "purpose": "The only lift under tape and the current review step."
+      },
+      {
+        "name": "folder-collar",
+        "value": "0 1px 1.5px rgb(0 0 0 / 0.28), 0 0 0 5px var(--manila)",
+        "purpose": "Tape on a folder tab, sitting in a flat manila collar."
+      },
+      {
+        "name": "float",
+        "value": "0 10px 28px rgb(20 22 26 / 0.16), 0 2px 5px rgb(20 22 26 / 0.08)",
+        "purpose": "Pickers, palette, help, open capture, mobile detail sheet. Dark: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35)."
+      },
+      {
+        "name": "sheet-stack",
+        "value": "0 1px 0 var(--rule), 0 3px 0 -1px var(--sheet), 0 4px 0 -1px var(--rule), 0 6px 12px -6px rgb(0 0 0 / 0.15)",
+        "purpose": "Clarify source sheet drawn as stacked paper edges."
+      },
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 2px var(--accent)",
+        "purpose": "Input and control focus, paired with an ink border."
+      },
+      {
+        "name": "cursor-ring",
+        "value": "inset 0 0 0 2px var(--ink)",
+        "purpose": "Keyboard cursor on rail items and group heads."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Default out-expo ease for every state transition."
+      },
+      {
+        "name": "strike",
+        "value": "200ms",
+        "purpose": "Pen line drawn through a subject when marked done."
+      },
+      {
+        "name": "fold",
+        "value": "180ms ease-in, 190ms delay",
+        "purpose": "Done row fades and slides 8px away after the strike."
+      },
+      {
+        "name": "pen-loop",
+        "value": "380ms",
+        "purpose": "Flag circle draws itself around the marker."
+      },
+      {
+        "name": "tick",
+        "value": "220ms",
+        "purpose": "Done tick draws in the marker."
+      },
+      {
+        "name": "pop",
+        "value": "140ms (picker), 160ms (palette, help)",
+        "purpose": "Floating surfaces fade and rise 4px."
+      },
+      {
+        "name": "scrim",
+        "value": "120ms ease-out",
+        "purpose": "Overlay scrim fade."
+      },
+      {
+        "name": "sheet-drop",
+        "value": "260ms, 30ms stagger",
+        "purpose": "Sheets drop into the in-tray drawing."
+      },
+      {
+        "name": "status-note",
+        "value": "180ms",
+        "purpose": "Status-line note rises in."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "1ms",
+        "purpose": "All animation and transition durations under prefers-reduced-motion: reduce."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow",
+        "value": "820px",
+        "purpose": "Rail becomes a strip, grid drops to marker/subject/date, detail becomes a bottom sheet."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Label Tape",
+      "kind": "chip",
+      "refersTo": "tape",
+      "description": "Black tape naming folder tabs, areas and page-level sections; md size for section heads.",
+      "html": "<span class=\"ds-tape\">Garage converted to a workshop</span> <span class=\"ds-tape ds-tape-md\">Export</span>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-tape{display:inline-block;font-family:var(--font-label);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;line-height:1;white-space:nowrap;border-radius:1.5px;background:var(--tape);color:var(--tape-ink);box-shadow:0 1px 1.5px rgb(0 0 0 / 0.28);font-size:11.5px;padding:3px 7px;}.ds-tape-md{font-size:14px;padding:4px 9px;}"
+    },
+    {
+      "name": "Rail",
+      "kind": "nav",
+      "refersTo": "rail",
+      "description": "Steel drawer: only the current list wears yellow tape, the rest are plain text with counts.",
+      "html": "<nav class=\"ds-rail\"><button class=\"ds-rail-item\"><span class=\"ds-tape ds-tape-yellow\">Next Actions</span><span class=\"ds-meta\">14</span></button><button class=\"ds-rail-item\"><span class=\"ds-name\">Projects</span><span class=\"ds-meta\"><span class=\"ds-stamp\">1 stalled</span> 7</span></button><button class=\"ds-rail-item\"><span class=\"ds-name\">Waiting For</span><span class=\"ds-meta\">3</span></button><button class=\"ds-rail-item\"><span class=\"ds-name\">Weekly Review</span><span class=\"ds-meta ds-due\">never</span></button></nav>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-tape{display:inline-block;font-family:var(--font-label);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;line-height:1;white-space:nowrap;border-radius:1.5px;background:var(--tape);color:var(--tape-ink);box-shadow:0 1px 1.5px rgb(0 0 0 / 0.28);font-size:11.5px;padding:3px 7px;}.ds-tape-yellow{background:var(--accent);color:var(--accent-ink);}.ds-rail{width:212px;background:var(--steel);color:var(--steel-ink);padding:14px 10px;display:flex;flex-direction:column;gap:1px;font:13px/1.4 var(--font-ui);border-right:1px solid var(--steel-2);}.ds-rail-item{display:flex;align-items:center;justify-content:space-between;gap:8px;height:30px;padding:0 8px;border:0;border-radius:3px;background:none;color:inherit;font:inherit;cursor:pointer;text-align:left;}.ds-rail-item:hover{background:var(--steel-2);}.ds-rail-item:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--ink);background:var(--steel-2);}.ds-name{font-weight:500;}.ds-meta{display:flex;align-items:center;gap:6px;color:var(--ink-2);font-size:12px;font-variant-numeric:tabular-nums;}.ds-due{color:var(--stamp);font-weight:600;}.ds-stamp{font-family:var(--font-label);font-weight:700;font-size:10px;line-height:1;letter-spacing:0.1em;text-transform:uppercase;color:var(--stamp);border:1.5px solid currentColor;border-radius:2px;padding:1px 3px 0;}"
+    },
+    {
+      "name": "Grid Row",
+      "kind": "custom",
+      "refersTo": "grid-row",
+      "description": "30px working row: marker, subject, context underline code, due date, energy; focused row fills label yellow.",
+      "html": "<div class=\"ds-grid\"><div class=\"ds-row\" tabindex=\"0\"><span class=\"ds-mk\"></span><span class=\"ds-subj\">Email Per the shredder throughput numbers</span><span class=\"ds-ctx\" style=\"--ctx:#2f6fb0\">@computer</span><span class=\"ds-date ds-over\">Yesterday</span><span class=\"ds-en\"><i class=\"on\"></i><i class=\"on\"></i><i></i></span></div><div class=\"ds-row ds-focus\" tabindex=\"0\"><span class=\"ds-mk\"></span><span class=\"ds-subj\">Book the lab for the regrind trial</span><span class=\"ds-ctx\" style=\"--ctx:#c0392b\">@phone</span><span class=\"ds-date\">–</span><span class=\"ds-en\"><i class=\"on\"></i><i></i><i></i></span></div></div>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-grid{background:var(--paper);color:var(--ink);font:13px/1.4 var(--font-ui);font-variant-numeric:tabular-nums;}.ds-row{display:grid;grid-template-columns:30px minmax(220px,1fr) 112px 84px 48px;align-items:center;height:30px;border-bottom:1px solid var(--rule);padding:0 8px 0 4px;outline:none;}.ds-row:hover{background:color-mix(in srgb,var(--steel) 45%,transparent);}.ds-row:focus-visible,.ds-focus{background:var(--accent);color:var(--accent-ink);}.ds-mk{width:8.4px;height:8.4px;border:1.25px solid var(--ink-3);border-radius:50%;margin-left:6px;}.ds-subj{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.ds-ctx{text-decoration:underline;text-decoration-color:var(--ctx);text-decoration-thickness:2px;text-underline-offset:4px;}.ds-date.ds-over{color:var(--stamp);font-weight:650;}.ds-focus .ds-date.ds-over,.ds-row:focus-visible .ds-date.ds-over{color:var(--accent-ink);text-decoration:underline 2px;}.ds-en{display:inline-flex;gap:2px;}.ds-en i{width:5px;height:12px;background:var(--rule);border-radius:0.5px;}.ds-en i.on{background:var(--ink-2);}.ds-focus .ds-en i,.ds-row:focus-visible .ds-en i{background:rgb(0 0 0 / 0.12);}.ds-focus .ds-en i.on,.ds-row:focus-visible .ds-en i.on{background:var(--accent-ink);}"
+    },
+    {
+      "name": "Folder Tab",
+      "kind": "custom",
+      "refersTo": "folder-tab",
+      "description": "Project group head: manila band with the project's black tape raised in a manila collar.",
+      "html": "<div class=\"ds-folder\" tabindex=\"0\"><span class=\"ds-chev\"></span><span class=\"ds-tape\">Passports renewed before the Lisbon trip</span><span class=\"ds-count\">2</span></div>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-tape{display:inline-block;font-family:var(--font-label);font-weight:600;text-transform:uppercase;letter-spacing:0.07em;line-height:1;white-space:nowrap;border-radius:1.5px;background:var(--tape);color:var(--tape-ink);box-shadow:0 1px 1.5px rgb(0 0 0 / 0.28);font-size:11.5px;padding:3px 7px;}.ds-folder{display:flex;align-items:center;gap:8px;height:34px;margin-top:18px;padding:0 8px;background:var(--manila-2);border-top:1px solid var(--manila);border-bottom:1px solid color-mix(in srgb,var(--manila) 60%,var(--rule-strong));font:13px/1.4 var(--font-ui);outline:none;}.ds-folder:focus-visible{box-shadow:inset 0 0 0 2px var(--ink),inset 0 0 0 4px var(--accent);}.ds-folder .ds-tape{position:relative;top:-9px;border-radius:1px;box-shadow:0 1px 1.5px rgb(0 0 0 / 0.28),0 0 0 5px var(--manila);}.ds-count{color:var(--manila-ink);font-size:12px;}.ds-chev{width:8px;height:8px;border-right:1.5px solid var(--ink-2);border-bottom:1.5px solid var(--ink-2);transform:rotate(45deg) translate(-2px,-1px);}"
+    },
+    {
+      "name": "Capture Line",
+      "kind": "input",
+      "refersTo": "input-capture",
+      "description": "Always-available capture field in the 44px top bar; ink border and yellow ring on focus.",
+      "html": "<textarea class=\"ds-capture\" rows=\"1\" placeholder=\"Capture anything\"></textarea>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-capture{display:block;width:100%;min-height:30px;resize:none;padding:5px 10px;background:var(--sheet);color:var(--ink);border:1px solid var(--rule-strong);border-radius:3px;font:13px/18px var(--font-ui);transition:box-shadow 150ms var(--ease),border-color 150ms;}.ds-capture::placeholder{color:var(--ink-3);}.ds-capture:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 2px var(--accent);}"
+    },
+    {
+      "name": "Field Pick",
+      "kind": "input",
+      "refersTo": "field-pick",
+      "description": "Detail-pane field that opens a picker; paper well at rest, ink border and yellow ring on focus.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-lbl\">Context</span><button class=\"ds-pick\">@computer</button></label>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-field{display:flex;flex-direction:column;gap:3px;width:180px;font:13px/1.4 var(--font-ui);color:var(--ink);}.ds-lbl{font-family:var(--font-label);font-weight:600;font-size:11.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);}.ds-pick{height:28px;display:flex;align-items:center;padding:0 8px;border:1px solid var(--rule);border-radius:3px;background:var(--paper);color:inherit;font:inherit;text-align:left;cursor:pointer;}.ds-pick:hover{border-color:var(--rule-strong);}.ds-pick:focus-visible{outline:none;border-color:var(--ink);box-shadow:0 0 0 2px var(--accent);}"
+    },
+    {
+      "name": "Picker",
+      "kind": "custom",
+      "refersTo": "picker",
+      "description": "Floating option picker: sheet card, float shadow, 140ms pop; highlighted option fills yellow.",
+      "html": "<div class=\"ds-picker\"><div class=\"ds-pt\">Context</div><input class=\"ds-pi\" value=\"@\"><ul class=\"ds-pl\"><li class=\"is-hi\">@computer</li><li>@phone</li><li>@errands</li></ul></div>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-picker{width:300px;background:var(--sheet);color:var(--ink);border:1px solid var(--rule-strong);border-radius:4px;box-shadow:var(--shadow);padding:8px;font:13px/1.4 var(--font-ui);animation:ds-pop 140ms var(--ease) both;}@keyframes ds-pop{from{opacity:0;transform:translateY(-4px);}}.ds-pt{font-family:var(--font-label);font-weight:600;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);margin:0 2px 6px;}.ds-pi{width:100%;height:30px;padding:0 8px;border:1px solid var(--ink);border-radius:3px;background:var(--paper);color:inherit;font:inherit;outline:none;box-shadow:0 0 0 2px var(--accent);}.ds-pl{list-style:none;margin:6px 0 0;padding:0;}.ds-pl li{display:flex;align-items:center;height:28px;padding:0 8px;border-radius:2px;}.ds-pl li:hover,.ds-pl li.is-hi{background:var(--accent);color:var(--accent-ink);}"
+    },
+    {
+      "name": "Rubber Stamp",
+      "kind": "chip",
+      "refersTo": "stamp",
+      "description": "Upright outlined condensed-caps mark; red for stalled, ink-3 for neutral statuses.",
+      "html": "<span class=\"ds-stamp\">Stalled</span> <span class=\"ds-stamp ds-muted\">Someday</span>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-stamp{display:inline-block;font-family:var(--font-label);font-weight:700;font-size:11px;line-height:1;letter-spacing:0.1em;text-transform:uppercase;color:var(--stamp);border:1.5px solid currentColor;border-radius:2px;padding:2px 4px 1px;}.ds-muted{color:var(--ink-3);}"
+    },
+    {
+      "name": "Status Line",
+      "kind": "custom",
+      "refersTo": "status-line",
+      "description": "26px steel footer: action note with the pinned ⌘Z undo suffix on the left, standing facts on the right.",
+      "html": "<footer class=\"ds-status\"><span class=\"ds-msg\">Marked done <span class=\"ds-undo\"><kbd class=\"ds-kbd\">⌘Z</kbd> undo</span></span><span class=\"ds-facts\"><span>2 flagged for today</span><span class=\"ds-warn\">No Claude API key</span></span></footer>",
+      "css": ":host{--paper:#f3f5f6;--sheet:#fbfcfd;--ink:#17181a;--ink-2:#474c52;--ink-3:#686d74;--rule:#dcdedb;--rule-strong:#bcc0bd;--steel:#dde0df;--steel-2:#cdd1d0;--steel-ink:#2b2e32;--manila:#d9b86b;--manila-2:#f1e3bd;--manila-ink:#4a3a12;--tape:#151515;--tape-ink:#f3f3ee;--accent:#f6d21b;--accent-ink:#141414;--tick:#e2e7eb;--stamp:#b3301c;--pen:#1b2340;--shadow:0 10px 28px rgb(20 22 26 / 0.16),0 2px 5px rgb(20 22 26 / 0.08);--font-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;--font-label:'Barlow Condensed','Arial Narrow','Helvetica Neue',sans-serif;--ease:cubic-bezier(0.16,1,0.3,1);} .ds-status{display:flex;align-items:center;justify-content:space-between;gap:16px;height:26px;padding:0 14px;background:var(--steel);border-top:1px solid var(--steel-2);font:12px/1.4 var(--font-ui);color:var(--steel-ink);}.ds-msg{display:flex;align-items:center;gap:10px;}.ds-undo{display:inline-flex;align-items:center;gap:4px;color:var(--ink-2);}.ds-kbd{display:inline-block;min-width:20px;padding:0 4px;font:600 10px/14px var(--font-ui);text-align:center;color:var(--ink);background:var(--sheet);border:1px solid var(--rule-strong);border-bottom-width:2px;border-radius:3px;}.ds-facts{display:flex;gap:14px;color:var(--ink-2);}.ds-warn{color:var(--stamp);font-weight:600;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Desk Kit Grid",
+    "overview": "The app is a GTD paper desk kit rebuilt as a keyboard grid. The Inbox is a wire in-tray whose stacked sheet edges scale with the count. Projects and groups are manila folders. Lists, projects and areas carry label-maker tape. Done is a pen stroke. Flagged-for-today is a hand-drawn pen circle. The metaphor lives in colour, condensed caps and a handful of drawn marks, never in paper texture, so density always wins. Rows are 30px, the body type is 13px, and a 1440 viewport holds more than twenty working rows.\n\nThe ground is cool office white and the ink is near-black. Steel grey carries the rail, the status line, rules and secondary text. Manila appears only on folder surfaces. One label-yellow accent marks where the owner is: the focused row, the active control, the current list and input focus rings. Rubber-stamp red is kept for states that need attention. The dark theme is a graphite desk at night. It keeps every role and follows `prefers-color-scheme`.\n\nThe build rejects the category default of an airy sidebar, rounded cards and a blue accent. Surfaces are flat, corners stay between 1.5 and 5px, and elevation is used only for things that float above the grid.",
+    "keyCharacteristics": [
+      "Dense, keyboard-driven grid: 30px rows, 13px system type, tabular numerals everywhere.",
+      "Label-maker tape (Barlow Condensed caps on black) names lists, projects, areas and page sections.",
+      "One yellow accent, used only to show position and focus.",
+      "Physical marks are drawn, not textured: pen circle, pen strike, wire tray, rubber stamp.",
+      "Light office-white and graphite-dark themes, both designed in their own right."
+    ],
+    "rules": [
+      {
+        "name": "The One Label Rule",
+        "body": "Label yellow means \"you are here\". It is reserved for the focused row, the active control, the current list and input focus rings. Region focus is shown on the focused element itself, never by painting a pane. A grid that loses region focus keeps its cursor row in steel (`steel-2`), not yellow.",
+        "section": "colors"
+      },
+      {
+        "name": "The Stamp Means Trouble Rule",
+        "body": "Stamp red is semantic only: overdue, stalled, chase, errors. It is never decoration and never a brand colour. When the stamp shape marks a neutral status (Someday, Done), it switches to `ink-3`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Context Code Rule",
+        "body": "Each context has its own colour, and that colour appears only as a 2px underline under the context name (offset 4px). Context colours never fill rows, cells or chips.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Condensed caps name things, and the system face says things. Barlow never sets a sentence or an editable value. The system face is never tracked out into caps.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Tape Rule",
+        "body": "Tape and folder surfaces are flat colour: no sheen gradients, no text-shadow emboss, no bevels. Their physical feel comes from colour, condensed caps, tracking and the soft 0 1px 1.5px drop only.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** reserve label yellow (`accent`) for the focused row, the active control, the current list and input focus rings, with `accent-ink` text on it.",
+      "**Do** tape only the current list in the rail (yellow). Folder tabs, areas and page-level section labels carry black tape.",
+      "**Do** show region focus on the focused element (yellow row, ink cursor ring) and demote an inactive grid's cursor row to `steel-2`.",
+      "**Do** keep rows at 30px, body at 13px, and numerals tabular.",
+      "**Do** set names in Barlow Condensed caps with 0.06–0.08em tracking, and everything readable in the system face.",
+      "**Do** draw state as a mark: pen circle for flagged, pen strike for done, upright stamp for stalled, a 2px underline for context.",
+      "**Do** design both themes: office white (`paper`, `sheet`) by day, graphite by night, switched by `prefers-color-scheme`.",
+      "**Do** honour `prefers-reduced-motion` for every animation and transition."
+    ],
+    "donts": [
+      "**Don't** paint a pane or region yellow to show it has focus.",
+      "**Don't** tape every rail entry. Tape marks position, and taping all of them drowns the signal.",
+      "**Don't** add sheen gradients, text-shadow emboss or bevels to tape or folders. The only lift is `0 1px 1.5px rgb(0 0 0 / 0.28)`.",
+      "**Don't** use stamp red decoratively, and don't rotate stamps.",
+      "**Don't** fill rows, cells or chips with context colours.",
+      "**Don't** print key hints on controls or in empty states. Keys are discovered through ⌘K and ⇧?; the only pinned exception is \"⌘Z undo\" on status-line action notes.",
+      "**Don't** add paper texture, airy card layouts, large radii or a blue accent. Density beats decoration."
+    ]
+  }
+}

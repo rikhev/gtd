@@ -1,0 +1,37 @@
+[Unit]
+Description=In-Tray (GTD)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gtd
+Group=gtd
+WorkingDirectory=/opt/gtd
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=8787
+Environment=GTD_DATA_DIR=/var/lib/gtd
+Environment=GTD_ENV_FILE=/var/lib/gtd/.env
+ExecStart=/usr/bin/node --env-file-if-exists=/var/lib/gtd/.env --import tsx server/index.ts
+Restart=on-failure
+RestartSec=3
+
+# Hardening: the app can write only to its data directory.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/gtd
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

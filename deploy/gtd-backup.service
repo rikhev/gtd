@@ -1,0 +1,16 @@
+[Unit]
+Description=In-Tray nightly backup
+
+[Service]
+Type=oneshot
+User=gtd
+Group=gtd
+WorkingDirectory=/opt/gtd
+Environment=GTD_DATA_DIR=/var/lib/gtd
+ExecStart=/usr/bin/node scripts/backup.mjs
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/gtd
+PrivateTmp=yes
+UMask=0077

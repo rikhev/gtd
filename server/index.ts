@@ -1,0 +1,224 @@
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
+import { randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
+import { applyOps, db, FILES_DIR, insertRow, loadState, now, patchRow } from "./db.ts";
+import { extract, guessMime, looksLikeEmail } from "./extract.ts";
+import { analyzeReview, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
+import { exportJson, exportZip } from "./export.ts";
+import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
+import { today } from "../shared/dates.ts";
+import type { FileRow, Op } from "../shared/types.ts";
+
+const app = new Hono();
+
+app.use("*", guard);
+app.get("/api/auth/me", me);
+app.post("/api/auth/login", login);
+app.post("/api/auth/logout", (c) => logout(c));
+app.post("/api/auth/logout-all", (c) => logout(c, true));
+
+/** Tickler: anything whose bring-back date has arrived returns to the inbox as fresh stuff. */
+function runTickler() {
+  const t = today();
+  const s = loadState();
+  const ops: Op[] = [];
+  const back = (title: string, notes: string, fromKind: string, id: string) => {
+    const sid = randomUUID();
+    ops.push({
+      type: "create",
+      table: "stuff",
+      row: { id: sid, text: notes ? `${title}\n\n${notes}` : title, kind: "text", status: "inbox", created_at: now() },
+    });
+    for (const f of s.files.filter((f) => f.owner_kind === fromKind && f.owner_id === id)) {
+      ops.push({ type: "patch", table: "files", id: f.id, data: { owner_kind: "stuff", owner_id: sid } });
+    }
+  };
+  for (const a of s.actions) {
+    if (a.bring_back && a.bring_back <= t && ["next", "waiting", "someday"].includes(a.status)) {
+      back(a.title, a.notes, "action", a.id);
+      ops.push({ type: "patch", table: "actions", id: a.id, data: { status: "trashed", bring_back: null } });
+    }
+  }
+  for (const p of s.projects) {
+    if (p.bring_back && p.bring_back <= t && ["active", "someday"].includes(p.status)) {
+      // Projects come back as a reminder; their actions stay put.
+      back(`Revisit project: ${p.title}`, p.outcome, "none", p.id);
+      ops.push({ type: "patch", table: "projects", id: p.id, data: { bring_back: null } });
+    }
+  }
+  if (ops.length) applyOps(ops);
+}
+
+app.get("/api/state", (c) => {
+  runTickler();
+  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today() } });
+});
+
+app.put("/api/settings/key", async (c) => {
+  const { key } = (await c.req.json().catch(() => ({}))) as { key?: string };
+  const result = await setApiKey(key ?? "");
+  return c.json({ ...result, hasKey: hasCredentials(), keyHint: keyHint() }, result.ok ? 200 : 400);
+});
+
+app.delete("/api/settings/key", (c) => {
+  clearApiKey();
+  return c.json({ ok: true, hasKey: hasCredentials(), keyHint: keyHint() });
+});
+
+app.post("/api/ops", async (c) => {
+  const { ops } = (await c.req.json()) as { ops: Op[] };
+  try {
+    applyOps(ops);
+    for (const op of ops) {
+      // Editing a captured item invalidates Claude's cached proposal for it.
+      if (op.table === "stuff" && op.type !== "create") forgetProposal(op.id);
+    }
+    return c.json({ ok: true });
+  } catch (e) {
+    return c.json({ ok: false, error: (e as Error).message }, 400);
+  }
+});
+
+app.post("/api/upload", async (c) => {
+  const body = await c.req.parseBody({ all: true });
+  const raw = body["file"];
+  const list = (Array.isArray(raw) ? raw : [raw]).filter((f): f is File => f instanceof File);
+  const ownerKind = (body["owner_kind"] as string) || null;
+  const ownerId = (body["owner_id"] as string) || null;
+  const created: { stuff: unknown[]; files: FileRow[] } = { stuff: [], files: [] };
+  for (const file of list) {
+    const buf = Buffer.from(await file.arrayBuffer());
+    const mime = guessMime(file.name, file.type);
+    const ex = await extract(file.name, mime, buf);
+    const fid = randomUUID();
+    writeFileSync(`${FILES_DIR}/${fid}`, buf);
+    let owner_kind = ownerKind as FileRow["owner_kind"] | null;
+    let owner_id = ownerId;
+    if (!owner_kind || !owner_id) {
+      const sid = randomUUID();
+      const row = { id: sid, text: ex.title, kind: ex.kind, status: "inbox", created_at: now(), processed_at: null };
+      insertRow("stuff", row);
+      created.stuff.push(row);
+      owner_kind = "stuff";
+      owner_id = sid;
+    }
+    const frow: FileRow = {
+      id: fid,
+      name: file.name,
+      mime,
+      size: buf.length,
+      preview: ex.text,
+      owner_kind,
+      owner_id,
+      created_at: now(),
+    };
+    insertRow("files", frow as unknown as Record<string, unknown>);
+    created.files.push(frow);
+  }
+  return c.json(created);
+});
+
+app.post("/api/capture", async (c) => {
+  const { text, id } = (await c.req.json()) as { text: string; id?: string };
+  const row = {
+    id: id ?? randomUUID(),
+    text: text.trim(),
+    kind: looksLikeEmail(text) ? "email" : "text",
+    status: "inbox",
+    created_at: now(),
+    processed_at: null,
+  };
+  insertRow("stuff", row);
+  return c.json(row);
+});
+
+app.get("/api/files/:id", (c) => {
+  const id = c.req.param("id");
+  const row = db.prepare("SELECT * FROM files WHERE id = ?").get(id) as FileRow | undefined;
+  const path = `${FILES_DIR}/${id}`;
+  if (!row || !existsSync(path)) return c.text("File not found", 404);
+  const inline = row.mime.startsWith("image/") || row.mime === "application/pdf" || row.mime.startsWith("text/");
+  return c.body(readFileSync(path), 200, {
+    "Content-Type": row.mime,
+    "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(row.name)}"`,
+  });
+});
+
+app.delete("/api/files/:id", (c) => {
+  const id = c.req.param("id");
+  db.prepare("DELETE FROM files WHERE id = ?").run(id);
+  const path = `${FILES_DIR}/${id}`;
+  if (existsSync(path)) unlinkSync(path);
+  return c.json({ ok: true });
+});
+
+app.post("/api/clarify", async (c) => {
+  const { fresh } = (await c.req.json().catch(() => ({}))) as { fresh?: boolean };
+  const job = startClarify(Boolean(fresh));
+  return c.json(jobStatus(job.id));
+});
+
+app.get("/api/clarify/:id", (c) => {
+  const s = jobStatus(c.req.param("id"));
+  return s ? c.json(s) : c.json({ error: "gone" }, 404);
+});
+
+app.post("/api/rules/suggest", async (c) => {
+  try {
+    return c.json({ rules: await suggestRules() });
+  } catch (e) {
+    return c.json({ error: describeError(e) }, 502);
+  }
+});
+
+app.post("/api/review/analyze", async (c) => {
+  try {
+    return c.json({ flags: await analyzeReview() });
+  } catch (e) {
+    return c.json({ error: describeError(e) }, 502);
+  }
+});
+
+app.post("/api/review/complete", (c) => {
+  const row = { id: randomUUID(), completed_at: now() };
+  insertRow("reviews", row);
+  return c.json(row);
+});
+
+app.patch("/api/stuff/:id/processed", (c) => {
+  patchRow("stuff", c.req.param("id"), { status: "processed", processed_at: now() });
+  forgetProposal(c.req.param("id"));
+  return c.json({ ok: true });
+});
+
+app.get("/api/export/json", (c) =>
+  c.body(exportJson(), 200, {
+    "Content-Type": "application/json",
+    "Content-Disposition": `attachment; filename="gtd-${today()}.json"`,
+  }),
+);
+
+app.get("/api/export/zip", (c) =>
+  c.body(Buffer.from(exportZip()), 200, {
+    "Content-Type": "application/zip",
+    "Content-Disposition": `attachment; filename="gtd-${today()}.zip"`,
+  }),
+);
+
+if (process.env.NODE_ENV === "production") {
+  app.use("/*", serveStatic({ root: "./dist" }));
+  app.get("*", (c) => c.html(readFileSync("./dist/index.html", "utf8")));
+}
+
+const port = Number(process.env.PORT ?? (process.env.NODE_ENV === "production" ? 8787 : 5174));
+const hostname = process.env.HOST ?? "127.0.0.1";
+if (authRequired() && !readAuth()) {
+  console.warn("[auth] Login is required but not set up. Run: npm run auth:setup");
+}
+serve({ fetch: app.fetch, port, hostname }, () => {
+  console.log(
+    `GTD on http://${hostname}:${port}  ·  login ${authRequired() ? "required" : "off (local mode)"}  ·  ${hasCredentials() ? "Claude key set" : "no Claude API key yet: add one in Settings"}`,
+  );
+});
