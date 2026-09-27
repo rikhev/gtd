@@ -3,3 +3,4 @@ dist
 data
 .env
 data-demo
+.impeccable/hook.cache.json
