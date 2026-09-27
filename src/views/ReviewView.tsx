@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
-import { completeActions, isChase, isStalled, lastReview, projectHealth, mutate, newAction, patchMany, plural, useMeta, useStore, load, notify } from "../store.ts";
+import { completeActions, isChase, isStale, isStalled, lastReview, projectHealth, mutate, newAction, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { runWhenReady, useCommands, type Command } from "../keys.ts";
@@ -8,7 +7,7 @@ import { Grid, useListNav, type Column } from "../components/Grid.tsx";
 import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tape } from "../components/bits.tsx";
 import { editors } from "../actionCommands.tsx";
 import { addDays, formatLong, today, daysBetween } from "../../shared/dates.ts";
-import type { ID, ReviewFlag } from "../../shared/types.ts";
+import type { Action, ID } from "../../shared/types.ts";
 
 const STEPS = [
   { id: "clear", title: "Get clear", note: "Empty the Inbox so nothing is floating around." },
@@ -28,7 +27,8 @@ interface Row {
   title: string;
   info: string;
   date: string | null;
-  flag?: ReviewFlag;
+  /** A built-in check that needs attention: stalled, overdue, untouched, follow-up due, due back. */
+  note?: string;
 }
 
 export function ReviewView({ regionActive }: { regionActive: boolean }) {
@@ -43,11 +43,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       saveSession(next);
       return next;
     });
-  const { stepIdx, flags, flagError } = sess;
-  const dismissed = useMemo(() => new Set(sess.dismissed), [sess.dismissed]);
+  const { stepIdx } = sess;
   const visited = useMemo(() => new Set(sess.visited), [sess.visited]);
   const setStepIdx = (n: number) => update({ stepIdx: n });
-  const dismiss = (id: string) => update({ dismissed: [...sess.dismissed, id] });
   const step = STEPS[stepIdx];
   const t = today();
   // A step is only struck through once it has been visited and nothing in it is left open.
@@ -65,19 +63,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     });
   }, [step.id, regionActive]);
 
-  // Claude only checks the lists when asked (⇧K): no Claude call ever starts on its own.
-  const [checking, setChecking] = useState(false);
-  const askClaude = () => {
-    if (checking) return;
-    setChecking(true);
-    update({ flagError: null });
-    fetch("/api/review/analyze", { method: "POST" })
-      .then((r) => r.json())
-      .then((j) => (j.error ? update({ flagError: j.error.message }) : update({ flags: j.flags, dismissed: [], flagError: null })))
-      .catch((e) => update({ flagError: (e as Error).message }))
-      .finally(() => setChecking(false));
-  };
-
   const startOver = () => {
     const fresh = newSession();
     saveSession(fresh);
@@ -92,7 +77,18 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     const waiting = mine.find((a) => a.status === "waiting");
     return waiting ? `Waiting · ${waiting.waiting_who ?? "someone"}` : "";
   };
-  const flagFor = (id: ID) => flags?.find((f) => f.id === id && !dismissed.has(f.id));
+  // The review's checks are built in (no Claude): each returns a short note, or nothing when all is well.
+  const weeks = meta.stallWeeks;
+  const projectNote = (p: (typeof s.projects)[number]) => {
+    const r = stallReason(s, p);
+    return r === "no-next" ? "Stalled: no next action" : r === "idle" ? `Stalled: nothing touched in ${weeks}+ weeks` : undefined;
+  };
+  const actionNote = (a: Action) => {
+    if (a.status === "next" && a.due && a.due < t) return "Overdue";
+    if (a.status === "waiting" && isChase(a, t)) return "Follow-up due";
+    if (isStale(a)) return a.status === "waiting" ? `Waiting ${weeks}+ weeks without change` : `Untouched for ${weeks}+ weeks`;
+    return undefined;
+  };
   const projectTitle = (id: ID | null) => s.projects.find((p) => p.id === id)?.title ?? "";
 
   const rows: Row[] = useMemo(() => {
@@ -107,15 +103,15 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             id: p.id,
             title: p.title,
             // The GTD question for each project: what is its next action? (A waiting-only project names who.)
-            info: isStalled(s, p) ? "" : projectNext(p.id),
+            info: stallReason(s, p) === "no-next" ? "" : projectNext(p.id),
             date: p.due,
-            flag: flagFor(p.id),
+            note: projectNote(p),
           }));
       case "next":
         return s.actions
           .filter((a) => a.status === "next")
-          .sort((a, b) => Number(Boolean(flagFor(b.id))) - Number(Boolean(flagFor(a.id))) || a.sort - b.sort)
-          .map((a) => ({ key: a.id, kind: "action", id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.due, flag: flagFor(a.id) }));
+          .sort((a, b) => Number(Boolean(actionNote(b))) - Number(Boolean(actionNote(a))) || a.sort - b.sort)
+          .map((a) => ({ key: a.id, kind: "action", id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.due, note: actionNote(a) }));
       case "waiting":
         // "Chase what's overdue": items to chase first, then by follow-up date.
         return s.actions
@@ -128,12 +124,12 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             title: a.title,
             info: `${a.waiting_who ?? "?"}${a.waiting_since ? ` · ${waitedFor(daysBetween(a.waiting_since, t))}` : ""}`,
             date: a.followup,
-            flag: flagFor(a.id),
+            note: actionNote(a),
           }));
       case "someday":
         return [
-          ...s.projects.filter((p) => p.status === "someday").map((p) => ({ key: p.id, kind: "project" as const, id: p.id, title: p.title, info: "Project", date: p.bring_back, flag: flagFor(p.id) })),
-          ...s.actions.filter((a) => a.status === "someday").map((a) => ({ key: a.id, kind: "action" as const, id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.bring_back, flag: flagFor(a.id) })),
+          ...s.projects.filter((p) => p.status === "someday").map((p) => ({ key: p.id, kind: "project" as const, id: p.id, title: p.title, info: "Project", date: p.bring_back, note: p.bring_back && p.bring_back <= t ? "Due back" : undefined })),
+          ...s.actions.filter((a) => a.status === "someday").map((a) => ({ key: a.id, kind: "action" as const, id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.bring_back, note: a.bring_back && a.bring_back <= t ? "Due back" : undefined })),
         ];
       case "upcoming": {
         const end = addDays(t, 14);
@@ -158,29 +154,12 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         return [];
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, step.id, flags, dismissed]);
+  }, [s, step.id, weeks]);
 
   const nav = useListNav(`review:${step.id}`, useMemo(() => [{ key: step.id, rowKeys: rows.map((r) => r.key), showHeader: false }], [rows, step.id]));
   const focusRow = rows.find((r) => r.key === nav.focus);
   const targetsOf = (kind: "project" | "action") =>
     [...new Set(nav.targets().map((k) => rows.find((r) => r.key === k)).filter((r): r is Row => Boolean(r && r.kind === kind)).map((r) => r.id))];
-
-  const acceptSuggestion = () => {
-    const f = focusRow?.flag;
-    if (!f || !focusRow) return;
-    if (f.suggested_next_action && focusRow.kind === "project") {
-      const a = newAction({ title: f.suggested_next_action, project_id: focusRow.id });
-      mutate(`Next action added to “${focusRow.title}”`, [{ type: "create", table: "actions", row: { ...a } }]);
-    } else if (f.suggested_title && focusRow.kind === "action") {
-      mutate("Rewritten", [{ type: "patch", table: "actions", id: focusRow.id, data: { title: f.suggested_title } }]);
-    } else if (f.suggested_title && focusRow.kind === "project") {
-      mutate("Project renamed", [{ type: "patch", table: "projects", id: focusRow.id, data: { title: f.suggested_title } }]);
-    } else {
-      notify("This flag has no suggested edit. Open the item with Enter to fix it.");
-      return;
-    }
-    dismiss(f.id);
-  };
 
   const finish = async () => {
     await fetch("/api/review/complete", { method: "POST" });
@@ -219,14 +198,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       case "clear":
         return inboxCount;
       case "projects":
-        return s.projects.filter((p) => p.status === "active" && (isStalled(s, p) || flagFor(p.id))).length;
+        return s.projects.filter((p) => isStalled(s, p)).length;
       case "next":
-        // Overdue actions are open with or without Claude; Claude's flags add to them.
-        return s.actions.filter((a) => a.status === "next" && ((a.due && a.due < t) || flagFor(a.id))).length;
+        return s.actions.filter((a) => a.status === "next" && actionNote(a)).length;
       case "waiting":
-        return s.actions.filter((a) => a.status === "waiting" && (isChase(a, t) || flagFor(a.id))).length;
+        return s.actions.filter((a) => a.status === "waiting" && actionNote(a)).length;
       case "someday":
-        return [...s.projects, ...s.actions].filter((x) => x.status === "someday" && ((x.bring_back && x.bring_back <= t) || flagFor(x.id))).length;
+        return [...s.projects, ...s.actions].filter((x) => x.status === "someday" && x.bring_back && x.bring_back <= t).length;
       case "upcoming": {
         // Anything whose date has already passed is open: a missed due date, follow-up, start or tickler.
         const past = (d: string | null) => Boolean(d && d < t);
@@ -289,10 +267,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       },
     },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
-    { id: "rv.ask", label: flags ? "Ask Claude to check your lists again" : "Ask Claude to check your lists", group: "Review", keys: ["shift+k"], enabled: meta.hasKey && !checking, run: askClaude },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
-    { id: "rv.accept", label: "Accept Claude's suggestion", group: "Review", keys: ["mod+enter"], enabled: Boolean(focusRow?.flag), run: acceptSuggestion },
-    { id: "rv.dismiss", label: "Dismiss Claude's flag", group: "Review", keys: ["alt+backspace"], enabled: Boolean(focusRow?.flag), run: () => focusRow?.flag && dismiss(focusRow.flag.id) },
     { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     {
       id: "rv.done",
@@ -344,14 +319,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         <span className="subject">
           <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title || "Untitled"}</span>
           {step.id === "projects" && r.kind === "project" && isStalled(s, s.projects.find((p) => p.id === r.id)!) && <span className="stamp">Stalled</span>}
-          {r.flag && (
-            <span className="flag-note">
-              <Sparkles size={12} strokeWidth={2} aria-hidden />
-              {r.flag.message}
-              {r.flag.suggested_next_action && <em> → {r.flag.suggested_next_action}</em>}
-              {r.flag.suggested_title && <em> → {r.flag.suggested_title}</em>}
-            </span>
-          )}
+          {r.note && <span className="flag-note">{r.note}</span>}
         </span>
       ),
     },
@@ -392,24 +360,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           {step.title}
         </h2>
         <p className="muted-text">{step.note}</p>
-        {/* Claude is optional and only runs when asked. Its standing note shows once, on the first step;
-            after you ask, its answer follows you through the steps. */}
-        {(stepIdx === 0 || checking || flags !== null || (flagError && meta.hasKey)) && (
-        <p className="review-claude small" aria-live="polite">
-          <Sparkles size={12} strokeWidth={2} aria-hidden />
-          {!meta.hasKey
-            ? "Claude's flags are off until you add an API key (⌘K › Add a Claude API key). The review works without them."
-            : checking
-              ? "Claude is checking your lists for stalled, stale and vague items…"
-              : flagError
-                ? `Claude couldn't check your lists (${flagError}). The review works without it.`
-                : flags === null
-                  ? "Claude hasn't looked at your lists. Ask it (⇧K) to flag stalled, stale and vague items."
-                  : flags.length
-                    ? `Claude flagged ${plural(flags.length, "item")} across your lists.`
-                    : "Claude found nothing that needs attention."}
-        </p>
-        )}
+
       </div>
       {step.id === "clear" ? (
         <div className="review-panel">
@@ -456,20 +407,18 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           nav={nav}
           active={regionActive}
           showHeaders={false}
-          rowClass={(r) => (r.flag ? "is-flagged-row" : "")}
+          rowClass={(r) => (r.note ? "is-flagged-row" : "")}
           empty={<p className="muted-text">Nothing here. Move on to the next step.</p>}
         />
       )}
       <KeyHints
         hints={[
           ...(step.id !== "finish" ? [{ k: "ctrl+.", label: "Next step" }] : []),
-          ...(meta.hasKey && !flags && step.id !== "finish" ? [{ k: "shift+k", label: "Ask Claude" }] : []),
           { k: "ctrl+,", label: "Previous" },
           ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "n", label: "Add next action" }] : []),
           ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
           ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
           ...(step.id !== "clear" && step.id !== "finish" ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
-          ...(focusRow?.flag ? [{ k: "mod+enter", label: "Accept Claude's fix" }] : []),
         ]}
       />
     </div>

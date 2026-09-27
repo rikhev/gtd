@@ -3,9 +3,9 @@ import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
-import { applyOps, db, FILES_DIR, insertRow, loadState, now, patchRow } from "./db.ts";
+import { applyOps, db, FILES_DIR, getSetting, insertRow, loadState, now, patchRow, setSetting } from "./db.ts";
 import { extract, guessMime, looksLikeEmail } from "./extract.ts";
-import { analyzeReview, cancelClarify, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
+import { cancelClarify, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
 import { exportJson, exportZip } from "./export.ts";
 import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
 import { today } from "../shared/dates.ts";
@@ -53,7 +53,7 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today() } });
+  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks() } });
 });
 
 app.put("/api/settings/key", async (c) => {
@@ -178,12 +178,14 @@ app.post("/api/rules/suggest", async (c) => {
   }
 });
 
-app.post("/api/review/analyze", async (c) => {
-  try {
-    return c.json({ flags: await analyzeReview() });
-  } catch (e) {
-    return c.json({ error: describeError(e) }, 502);
-  }
+/** Weeks without progress before a project counts as stalled (the owner can change it in Settings). */
+const stallWeeks = () => Number(getSetting("stallWeeks", "3")) || 3;
+app.put("/api/settings/stall", async (c) => {
+  const { weeks } = (await c.req.json().catch(() => ({}))) as { weeks?: number };
+  const w = Math.round(Number(weeks));
+  if (!(w >= 1 && w <= 52)) return c.json({ error: "Choose between 1 and 52 weeks" }, 400);
+  setSetting("stallWeeks", String(w));
+  return c.json({ stallWeeks: w });
 });
 
 app.post("/api/review/complete", (c) => {

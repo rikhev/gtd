@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, Check } from "lucide-react";
-import { capture, daysSinceReview, notify, useNotice, useStore, isStalled, isChase } from "../store.ts";
+import { capture, daysSinceReview, notify, useMeta, useNotice, useStore, isStalled, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { allCommandsForPalette, activeCommands, layerOf, useCommands, keyLabel, type Command } from "../keys.ts";
 import { InboxStack, Kbd, Tape } from "./bits.tsx";
@@ -32,6 +32,7 @@ type Entry = { key: string; view: ViewId; label: string; name: string; start?: b
 export function Rail({ active }: { active: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
+  const { stallWeeks } = useMeta(); // recount stalled projects when the threshold changes
   const [cursor, setCursor] = useState(0);
   const t = today();
 
@@ -50,7 +51,8 @@ export function Rail({ active }: { active: boolean }) {
     const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
     const systemAge = firstDay ? daysBetween(firstDay.slice(0, 10), t) : 0;
     return { inbox: inboxItems.length, overdue, flagged, chase, stalled, doneToday, oldestDays, systemAge };
-  }, [s, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s, t, stallWeeks]);
   const reviewAge = daysSinceReview(s);
   const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
 

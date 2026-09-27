@@ -36,7 +36,7 @@ export function Marker({ flagged, done, chase }: { flagged: boolean; done?: bool
 const HEALTH_LABEL = {
   ok: "On track: has a next action",
   waiting: "Waiting: only waiting on others",
-  stalled: "Stalled: no next action",
+  stalled: "Stalled: no next action, or nothing touched for weeks",
   someday: "Someday / Maybe",
   done: "Completed",
 } as const;

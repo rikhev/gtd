@@ -14,7 +14,7 @@ db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = OFF;");
 export const COLUMNS: Record<TableName, string[]> = {
   actions: [
     "id", "title", "notes", "project_id", "context_id", "due", "defer", "time_min", "energy", "flagged",
-    "status", "waiting_who", "waiting_since", "followup", "recurrence", "bring_back", "sort", "created_at", "completed_at",
+    "status", "waiting_who", "waiting_since", "followup", "recurrence", "bring_back", "sort", "created_at", "completed_at", "updated_at",
   ],
   projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at"],
   stuff: ["id", "text", "kind", "status", "created_at", "processed_at"],
@@ -61,7 +61,24 @@ CREATE TABLE IF NOT EXISTS corrections (
 );
 CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, completed_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS proposals (stuff_id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
+
+// "Last touched": when an action was last edited or completed. Older databases get the column,
+// backfilled with the best date we have (completed, else created).
+if (!(db.prepare("PRAGMA table_info(actions)").all() as { name: string }[]).some((c) => c.name === "updated_at")) {
+  db.exec("ALTER TABLE actions ADD COLUMN updated_at TEXT");
+}
+db.exec("UPDATE actions SET updated_at = COALESCE(completed_at, created_at) WHERE updated_at IS NULL");
+
+/** Owner preferences kept on the server (so every browser agrees). */
+export function getSetting(key: string, fallback: string): string {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
+  return row?.value ?? fallback;
+}
+export function setSetting(key: string, value: string) {
+  db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
 
 export const now = () => new Date().toISOString();
 
@@ -125,8 +142,16 @@ function clean(table: TableName, data: Record<string, unknown>) {
   return out;
 }
 
+/** An action counts as touched by any change except a pure reorder. */
+function touch(table: TableName, data: Record<string, string | number | null>) {
+  if (table !== "actions" || "updated_at" in data) return;
+  if (Object.keys(data).every((k) => k === "sort" || k === "id")) return;
+  data.updated_at = now();
+}
+
 export function insertRow(table: TableName, row: Record<string, unknown>) {
   const data = clean(table, row);
+  touch(table, data);
   const keys = Object.keys(data);
   db.prepare(`INSERT OR REPLACE INTO ${table} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})`).run(
     ...keys.map((k) => data[k]),
@@ -136,6 +161,7 @@ export function insertRow(table: TableName, row: Record<string, unknown>) {
 export function patchRow(table: TableName, id: string, patch: Record<string, unknown>) {
   const data = clean(table, patch);
   delete data.id;
+  touch(table, data);
   const keys = Object.keys(data);
   if (!keys.length) return;
   db.prepare(`UPDATE ${table} SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`).run(

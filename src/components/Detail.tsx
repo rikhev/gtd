@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip } from "lucide-react";
-import { mutate, newAction, notify, projectHealth, upload, useStore } from "../store.ts";
+import { mutate, newAction, notify, projectHealth, stallReason, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { runWhenReady, useCommands } from "../keys.ts";
 import { editors } from "../actionCommands.tsx";
@@ -272,6 +272,7 @@ function ProjectDetail({ p }: { p: Project }) {
   const ui = useUI();
   const ed = projectEditors(ui);
   const s = useStore((x) => x);
+  const meta = useMeta();
   const [showDone, setShowDone] = useState(false);
   const [draft, setDraft] = useState("");
   const area = s.areas.find((a) => a.id === p.area_id);
@@ -304,7 +305,12 @@ function ProjectDetail({ p }: { p: Project }) {
         <h3 className="detail-h">
           Actions <span className="count">{open.length}</span>
         </h3>
-        {projectHealth(s, p) === "stalled" && <p className="stamp-line"><span className="stamp">Stalled</span> No next action. Add one below.</p>}
+        {stallReason(s, p) && (
+          <p className="stamp-line">
+            <span className="stamp">Stalled</span>{" "}
+            {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Move it forward, or put it on hold.`}
+          </p>
+        )}
         <ul>
           {open.map((a) => (
             <li key={a.id}>

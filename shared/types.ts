@@ -23,6 +23,8 @@ export interface Action {
   sort: number;
   created_at: string;
   completed_at: string | null;
+  /** Last edited or completed; a project with nothing touched for the stall threshold is stalled. */
+  updated_at: string | null;
 }
 
 export interface Project {
@@ -150,11 +152,3 @@ export interface Proposal {
   reference: { title: string; notes: string } | null;
 }
 
-export interface ReviewFlag {
-  kind: "project" | "action" | "waiting" | "someday";
-  id: ID;
-  issue: "stalled" | "stale" | "vague" | "overdue" | "other";
-  message: string;
-  suggested_title: string | null;
-  suggested_next_action: string | null;
-}

@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { db, FILES_DIR, loadState, now } from "./db.ts";
 import { IMAGE_MIMES } from "./extract.ts";
 import { today } from "../shared/dates.ts";
-import type { FileRow, Proposal, ReviewFlag, State, Stuff } from "../shared/types.ts";
+import type { FileRow, Proposal, State, Stuff } from "../shared/types.ts";
 
 const MODEL = "claude-sonnet-5";
 /** Bump when the clarify instructions change, so older cached proposals are regenerated. */
@@ -382,68 +382,3 @@ export async function suggestRules(): Promise<string[]> {
 /* Weekly review                                                        */
 /* ------------------------------------------------------------------ */
 
-const ReviewOutput = z.object({
-  flags: z.array(
-    z.object({
-      kind: z.enum(["project", "action", "waiting", "someday"]),
-      id: z.string(),
-      issue: z.enum(["stalled", "stale", "vague", "overdue", "other"]),
-      message: z.string().describe("One short sentence the owner reads in the list"),
-      suggested_title: z.string().nullable().describe("A clearer verb-first rewrite for a vague action or a project not named verb-first"),
-      suggested_next_action: z.string().nullable().describe("For stalled projects: a concrete next action"),
-    }),
-  ),
-});
-
-export async function analyzeReview(): Promise<ReviewFlag[]> {
-  const s = loadState();
-  const t = today();
-  const ctx = (id: string | null) => s.contexts.find((c) => c.id === id)?.name ?? "";
-  const projects = s.projects
-    .filter((p) => p.status === "active")
-    .map((p) => {
-      const acts = s.actions.filter((a) => a.project_id === p.id && ["next", "waiting"].includes(a.status));
-      const lastDone = s.actions
-        .filter((a) => a.project_id === p.id && a.completed_at)
-        .map((a) => a.completed_at!.slice(0, 10))
-        .sort()
-        .pop();
-      return `- project id=${p.id} "${p.title}" open actions: ${
-        acts.map((a) => `[${a.status}] ${a.title}`).join("; ") || "NONE"
-      }; last completed action: ${lastDone ?? "never"}`;
-    })
-    .join("\n");
-  const next = s.actions
-    .filter((a) => a.status === "next")
-    .map((a) => `- action id=${a.id} "${a.title}" ${ctx(a.context_id)} created ${a.created_at.slice(0, 10)}${a.due ? ` due ${a.due}` : ""}`)
-    .join("\n");
-  const waiting = s.actions
-    .filter((a) => a.status === "waiting")
-    .map((a) => `- waiting id=${a.id} "${a.title}" who=${a.waiting_who ?? "?"} since=${a.waiting_since ?? "?"} followup=${a.followup ?? "none"}`)
-    .join("\n");
-  const someday = s.actions
-    .filter((a) => a.status === "someday")
-    .map((a) => `- someday id=${a.id} "${a.title}" created ${a.created_at.slice(0, 10)}`)
-    .join("\n");
-
-  const response = await getClient().messages.parse({
-    model: MODEL,
-    max_tokens: 16000,
-    thinking: { type: "adaptive" },
-    output_config: { effort: "medium", format: zodOutputFormat(ReviewOutput) },
-    system: `You assist the owner's GTD Weekly Review. Today is ${t}. Flag only what deserves attention:
-- stalled: an active project with no open next or waiting action (always suggest a concrete next action).
-- stale: waiting-for items older than about 10 days or past their follow-up date; next actions untouched for over a month.
-- vague (projects): project titles not written verb-first like a next action (e.g. "Updated user guide…" or "Passports renewed…"). Suggest a verb-first title ("Update the user guide…", "Renew passports…").
-- vague (actions): action titles that are not concrete, verb-first physical actions, or that bundle several steps into one ("and", lists, parenthesised sub-tasks). Suggest a rewrite that is only the first single step; for a bundle, say in the message that the rest belongs in the project as separate actions.
-- overdue: past due dates.
-Keep messages short and specific, and write them and every suggestion in English. Use the exact ids given. Don't flag healthy items.`,
-    messages: [
-      {
-        role: "user",
-        content: `Active projects:\n${projects || "(none)"}\n\nNext actions:\n${next || "(none)"}\n\nWaiting for:\n${waiting || "(none)"}\n\nSomeday/maybe:\n${someday || "(none)"}`,
-      },
-    ],
-  });
-  return response.parsed_output?.flags ?? [];
-}

@@ -120,7 +120,10 @@ export function Picker({ spec, close }: Props) {
   }, [q]);
 
   useEffect(() => {
-    if (spec.type === "text") setQ(spec.current);
+    if (spec.type !== "text") return;
+    setQ(spec.current);
+    // The current value is selected, so typing replaces it (e.g. "3" → type "14").
+    requestAnimationFrame(() => input.current?.select());
   }, [spec]);
 
   const choose = (o: Option | undefined) => {

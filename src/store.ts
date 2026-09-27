@@ -24,7 +24,9 @@ let meta: {
   authRequired: boolean;
   signedIn: boolean;
   authConfigured: boolean;
-} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true };
+  /** Weeks without progress before a project counts as stalled (Settings). */
+  stallWeeks: number;
+} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3 };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -191,9 +193,18 @@ function dropStaleWaiting(ops: Op[]): Op[] {
   );
 }
 
+/** Any edit to an action (except a pure reorder) marks it touched, as the server does; undo restores the old date. */
+function touchActions(ops: Op[]): Op[] {
+  return ops.map((op) =>
+    op.type === "patch" && op.table === "actions" && !("updated_at" in op.data) && Object.keys(op.data).some((k) => k !== "sort")
+      ? { ...op, data: { ...op.data, updated_at: stamp() } }
+      : op,
+  );
+}
+
 export function mutate(label: string, rawOps: Op[], opts: { silent?: boolean } = {}) {
   if (!rawOps.length) return;
-  const ops = dropStaleWaiting(rawOps);
+  const ops = touchActions(dropStaleWaiting(rawOps));
   const inverse = invert(ops);
   applyLocal(ops);
   void send(ops);
@@ -244,6 +255,7 @@ export function newAction(data: Partial<Action>): Action {
     sort: maxSort + 1,
     created_at: stamp(),
     completed_at: null,
+    updated_at: stamp(),
     ...data,
   };
 }
@@ -319,9 +331,29 @@ export function patchMany(table: TableName, ids: ID[], data: Record<string, unkn
 
 /* ---------------- derived ---------------- */
 
+/**
+ * Why an active project is stalled, if it is: it has nothing open to do, or nothing in it has been
+ * touched (edited or completed) for the stall threshold. Built in: no Claude needed.
+ */
+export function stallReason(s: State, p: Project): "no-next" | "idle" | null {
+  if (p.status !== "active") return null;
+  const mine = s.actions.filter((a) => a.project_id === p.id);
+  if (!mine.some((a) => a.status === "next" || a.status === "waiting")) return "no-next";
+  const limit = Date.now() - meta.stallWeeks * 7 * 86_400_000;
+  if (Date.parse(p.created_at) > limit) return null; // too new to have stalled
+  const lastTouch = mine.reduce((m, a) => Math.max(m, Date.parse(a.updated_at ?? a.completed_at ?? a.created_at) || 0), 0);
+  return lastTouch < limit ? "idle" : null;
+}
+
 export function isStalled(s: State, p: Project): boolean {
-  if (p.status !== "active") return false;
-  return !s.actions.some((a) => a.project_id === p.id && (a.status === "next" || a.status === "waiting"));
+  return stallReason(s, p) !== null;
+}
+
+/** An open action nobody has touched for the stall threshold (shown as stale in the review). */
+export function isStale(a: Action): boolean {
+  if (a.status !== "next" && a.status !== "waiting") return false;
+  const touched = Date.parse(a.updated_at ?? a.created_at) || 0;
+  return touched < Date.now() - meta.stallWeeks * 7 * 86_400_000;
 }
 
 export type ProjectHealth = "ok" | "waiting" | "stalled" | "someday" | "done";
@@ -330,6 +362,7 @@ export type ProjectHealth = "ok" | "waiting" | "stalled" | "someday" | "done";
 export function projectHealth(s: State, p: Project): ProjectHealth {
   if (p.status === "someday") return "someday";
   if (p.status === "done" || p.status === "trashed") return "done";
+  if (isStalled(s, p)) return "stalled";
   const open = s.actions.filter((a) => a.project_id === p.id);
   if (open.some((a) => a.status === "next")) return "ok";
   if (open.some((a) => a.status === "waiting")) return "waiting";

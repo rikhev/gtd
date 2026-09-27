@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { mutate, plural, useMeta, useStore } from "../store.ts";
+import { mutate, notify, plural, updateMeta, useMeta, useStore } from "../store.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
@@ -98,7 +98,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: rules, contexts, Claude, export                            */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "apikey"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "rule" | "context" | "apikey" | "stall"; id: ID; text: string; status?: string; color?: string };
 
 export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
@@ -108,6 +108,12 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
 
   const groups: GridGroup<SRow>[] = useMemo(
     () => [
+      {
+        key: "review",
+        label: "Weekly Review",
+        hideCount: true,
+        rows: [{ key: "stall", kind: "stall" as const, id: "stall", text: "Stalled after" }],
+      },
       {
         key: "claude",
         label: "Claude",
@@ -136,7 +142,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.rules, s.contexts, meta.hasKey],
+    [s.rules, s.contexts, meta.hasKey, meta.stallWeeks],
   );
   const nav = useListNav("settings", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: true })), [groups]));
   const all = groups.flatMap((g) => g.rows);
@@ -145,6 +151,28 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
 
   const commands: Command[] = [
     ...nav.commands,
+    {
+      id: "set.stall",
+      label: "Change when projects count as stalled",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "stall",
+      run: () =>
+        // A number is typed, not picked from a list: any whole number of weeks from 1 to 52.
+        ui.openPicker({
+          type: "text",
+          title: "Stalled after (weeks)",
+          current: String(meta.stallWeeks),
+          placeholder: "Number of weeks",
+          preview: (v) => {
+            const n = Number(v.trim());
+            if (!v.trim()) return { ok: false, text: "Type a number of weeks" };
+            if (!Number.isInteger(n) || n < 1 || n > 52) return { ok: false, text: "A whole number from 1 to 52" };
+            return { ok: true, text: `Stalled after ${plural(n, "week")} without progress` };
+          },
+          onPick: (v) => void saveStallWeeks(Number(v.trim())),
+        }),
+    },
     {
       id: "set.key",
       label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key",
@@ -244,10 +272,15 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
               else if (val !== r.text) mutate("Saved", [{ type: "patch", table, id: r.id, data: { [field]: val } }]);
             }}
           />
+        ) : r.kind === "stall" ? (
+          <span className="subject">
+            <span className="subject-text strong">Stalled after</span>
+            <span className="subject-more">A project with a next action counts as stalled when nothing in it has been touched for this long.</span>
+          </span>
         ) : r.kind === "apikey" ? (
           <span className="subject">
             <span className="subject-text strong">API key</span>
-            <span className="subject-more">{meta.hasKey ? `Stored in the server's .env; the browser only sees the last four characters. Clarify and Claude's review flags use Claude Sonnet 5.` : "Lets Claude propose projects and actions in Clarify and flag your lists in the Weekly Review. Both work without it."}</span>
+            <span className="subject-more">{meta.hasKey ? `Stored in the server's .env; the browser only sees the last four characters. Clarify with Claude uses Claude Sonnet 5.` : "Lets Claude propose projects and actions when you clarify with Claude (⌥K). Everything else works without it."}</span>
           </span>
         ) : r.kind === "context" ? (
           <ContextCode ctx={{ id: r.id, name: r.text, color: r.color!, sort: 0 }} />
@@ -260,7 +293,9 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       label: "",
       width: "160px",
       render: (r) =>
-        r.kind === "apikey" ? (
+        r.kind === "stall" ? (
+          <span className="num">{plural(meta.stallWeeks, "week")}</span>
+        ) : r.kind === "apikey" ? (
           meta.hasKey ? (
             <span className="key-state">
               Connected
@@ -301,4 +336,13 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       </div>
     </div>
   );
+}
+
+async function saveStallWeeks(weeks: number) {
+  const res = await fetch("/api/settings/stall", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ weeks }) });
+  const j = (await res.json()) as { stallWeeks?: number; error?: string };
+  if (j.stallWeeks) {
+    updateMeta({ stallWeeks: j.stallWeeks });
+    notify(`Projects now count as stalled after ${plural(j.stallWeeks, "week")} without progress.`);
+  } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }
