@@ -5,7 +5,7 @@ import { clearSession, loadSession, newSession, saveSession, type ReviewSession 
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
-import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tape } from "../components/bits.tsx";
+import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
 import { editors } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
@@ -337,7 +337,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       render: (r) => (
         <span className="subject">
           <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title || "Untitled"}</span>
-          {step.id === "projects" && r.kind === "project" && isStalled(s, s.projects.find((p) => p.id === r.id)!) && <span className="stamp">Stalled</span>}
+          {step.id === "projects" && r.kind === "project" && isStalled(s, s.projects.find((p) => p.id === r.id)!) && <span className="badge">Stalled</span>}
           {r.note && <span className="flag-note">{r.note}</span>}
         </span>
       ),
@@ -386,7 +386,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       ) : step.id === "finish" ? (
         <div className="review-panel review-finish">
           {/* The end of the week leads with what you cleared, then what is still open. */}
-          <Tape size="md">{openSteps.length ? "Ready to record" : "Everything reviewed"}</Tape>
+          <Tag size="md">{openSteps.length ? "Ready to record" : "Everything reviewed"}</Tag>
           <p className="clarify-msg">
             {clearSteps} of {STEPS.length - 1} steps clear{tally.length ? ` · ${tally.join(" · ")}` : ""}.
           </p>

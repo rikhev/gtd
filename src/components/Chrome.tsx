@@ -3,7 +3,7 @@ import { Search, Check } from "lucide-react";
 import { capture, daysSinceReview, notify, useMeta, useNotice, useStore, isStalled, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { allCommandsForPalette, activeCommands, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
-import { Kbd, Tape } from "./bits.tsx";
+import { Kbd, Tag } from "./bits.tsx";
 import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
 
@@ -174,7 +174,7 @@ export function Rail({ active }: { active: boolean }) {
                 <button type="button" {...stop(entries[idx(id)], "rail-item")}>
                   <span className="rail-name">{VIEW_TITLES[id]}</span>
                   <span className="rail-meta">
-                    {id === "projects" && sig.stalled > 0 && <span className="stamp tiny">{sig.stalled} stalled</span>}
+                    {id === "projects" && sig.stalled > 0 && <span className="badge tiny">{sig.stalled} stalled</span>}
                     {m && <span className={`num ${m.tone === "due" ? "is-due" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
                     <RailKey k={keyOf(id)} />
                   </span>
@@ -583,7 +583,7 @@ export function HelpOverlay({ close }: { close: () => void }) {
     <div className="overlay" onMouseDown={close}>
       <div ref={box} className="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts on this screen" tabIndex={-1} onMouseDown={(e) => e.stopPropagation()}>
         <div className="help-head">
-          <Tape size="md">Keys on this screen</Tape>
+          <Tag size="md">Keys on this screen</Tag>
           <span className="muted-text small">
             <Kbd k="mod+k" /> finds every command
           </span>

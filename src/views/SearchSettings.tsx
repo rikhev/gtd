@@ -3,7 +3,7 @@ import { mutate, notify, plural, updateMeta, useMeta, useStore } from "../store.
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { ContextCode, Tape } from "../components/bits.tsx";
+import { ContextCode, Tag } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { CONTEXT_COLORS } from "../actionCommands.tsx";
@@ -360,7 +360,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-more">{meta.hasKey ? `Kept out of the browser: only its last four characters are ever shown. Clarify with Claude uses Claude Sonnet 5.` : "Lets Claude propose projects and actions when you clarify with Claude (⌥K). Everything else works without it."}</span>
           </span>
         ) : r.kind === "area" ? (
-          <Tape>{r.text || "Untitled"}</Tape>
+          <Tag>{r.text || "Untitled"}</Tag>
         ) : r.kind === "context" ? (
           <ContextCode ctx={{ id: r.id, name: r.text, color: r.color!, sort: 0 }} />
         ) : (
@@ -383,7 +383,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
               {meta.keyHint && <span className="key-hint num">…{meta.keyHint}</span>}
             </span>
           ) : (
-            <span className="stamp">Not set</span>
+            <span className="badge">Not set</span>
           )
         ) : r.status === "suggested" ? (
           <span className="muted-text small">Awaiting approval</span>
@@ -411,7 +411,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       {/* Export last: the things you set come first, taking your data out comes after. */}
       <div className="settings-facts">
         <div>
-          <Tape>Export</Tape>
+          <Tag>Export</Tag>
           <p>
             <a href="/api/export/zip">Markdown files (.zip)</a> · <a href="/api/export/json">JSON</a>. Both are also in the command palette.
           </p>

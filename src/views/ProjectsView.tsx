@@ -3,7 +3,7 @@ import { getState, isStalled, mutate, named, newAction, newProject, patchMany, p
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { DateCell, DoneBox, Lamp, Tape } from "../components/bits.tsx";
+import { DateCell, DoneBox, Lamp, Tag } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, askContext, createAreaOp } from "../actionCommands.tsx";
@@ -361,13 +361,13 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         ) : (
           <span className="subject">
             <span className="subject-text strong">{p.title || "Untitled project"}</span>
-            {isStalled(s, p) && <span className="stamp">Stalled</span>}
-            {p.status === "someday" && <span className="stamp muted">Someday</span>}
-            {p.status === "done" && p.archived_at && <span className="stamp muted">Done</span>}
+            {isStalled(s, p) && <span className="badge">Stalled</span>}
+            {p.status === "someday" && <span className="badge muted">Someday</span>}
+            {p.status === "done" && p.archived_at && <span className="badge muted">Done</span>}
           </span>
         ),
     },
-    ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", drop: 2, render: (p: Project) => (p.area_id ? <Tape>{areaById.get(p.area_id)?.name}</Tape> : <span className="dash" aria-hidden="true">–</span>) }]),
+    ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", drop: 2, render: (p: Project) => (p.area_id ? <Tag>{areaById.get(p.area_id)?.name}</Tag> : <span className="dash" aria-hidden="true">–</span>) }]),
     { key: "next", label: "Next action", width: "minmax(160px, 1fr)", drop: 3, render: (p) => (firstNext.get(p.id) ? <span className="muted-text">{firstNext.get(p.id)}</span> : <span className="dash" aria-hidden="true">–</span>) },
     { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
     { key: "due", label: "Due", width: "84px", render: (p) => <DateCell date={p.due} /> },
@@ -381,7 +381,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         sort
           ? undefined
           : {
-              // Drag to reorder while the list is in its own order; dropped into another area folder, the project moves there.
+              // Drag to reorder while the list is in its own order; dropped into another area, the project moves there.
               onMove: (key, beforeKey, groupKey) => {
                 const g = groups.find((x) => x.key === groupKey);
                 const me = s.projects.find((p) => p.id === key);

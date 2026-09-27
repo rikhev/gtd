@@ -330,8 +330,8 @@ function ProjectDetail({ p }: { p: Project }) {
           )}
         </h3>
         {stallReason(s, p) && (
-          <p className="stamp-line">
-            <span className="stamp">Stalled</span>{" "}
+          <p className="badge-line">
+            <span className="badge">Stalled</span>{" "}
             {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Move it forward, or put it on hold.`}
           </p>
         )}

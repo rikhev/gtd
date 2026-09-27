@@ -6,7 +6,7 @@ import { runWhenReady, useCommands, type Command } from "../keys.ts";
 import { RAIL } from "../components/Chrome.tsx";
 import { promptApiKey } from "../apiKey.ts";
 import { suggestRules } from "../rules.ts";
-import { ContextCode, Energy, KeyChoices, KeyHints, Tape } from "../components/bits.tsx";
+import { ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
 import { areaItems, askWaitingOn, contextItems, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
 import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
@@ -547,7 +547,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
   if (stopped) {
     return (
       <div className="clarify-state" role="alert">
-        <Tape size="md">Clarify stopped</Tape>
+        <Tag size="md">Clarify stopped</Tag>
         <p className="clarify-msg">{err}</p>
         <KeyChoices
           choices={[
@@ -566,7 +566,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
   if (job && queue.length === 0) {
     return (
       <div className="clarify-state">
-        <Tape size="md">Inbox zero</Tape>
+        <Tag size="md">Inbox zero</Tag>
         <p className="clarify-msg">Nothing left to clarify. Your lists are up to date.</p>
         <KeyChoices choices={[{ k: "escape", label: backLabel, run: host.leave }]} />
       </div>
@@ -576,7 +576,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
   if (job && index >= queue.length) {
     return (
       <div className="clarify-state">
-        <Tape size="md">Inbox clear</Tape>
+        <Tag size="md">Inbox clear</Tag>
         <p className="clarify-msg">{plural(handled.size, "item")} clarified. Everything has a place.</p>
         <KeyChoices
           choices={[
@@ -638,7 +638,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
         <section className="clarify-proposal" aria-label="Claude's proposal" aria-busy={!draft}>
           <h2 className="pane-h">
             {byHand ? "Your decision" : "Proposal"}
-            {draft && <Tape>{DISPOSITIONS[draft.disposition]}</Tape>}
+            {draft && <Tag>{DISPOSITIONS[draft.disposition]}</Tag>}
           </h2>
           {!draft ? (
             <div className="proposal-skeleton" aria-live="polite">
@@ -693,7 +693,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                           })
                         }
                       >
-                        {draft.new_project.area ? <Tape>{draft.new_project.area}</Tape> : <span className="dash">No area</span>}
+                        {draft.new_project.area ? <Tag>{draft.new_project.area}</Tag> : <span className="dash">No area</span>}
                       </button>
                     </div>
                   )}

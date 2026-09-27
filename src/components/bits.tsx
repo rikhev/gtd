@@ -3,13 +3,13 @@ import { formatDate, formatTime, daysBetween, today } from "../../shared/dates.t
 import type { Action, Context } from "../../shared/types.ts";
 import { keyLabel } from "../keys.ts";
 
-/** Label-maker tape: black tape, embossed white condensed caps. */
-export function Tape({ children, tone = "black", size = "sm" }: { children: ReactNode; tone?: "black"; size?: "sm" | "md" }) {
-  return <span className={`tape tape-${tone} tape-${size}`}>{children}</span>;
+/** A place name (an area, a disposition) as a quiet chip; md is a state's title in plain caps. */
+export function Tag({ children, size = "sm" }: { children: ReactNode; size?: "sm" | "md" }) {
+  return <span className={`tag tag-${size}`}>{children}</span>;
 }
 
 /**
- * The row marker: an empty ring, a pen tick when done. Flagged for today, it becomes a red flag on a pole,
+ * The row marker: an empty ring, a tick when done. Flagged for today, it becomes a red flag on a pole,
  * the mark classic Outlook uses for a task flagged for follow-up.
  */
 export function Marker({ flagged, done, chase, quiet }: { flagged: boolean; done?: boolean; chase?: boolean; quiet?: boolean }) {

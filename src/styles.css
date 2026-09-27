@@ -1,43 +1,42 @@
 /* Stiltje — GTD as a keyboard grid; the name is Swedish for dead calm, "mind like water".
-   Tokens: office paper + ink, steel rail, blue-grey folder tabs, navy label tape,
-   one corporate blue for focus and selection, traffic-light lamps for project health. */
+   Tokens: near-white and grey with the faintest cast of still water, near-black ink, one blue for focus
+   and selection, and colour only where it says something (overdue, stalled, flagged, project health). */
 
 :root {
   color-scheme: light;
-  --paper: #f3f5f6;
+  --paper: #f3f5f7;
   --sheet: #fbfcfd;
-  --ink: #17181a;
-  --ink-2: #474c52;
-  --ink-3: #686d74;
-  --rule: #dcdedb;
-  --rule-strong: #bcc0bd;
-  --steel: #dce2e6; /* a faint blue grey, the pond's own hue, so the water settles into the rail */
-  --steel-2: #cbd3d9;
-  --steel-ink: #2b2e32;
-  --folder: #a9bedb;
-  --folder-2: #e6edf7;
-  --folder-ink: #1d3456;
-  --tape: #1b2a41;
-  --rail-current: var(--paper);
-  /* The pond at the head of the rail: cool water a shade under the steel, bright crests over dark troughs. */
-  --water-far: #d2dae0;
-  --water-near: #bccad4;
-  --water-line: #f4f7f9;
+  --ink: #16191d;
+  --ink-2: #454b53;
+  --ink-3: #5a6169;
+  --rule: #dbe0e4;
+  --rule-strong: #bcc4cb;
+  --rail: #e2e7eb; /* the pond's air, a shade under the water, so the surface settles into the rail */
+  --rail-2: #d1d9df;
+  --rail-ink: #282d33;
+  --rail-current: var(--sheet);
+  --wash: #e9eef2; /* a quiet water-grey surface: chips, a proposed project, the current review step */
+  --wash-ink: #2b333c;
+  --toast: #20262d;
+  --toast-ink: #eef2f5;
+  /* The pond at the head of the rail: cool water a shade under the rail, bright crests over dark troughs. */
+  --water-far: #d4dce2;
+  --water-near: #bfccd5;
+  --water-line: #f5f8fa;
   --water-crest: #ffffff;
   --water-trough: #6d8396;
   --water-drop: #58728a;
-  --stamp-on-steel: #9c2716;
-  --tape-ink: #f2f5fa;
-  --accent: #1f5fcc;
+  --alert-on-rail: #9c2716;
+  --accent: #2462c6;
   --accent-contrast: #ffffff;
-  --select: #d9e6fa;
-  --select-ink: #0f1b30;
+  --select: #dce6f3;
+  --select-ink: #0f1b2d;
   --go: #1f8a4c;
   --wait: #c7890a;
-  --tick: #e2e7eb;
-  --stamp: #b3301c;
-  --pen: #1b2340;
-  --shadow: 0 10px 28px rgb(20 22 26 / 0.16), 0 2px 5px rgb(20 22 26 / 0.08);
+  --tick: #e3e8ec;
+  --alert: #b3301c;
+  --mark: #2a3139;
+  --shadow: 0 10px 28px rgb(18 24 32 / 0.14), 0 2px 5px rgb(18 24 32 / 0.07);
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --font-label: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
   --row: 30px;
@@ -48,75 +47,73 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper: #16171a;
-    --sheet: #1c1d21;
-    --ink: #eae8e1;
-    --ink-2: #b9bbbd;
-    --ink-3: #93979c;
-    --rule: #2b2d32;
-    --rule-strong: #3d4046;
-    --steel: #1e2227;
-    --steel-2: #2b3037;
-    --steel-ink: #d6d7d6;
-    --folder: #3e5a83;
-    --folder-2: #1b2433;
-    --folder-ink: #c9d8ef;
-    --tape: #2a3d5c;
-    --rail-current: #33363d;
+    --paper: #15181b;
+    --sheet: #1b1f23;
+    --ink: #e7eaed;
+    --ink-2: #b4bac0;
+    --ink-3: #979ea5;
+    --rule: #2a2f35;
+    --rule-strong: #3b4249;
+    --rail: #1d2227;
+    --rail-2: #2a3037;
+    --rail-ink: #d5d9dd;
+    --rail-current: #30373e;
+    --wash: #232a31;
+    --wash-ink: #cfd7df;
+    --toast: #e3e8ec;
+    --toast-ink: #15191d;
     --water-far: #242b32;
     --water-near: #1b2631;
     --water-line: #3a4754;
     --water-crest: #a9c1d8;
     --water-trough: #0b1116;
     --water-drop: #93b3d1;
-    --stamp-on-steel: #f2917f;
-    --tape-ink: #e8eef8;
-    --accent: #5b95f5;
+    --alert-on-rail: #f2917f;
+    --accent: #6497ee;
     --accent-contrast: #0b1426;
-    --select: #1f3a63;
-    --select-ink: #eef3fb;
+    --select: #1f3656;
+    --select-ink: #eef3fa;
     --go: #3dba72;
     --wait: #e2a634;
-    --tick: #2b3646;
-    --stamp: #ec6d57;
-    --pen: #e3dccb;
+    --tick: #2b3440;
+    --alert: #ec6d57;
+    --mark: #d5dae0;
     --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #16171a;
-  --sheet: #1c1d21;
-  --ink: #eae8e1;
-  --ink-2: #b9bbbd;
-  --ink-3: #93979c;
-  --rule: #2b2d32;
-  --rule-strong: #3d4046;
-  --steel: #1e2227;
-  --steel-2: #2b3037;
-  --steel-ink: #d6d7d6;
-  --folder: #3e5a83;
-  --folder-2: #1b2433;
-  --folder-ink: #c9d8ef;
-  --tape: #2a3d5c;
-  --rail-current: #33363d;
+  --paper: #15181b;
+  --sheet: #1b1f23;
+  --ink: #e7eaed;
+  --ink-2: #b4bac0;
+  --ink-3: #979ea5;
+  --rule: #2a2f35;
+  --rule-strong: #3b4249;
+  --rail: #1d2227;
+  --rail-2: #2a3037;
+  --rail-ink: #d5d9dd;
+  --rail-current: #30373e;
+  --wash: #232a31;
+  --wash-ink: #cfd7df;
+  --toast: #e3e8ec;
+  --toast-ink: #15191d;
   --water-far: #242b32;
   --water-near: #1b2631;
   --water-line: #3a4754;
   --water-crest: #a9c1d8;
   --water-trough: #0b1116;
   --water-drop: #93b3d1;
-  --stamp-on-steel: #f2917f;
-  --tape-ink: #e8eef8;
-  --accent: #5b95f5;
+  --alert-on-rail: #f2917f;
+  --accent: #6497ee;
   --accent-contrast: #0b1426;
-  --select: #1f3a63;
-  --select-ink: #eef3fb;
+  --select: #1f3656;
+  --select-ink: #eef3fa;
   --go: #3dba72;
   --wait: #e2a634;
-  --tick: #2b3646;
-  --stamp: #ec6d57;
-  --pen: #e3dccb;
+  --tick: #2b3440;
+  --alert: #ec6d57;
+  --mark: #d5dae0;
   --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
 }
 :root[data-theme="light"] {
@@ -192,7 +189,7 @@ a:hover {
   color: var(--ink-2);
 }
 .error-text {
-  color: var(--stamp);
+  color: var(--alert);
 }
 .dash {
   color: var(--ink-3);
@@ -286,10 +283,11 @@ a:hover {
 }
 
 /* ------------------------------------------------------------------ */
-/* Label-maker tape                                                     */
+/* Tags                                                                 */
 /* ------------------------------------------------------------------ */
 
-.tape {
+/* A tag names a place (an area, a disposition, a section): Label Caps on a quiet water-grey chip. */
+.tag {
   display: inline-block;
   font-family: var(--font-label);
   font-weight: 600;
@@ -297,41 +295,44 @@ a:hover {
   letter-spacing: 0.07em;
   line-height: 1;
   white-space: nowrap;
-  border-radius: 1.5px;
-  background-color: var(--tape);
-  color: var(--tape-ink);
-  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.28);
+  border-radius: 3px;
+  background-color: var(--wash);
+  color: var(--wash-ink);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tape-sm {
+.tag-sm {
   font-size: 11.5px;
-  padding: 3px 7px 3px;
+  padding: 3px 6px 3px;
 }
-.tape-md {
+/* A heading-sized tag stands alone as a state's title: plain caps, no chip. */
+.tag-md {
   font-size: 14px;
-  padding: 4px 9px;
+  padding: 0;
+  background: none;
+  color: var(--ink-2);
+  letter-spacing: 0.08em;
 }
 
 /* ------------------------------------------------------------------ */
-/* Rail: the steel drawer                                               */
+/* Rail                                                                 */
 /* ------------------------------------------------------------------ */
 
 .rail {
   grid-row: 1;
-  background: var(--steel);
+  background: var(--rail);
   border-right: 1px solid var(--rule-strong);
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 14px 10px;
   overflow: auto;
-  color: var(--steel-ink);
+  color: var(--rail-ink);
 }
 
-/* Mind like water: the rail opens on a still surface (steel air above a 1px horizon, water below that
-   fades into the drawer). Drops and their rings are drawn on the canvas only while they move. */
+/* Mind like water: the rail opens on a still surface (the rail's air above a 1px horizon, water below that
+   fades into the rail). Drops and their rings are drawn on the canvas only while they move. */
 .pond {
   position: relative;
   flex: none;
@@ -393,7 +394,7 @@ a:hover {
   color: var(--ink-2);
 }
 .rail-item:hover {
-  background: var(--steel-2);
+  background: var(--rail-2);
   color: var(--ink);
 }
 .rail-name {
@@ -411,7 +412,7 @@ a:hover {
   font-size: 12px;
 }
 .rail-meta .is-due {
-  color: var(--stamp);
+  color: var(--alert);
   font-weight: 600;
 }
 .rail-meta .is-quiet {
@@ -424,11 +425,11 @@ a:hover {
   min-width: 16px;
   color: var(--ink-2);
 }
-/* On a hovered row the stamp red darkens (lightens in dark) so small red text keeps AA on steel-2. */
+/* On a hovered row the alert red darkens (lightens in dark) so small red text keeps AA on rail-2. */
 .rail-item:hover .is-due,
-.rail-item:hover .stamp {
-  color: var(--stamp-on-steel);
-  border-color: var(--stamp-on-steel);
+.rail-item:hover .badge {
+  color: var(--alert-on-rail);
+  border-color: var(--alert-on-rail);
 }
 
 /* The system check follows the lists: is my system current? Settings alone sits at the foot. */
@@ -447,7 +448,7 @@ a:hover {
   border-top: 1px solid var(--rule-strong);
 }
 
-/* The open list: the sheet pulled forward (lighter than the drawer in both themes), with a hairline edge. */
+/* The open list: the sheet pulled forward (lighter than the rail in both themes), with a hairline edge. */
 .rail-item.is-current {
   background: var(--rail-current);
   color: var(--ink);
@@ -458,7 +459,7 @@ a:hover {
 }
 .rail-item.is-cursor {
   box-shadow: inset 0 0 0 2px var(--ink);
-  background: var(--steel-2);
+  background: var(--rail-2);
 }
 .rail-item.is-current.is-cursor {
   background: var(--rail-current);
@@ -676,7 +677,7 @@ body.is-banding {
   position: relative;
 }
 .row:hover {
-  background: color-mix(in srgb, var(--steel) 45%, transparent);
+  background: color-mix(in srgb, var(--rail) 45%, transparent);
 }
 .cell {
   height: 100%;
@@ -702,7 +703,7 @@ body.is-banding {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .grid:not(.is-active) .row.is-focus {
-  background: var(--steel-2);
+  background: var(--rail-2);
 }
 .grid.is-active .row.is-focus.is-ticked {
   box-shadow: inset 0 0 0 2px var(--accent);
@@ -751,7 +752,7 @@ body.is-banding {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--stamp);
+  color: var(--alert);
   flex: none;
 }
 .is-focus .chase-label {
@@ -790,7 +791,7 @@ body.is-banding {
   box-shadow: 0 0 0 2px var(--select-ink);
 }
 
-/* Group headers: plain rules, or a blue-grey folder with its tab and tape. */
+/* Group headers: Label Caps over a plain rule, in every list. */
 .group-head {
   display: flex;
   align-items: center;
@@ -798,7 +799,7 @@ body.is-banding {
   height: 32px;
   padding: 0 8px;
   margin-top: 10px;
-  /* Plain heads (contexts, waiting on, dates…) are Label Caps over a rule; the folder surface is for projects only. */
+  /* Plain heads (contexts, waiting on, dates…) are Label Caps over a rule in every list. */
   border-bottom: 1px solid var(--rule-strong);
   cursor: default;
 }
@@ -862,7 +863,7 @@ body.is-banding {
 }
 .marker .tick {
   fill: none;
-  stroke: var(--pen);
+  stroke: var(--mark);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -871,7 +872,7 @@ body.is-banding {
   opacity: 0;
   transition: stroke-dashoffset 380ms var(--ease), opacity 60ms;
 }
-/* Flagged for today: a stamp-red flag on an ink pole, as in classic Outlook. */
+/* Flagged for today: an alert-red flag on an ink pole, as in classic Outlook. */
 .marker .flag-pole {
   fill: none;
   stroke: var(--ink-2);
@@ -879,7 +880,7 @@ body.is-banding {
   stroke-linecap: round;
 }
 .marker .flag-cloth {
-  fill: var(--stamp);
+  fill: var(--alert);
 }
 /* Flagging drops the flag onto the row. */
 .marker.is-flagged .leaf {
@@ -905,7 +906,7 @@ body.is-banding {
   opacity: 0.4;
 }
 .marker.is-chase .ring {
-  stroke: var(--stamp);
+  stroke: var(--alert);
   stroke-dasharray: 2 2;
 }
 .is-focus .marker .tick {
@@ -946,7 +947,7 @@ body.is-banding {
   opacity: 0;
 }
 
-/* The Complete box (classic Outlook's task checkbox): a 12px square in the row's quiet ink; checked, a pen tick.
+/* The Complete box (classic Outlook's task checkbox): a 12px square in the row's quiet ink; checked, a tick.
    Hover inks the box so it reads as clickable; the row's own hover stays as it is. */
 .done-box {
   display: inline-flex;
@@ -969,7 +970,7 @@ body.is-banding {
 }
 .done-box .check {
   fill: none;
-  stroke: var(--pen);
+  stroke: var(--mark);
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -993,9 +994,9 @@ body.is-banding {
   align-items: center;
 }
 
-/* Done: a pen line strikes through the subject, then the row folds away. */
+/* Done: a line strikes through the subject, then the row folds away. */
 .row.is-striking .subject-text {
-  background-image: linear-gradient(var(--pen), var(--pen));
+  background-image: linear-gradient(var(--mark), var(--mark));
   background-repeat: no-repeat;
   background-position: 0 58%;
   animation: strike 200ms var(--ease) forwards;
@@ -1061,7 +1062,7 @@ body.is-banding {
   color: var(--ink);
 }
 .date.is-overdue {
-  color: var(--stamp);
+  color: var(--alert);
   font-weight: 650;
 }
 .date.is-soon {
@@ -1070,7 +1071,7 @@ body.is-banding {
 /* On the selected row the text keeps contrast in both themes; the red stays as the underline. */
 .is-focus .date.is-overdue {
   color: var(--select-ink);
-  text-decoration: underline 2px var(--stamp);
+  text-decoration: underline 2px var(--alert);
   text-underline-offset: 3px;
 }
 
@@ -1102,8 +1103,8 @@ body.is-banding {
   background: var(--select-ink);
 }
 
-/* Rubber stamp: stalled, overdue projects. */
-.stamp {
+/* A badge is a state word beside a name: Stalled in alert red (it asks for something), Someday or Done in grey. */
+.badge {
   display: inline-block;
   font-family: var(--font-label);
   font-weight: 700;
@@ -1111,22 +1112,23 @@ body.is-banding {
   line-height: 1;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--stamp);
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  padding: 2px 4px 1px;
+  color: var(--alert);
+  background: color-mix(in srgb, var(--alert) 10%, transparent);
+  border-radius: 3px;
+  padding: 3px 5px 2px;
   white-space: nowrap;
   flex: none;
 }
-.stamp.muted {
+.badge.muted {
   color: var(--ink-3);
+  background: var(--wash);
 }
-.stamp.tiny {
-  font-size: 11px;
-  padding: 1px 3px 0;
+.badge.tiny {
+  padding: 2px 4px 1px;
 }
-.is-focus .stamp {
+.is-focus .badge {
   color: var(--select-ink);
+  background: color-mix(in srgb, var(--select-ink) 8%, transparent);
 }
 
 /* Project health lamps: green has a next action, amber is only waiting on others, red is stalled. */
@@ -1147,7 +1149,7 @@ body.is-banding {
   --lamp: var(--wait);
 }
 .lamp.stalled {
-  --lamp: var(--stamp);
+  --lamp: var(--alert);
 }
 /* Someday: a half-lit lamp (parked, not off), so it can't be mistaken for an action's empty ring. */
 .lamp.someday {
@@ -1355,7 +1357,7 @@ input.field-text {
   color: var(--ink-2);
 }
 .icon-btn:hover {
-  background: var(--steel);
+  background: var(--rail);
   color: var(--ink);
 }
 
@@ -1466,7 +1468,7 @@ input.field-text {
   text-transform: uppercase;
   color: var(--ink-2);
 }
-.stamp-line {
+.badge-line {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1711,8 +1713,8 @@ input.field-text {
   gap: 12px;
   max-width: min(640px, calc(100vw - 32px));
   padding: 8px 14px;
-  background: var(--tape);
-  color: var(--tape-ink);
+  background: var(--toast);
+  color: var(--toast-ink);
   border-radius: 5px;
   box-shadow: var(--shadow);
   font-size: 12.5px;
@@ -1726,7 +1728,7 @@ input.field-text {
   transform: translate(-50%, 0);
 }
 .toast.is-error {
-  background: var(--stamp);
+  background: var(--alert);
   color: #fff;
   font-weight: 600;
 }
@@ -1832,9 +1834,9 @@ input.field-text {
 .sheet {
   background: var(--sheet);
   border: 1px solid var(--rule);
-  border-radius: 2px;
+  border-radius: 3px;
   padding: 18px 20px;
-  box-shadow: 0 1px 0 var(--rule), 0 3px 0 -1px var(--sheet), 0 4px 0 -1px var(--rule), 0 6px 12px -6px rgb(0 0 0 / 0.15);
+  box-shadow: 0 2px 8px -4px rgb(18 24 32 / 0.12);
   max-height: calc(100dvh - 260px);
   overflow: auto;
 }
@@ -1874,13 +1876,13 @@ input.field-text {
   align-items: center;
   padding: 10px 12px 12px;
   margin-bottom: 12px;
-  background: var(--folder-2);
-  border-top: 2px solid var(--folder);
+  background: var(--wash);
+  border-top: 1px solid var(--rule-strong);
   border-radius: 0 3px 3px 3px;
 }
 .p-project .field-label {
   grid-column: 1 / -1;
-  color: var(--folder-ink);
+  color: var(--wash-ink);
 }
 .p-project-title {
   font-weight: 650;
@@ -1910,7 +1912,7 @@ input.field-text {
   box-shadow: 0 0 0 2px var(--accent);
 }
 .p-row.is-done {
-  background: color-mix(in srgb, var(--sheet) 70%, var(--steel));
+  background: color-mix(in srgb, var(--sheet) 70%, var(--rail));
 }
 .p-row.is-done .p-title {
   text-decoration: line-through;
@@ -2123,16 +2125,16 @@ input.field-text {
   font-size: 12px;
   font-weight: 650;
   letter-spacing: 0;
-  color: var(--stamp);
+  color: var(--alert);
   font-variant-numeric: tabular-nums;
 }
 .review-steps .is-current .step-count {
   color: inherit;
 }
+/* The current step is where you are: the selection fill, as for the focused row. */
 .review-steps .is-current button {
-  background: var(--tape);
-  color: var(--tape-ink);
-  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.28);
+  background: var(--select);
+  color: var(--select-ink);
 }
 .review-tally {
   margin: 0;
@@ -2239,7 +2241,7 @@ input.field-text {
     bottom: 0;
     z-index: 60;
     padding: 0 6px env(safe-area-inset-bottom, 0px);
-    background: var(--steel);
+    background: var(--rail);
     border-top: 1px solid var(--rule-strong);
   }
   .tab {
@@ -2370,7 +2372,7 @@ input.field-text {
   display: grid;
   place-items: center;
   padding: 24px 16px;
-  background: var(--steel);
+  background: var(--rail);
 }
 .login-sheet {
   width: min(360px, 100%);
@@ -2395,7 +2397,7 @@ input.field-text {
 }
 .login-error {
   margin: 0;
-  color: var(--stamp);
+  color: var(--alert);
   font-weight: 600;
 }
 .login-note {
@@ -2412,9 +2414,9 @@ input.field-text {
 .login-button {
   height: 34px;
   border-radius: 3px;
-  background: var(--tape);
-  color: var(--tape-ink);
-  border: 1px solid var(--rule-strong);
+  background: var(--ink);
+  color: var(--sheet);
+  border: 1px solid var(--ink);
   font-family: var(--font-label);
   font-weight: 600;
   font-size: 14px;
@@ -2532,22 +2534,12 @@ input.field-text {
   }
 }
 
-/* In dark mode the navy tape on the graphite rail gets a hairline edge, so it reads as tape, not a dim blob. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .rail .tape {
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--folder) 70%, transparent);
-  }
-}
-:root[data-theme="dark"] .rail .tape {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--folder) 70%, transparent);
-}
-
-/* A next action without a context can't be accepted: its Context chip says so in stamp red. */
+/* A next action without a context can't be accepted: its Context chip says so in alert red. */
 .p-field.is-needed {
-  border-color: var(--stamp);
+  border-color: var(--alert);
 }
 .p-needed {
-  color: var(--stamp);
+  color: var(--alert);
   font-weight: 600;
 }
 

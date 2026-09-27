@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { load, useMeta } from "../store.ts";
-import { Tape } from "./bits.tsx";
+import { Tag } from "./bits.tsx";
 
 /** The only screen a signed-out visitor can reach. Password, then authenticator or recovery code. */
 export function Login() {
@@ -49,7 +49,7 @@ export function Login() {
     <main className="login">
       <form className="login-sheet" onSubmit={submit} aria-label="Sign in">
         <div className="login-head">
-          <Tape size="md">Stiltje</Tape>
+          <Tag size="md">Stiltje</Tag>
         </div>
         {!meta.authConfigured ? (
           <p className="login-note">
