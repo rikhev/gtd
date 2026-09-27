@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { completeActions, isChase, isStale, isStalled, lastReview, projectHealth, mutate, newAction, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
+import { completeActions, isChase, isStale, isStalled, lastReview, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
-import { runWhenReady, useCommands, type Command } from "../keys.ts";
-import { Grid, useListNav, type Column } from "../components/Grid.tsx";
+import { useCommands, type Command } from "../keys.ts";
+import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
 import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tape } from "../components/bits.tsx";
 import { editors } from "../actionCommands.tsx";
+import { projectEditors } from "./ProjectsView.tsx";
+import { ClarifyView } from "./ClarifyView.tsx";
+import { stuffTitle } from "./InboxView.tsx";
+import { doneNow, fileStuff, trashNow } from "../fileStuff.ts";
 import { addDays, formatLong, today, daysBetween } from "../../shared/dates.ts";
-import type { Action, ID } from "../../shared/types.ts";
+import type { Action, ID, Stuff } from "../../shared/types.ts";
 
 const STEPS = [
   { id: "clear", title: "Get clear", note: "Empty the Inbox so nothing is floating around." },
@@ -22,7 +27,7 @@ type StepId = (typeof STEPS)[number]["id"];
 
 interface Row {
   key: string;
-  kind: "project" | "action";
+  kind: "project" | "action" | "stuff";
   id: ID;
   title: string;
   info: string;
@@ -54,6 +59,10 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.id]);
   const ed = editors(ui);
+  // Clarify runs inside the Get clear step, so the review never goes away underneath it.
+  const [clarifying, setClarifying] = useState<{ run: number; withClaude: boolean } | null>(null);
+  const clarify = (withClaude: boolean) => setClarifying((c) => ({ run: (c?.run ?? 0) + 1, withClaude }));
+  useEffect(() => setClarifying(null), [step.id]);
   // Steps without a list (Get clear, Finish) still need somewhere for focus to land.
   useEffect(() => {
     if (!regionActive) return;
@@ -91,8 +100,17 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   };
   const projectTitle = (id: ID | null) => s.projects.find((p) => p.id === id)?.title ?? "";
 
-  const rows: Row[] = useMemo(() => {
+  const stepRows: Row[] = useMemo(() => {
     switch (step.id as StepId) {
+      case "clear": {
+        // The Inbox as a list like every other step, oldest first: clarify or file it without leaving the review.
+        const files = new Map<string, number>();
+        s.files.forEach((f) => f.owner_kind === "stuff" && files.set(f.owner_id, (files.get(f.owner_id) ?? 0) + 1));
+        return s.stuff
+          .filter((x) => x.status === "inbox")
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))
+          .map((st) => ({ key: st.id, kind: "stuff", id: st.id, title: stuffTitle(st), info: files.get(st.id) ? plural(files.get(st.id)!, "file") : "", date: st.created_at.slice(0, 10) }));
+      }
       case "projects":
         return s.projects
           .filter((p) => p.status === "active")
@@ -155,10 +173,18 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, step.id, weeks]);
+  // Each step's list sorts from its headings too, remembered per step.
+  const [sort, setSort] = useSort(`review:${step.id}`);
+  const sorters: Sorters<Row> = useMemo(() => ({ subject: (r) => r.title, info: (r) => r.info, date: (r) => r.date }), []);
+  const rows = useMemo(() => sortGroups([{ key: step.id, label: "", rows: stepRows }], sorters, sort)[0].rows, [stepRows, sorters, sort, step.id]);
 
   const nav = useListNav(`review:${step.id}`, useMemo(() => [{ key: step.id, rowKeys: rows.map((r) => r.key), showHeader: false }], [rows, step.id]));
   const focusRow = rows.find((r) => r.key === nav.focus);
-  const targetsOf = (kind: "project" | "action") =>
+  useEffect(() => {
+    ui.followDetail(focusRow ? { kind: focusRow.kind, id: focusRow.id } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusRow?.key]);
+  const targetsOf = (kind: Row["kind"]) =>
     [...new Set(nav.targets().map((k) => rows.find((r) => r.key === k)).filter((r): r is Row => Boolean(r && r.kind === kind)).map((r) => r.id))];
 
   const finish = async () => {
@@ -174,20 +200,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     ui.go("next");
   };
 
-  /** The GTD fix for a stalled project: give it a next action, right here. */
-  const addNextAction = (projectId: ID, title: string) =>
-    ui.openPicker({
-      type: "text",
-      title: `Next action for “${title || "Untitled project"}”`,
-      current: "",
-      placeholder: "Describe the next action",
-      onPick: (v) => {
-        const text = v.trim();
-        if (!text) return;
-        const a = newAction({ title: text, project_id: projectId });
-        mutate(`Next action added to “${title}”`, [{ type: "create", table: "actions", row: { ...a } }]);
-      },
-    });
+  /** The GTD fix for a stalled project: give it a next action, right here (same flow as T on Projects). */
+  const addNextAction = (projectId: ID) => projectEditors(ui).addNextAction(projectId);
 
   const inboxItems = s.stuff.filter((x) => x.status === "inbox").sort((a, b) => a.created_at.localeCompare(b.created_at));
   const inboxCount = inboxItems.length;
@@ -234,17 +248,17 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
 
   const commands: Command[] = [
     ...nav.commands,
-    { id: "rv.next", label: "Next step", group: "Review", keys: ["ctrl+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
-    { id: "rv.prev", label: "Previous step", group: "Review", keys: ["ctrl+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
-    { id: "rv.clarify", label: "Clarify", group: "Review", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: () => ui.startClarify("review") },
-    { id: "rv.clarifyclaude", label: "Clarify with Claude", group: "Review", keys: ["alt+k"], enabled: step.id === "clear" && inboxCount > 0, run: () => ui.startClarify("review", true) },
+    { id: "rv.next", label: "Next step", group: "Review", keys: ["mod+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
+    { id: "rv.prev", label: "Previous step", group: "Review", keys: ["mod+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
+    { id: "rv.clarify", label: "Clarify", group: "Review", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: () => clarify(false) },
+    { id: "rv.clarifyclaude", label: "Clarify with Claude", group: "Review", keys: ["alt+k"], enabled: step.id === "clear" && inboxCount > 0, run: () => clarify(true) },
     {
       id: "rv.addnext",
       label: "Add a next action to this project",
       group: "Review",
-      keys: ["n"],
+      keys: ["n", "t"],
       enabled: step.id === "projects" && focusRow?.kind === "project",
-      run: () => focusRow && addNextAction(focusRow.id, focusRow.title),
+      run: () => focusRow && addNextAction(focusRow.id),
     },
     ...STEPS.slice(0, -1).map((st, i) => ({
       id: `rv.jump${i + 1}`,
@@ -255,17 +269,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       hidden: true,
       run: () => setStepIdx(i),
     })),
-    {
-      id: "rv.file",
-      label: "File the Inbox",
-      group: "Review",
-      keys: ["v"],
-      enabled: step.id === "clear" && inboxCount > 0,
-      run: () => {
-        ui.go("inbox");
-        runWhenReady("inbox.file");
-      },
-    },
+    { id: "rv.file", label: "File", group: "Review", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
@@ -278,12 +282,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
+        if (targetsOf("stuff").length) doneNow(targetsOf("stuff"));
         if (step.id === "someday") {
           if (a.length) patchMany("actions", a, { status: "next" }, `${plural(a.length, "action")} activated`);
           if (p.length) patchMany("projects", p, { status: "active" }, `${plural(p.length, "project")} activated`);
         } else {
           if (a.length) completeActions(a);
-          if (p.length) patchMany("projects", p, { status: "done", completed_at: new Date().toISOString() }, `${plural(p.length, "project")} complete`);
+          if (p.length) projectEditors(ui).complete(p);
         }
       },
     },
@@ -299,21 +304,35 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
+        if (targetsOf("stuff").length) trashNow(targetsOf("stuff"));
         if (a.length) patchMany("actions", a, { status: "trashed" }, `${plural(a.length, "action")} trashed`);
         if (p.length) patchMany("projects", p, { status: "trashed" }, `${plural(p.length, "project")} trashed`);
       },
     },
   ];
-  useCommands("review", commands, { priority: 12, active: regionActive });
+  // While Clarify runs in the step, its keys are the only ones live.
+  useCommands("review", commands, { priority: 12, active: regionActive && !clarifying });
 
   const last = lastReview(s);
+  const clarifyHost = {
+    leave: () => setClarifying(null),
+    restart: clarify,
+    // Clarify can't run: back to the list with the filing picker open on the item in hand.
+    fileInbox: () => {
+      setClarifying(null);
+      const id = nav.focus ?? rows[0]?.key;
+      if (id) fileStuff(ui, [id]);
+    },
+    backLabel: "Back to Get clear",
+    offerNext: false,
+  };
 
   const columns: Column<Row>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health={healthOf(r.id)} /> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health={healthOf(r.id)} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
     {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.
-      label: ({ projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", upcoming: "Item" } as Record<string, string>)[step.id] ?? "",
+      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", upcoming: "Item" } as Record<string, string>)[step.id] ?? "",
       width: "minmax(220px, 1fr)",
       render: (r) => (
         <span className="subject">
@@ -323,9 +342,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </span>
       ),
     },
-    { key: "info", label: ({ projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "info", label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
-    { key: "date", label: ({ projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" ? "plain" : "due"} /> },
+    { key: "date", label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" ? "plain" : "due"} /> },
   ];
   function healthOf(id: ID) {
     const p = s.projects.find((x) => x.id === id);
@@ -362,22 +381,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         <p className="muted-text">{step.note}</p>
 
       </div>
-      {step.id === "clear" ? (
-        <div className="review-panel">
-          <p className="big-count">
-            <span className="num">{inboxCount}</span> {inboxCount === 1 ? "item" : "items"} in the Inbox
-          </p>
-          {/* The actual pile, so its weight can be judged without leaving the review. */}
-          {inboxCount > 0 && (
-            <ul className="review-pile">
-              {inboxItems.slice(0, 8).map((x) => (
-                <li key={x.id}>{x.text.split("\n")[0].trim() || "Untitled"}</li>
-              ))}
-              {inboxCount > 8 && <li className="muted-text">and {inboxCount - 8} more</li>}
-            </ul>
-          )}
-          <p className="muted-text">{inboxCount ? "Clarify or file them now, then move to the next step." : "Clear. Move on to the next step."}</p>
-        </div>
+      {step.id === "clear" && clarifying ? (
+        <ClarifyView key={clarifying.run} regionActive={regionActive} withClaude={clarifying.withClaude} host={clarifyHost} />
       ) : step.id === "finish" ? (
         <div className="review-panel review-finish">
           {/* The end of the week leads with what you cleared, then what is still open. */}
@@ -400,6 +405,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       ) : (
         <Grid
           listId={`review:${step.id}`}
+          sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
           label={`Weekly Review, ${step.title}`}
           columns={columns}
           groups={[{ key: step.id, label: "", rows }]}
@@ -408,24 +414,30 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           active={regionActive}
           showHeaders={false}
           rowClass={(r) => (r.note ? "is-flagged-row" : "")}
-          empty={<p className="muted-text">Nothing here. Move on to the next step.</p>}
+          empty={<p className="muted-text">{step.id === "clear" ? "The Inbox is empty. Move on to the next step." : "Nothing here. Move on to the next step."}</p>}
         />
       )}
-      <KeyHints
-        hints={[
-          ...(step.id !== "finish" ? [{ k: "ctrl+.", label: "Next step" }] : []),
-          { k: "ctrl+,", label: "Previous" },
-          ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "n", label: "Add next action" }] : []),
-          ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
-          ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
-          ...(step.id !== "clear" && step.id !== "finish" ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
-        ]}
-      />
+      {!clarifying && (
+        <KeyHints
+          hints={[
+            ...(step.id !== "finish" ? [{ k: "mod+.", label: "Next step" }] : []),
+            { k: "mod+,", label: "Previous" },
+            ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "n", label: "Add next action" }] : []),
+            ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
+            ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
+            ...(step.id !== "finish" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
+          ]}
+        />
+      )}
     </div>
   );
 }
 
 /** How long something has been waited on, in one format: "today", "1 day", "4 days". */
+function stuffIcon(st: Stuff | undefined) {
+  return st?.kind === "email" ? <Mail size={14} strokeWidth={1.75} aria-label="Email" /> : st?.kind === "file" ? <FileText size={14} strokeWidth={1.75} aria-label="File" /> : <StickyNote size={14} strokeWidth={1.75} aria-label="Note" />;
+}
+
 function waitedFor(days: number) {
   return days <= 0 ? "today" : plural(days, "day");
 }

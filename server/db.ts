@@ -15,8 +15,9 @@ export const COLUMNS: Record<TableName, string[]> = {
   actions: [
     "id", "title", "notes", "project_id", "context_id", "due", "defer", "time_min", "energy", "flagged",
     "status", "waiting_who", "waiting_since", "followup", "recurrence", "bring_back", "sort", "created_at", "completed_at", "updated_at",
+    "done_from", "archived_at",
   ],
-  projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at"],
+  projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at"],
   stuff: ["id", "text", "kind", "status", "created_at", "processed_at"],
   refs: ["id", "title", "notes", "project_id", "status", "created_at"],
   contexts: ["id", "name", "color", "sort"],
@@ -70,6 +71,20 @@ if (!(db.prepare("PRAGMA table_info(actions)").all() as { name: string }[]).some
   db.exec("ALTER TABLE actions ADD COLUMN updated_at TEXT");
 }
 db.exec("UPDATE actions SET updated_at = COALESCE(completed_at, created_at) WHERE updated_at IS NULL");
+
+// Done stays on its list until archived, as in classic Outlook: an action remembers the list it was done
+// from, and archiving moves it to Done. When the columns first appear, everything already done counts as
+// archived (it was already in Done), once; after that a done, unarchived action stays on its list.
+if (!(db.prepare("PRAGMA table_info(actions)").all() as { name: string }[]).some((c) => c.name === "archived_at")) {
+  db.exec("ALTER TABLE actions ADD COLUMN done_from TEXT");
+  db.exec("ALTER TABLE actions ADD COLUMN archived_at TEXT");
+  db.exec("UPDATE actions SET archived_at = COALESCE(completed_at, created_at) WHERE status = 'done'");
+}
+// Completed projects likewise stay on Projects, struck through, until archived; the ones finished before that are archived once.
+if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).some((c) => c.name === "archived_at")) {
+  db.exec("ALTER TABLE projects ADD COLUMN archived_at TEXT");
+  db.exec("UPDATE projects SET archived_at = COALESCE(completed_at, created_at) WHERE status = 'done'");
+}
 
 /** Owner preferences kept on the server (so every browser agrees). */
 export function getSetting(key: string, fallback: string): string {

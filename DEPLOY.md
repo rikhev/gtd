@@ -1,9 +1,9 @@
-# Running In-Tray on your VPS (Rocky Linux 9)
+# Running Stiltje on your VPS (Rocky Linux 9)
 
 The finished setup:
 
 ```
-browser ──HTTPS──▶ nginx (gtd.hevosmaa.net) ──▶ 127.0.0.1:8787 In-Tray (systemd, user "gtd")
+browser ──HTTPS──▶ nginx (gtd.hevosmaa.net) ──▶ 127.0.0.1:8787 Stiltje (systemd, user "gtd")
                                                    └─ /var/lib/gtd   lists, uploads, login, API key, backups
 ```
 

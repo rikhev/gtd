@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
 import type { UI } from "./ui.tsx";
-import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, stamp, uid } from "./store.ts";
+import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
@@ -281,6 +281,8 @@ export function useActionCommands(opts: {
   defaults?: () => Partial<Action>;
   neighbors: (id: ID) => { prev?: Action; next?: Action };
   onCreated?: (id: ID) => void;
+  /** Rows about to be marked done: the list moves its cursor off them (they stay, struck through, at the bottom). */
+  onCompleting?: (ids: ID[]) => void;
   waitingView?: boolean;
   doneView?: boolean;
 }) {
@@ -300,7 +302,11 @@ export function useActionCommands(opts: {
   const complete = () => {
     const ids = pick();
     if (!ids.length) return;
-    // The pen strikes through first; the rows fold away a beat later.
+    // E on done rows (still on their list) takes them back: E toggles, like the Complete box.
+    const acts = getState().actions.filter((a) => ids.includes(a.id));
+    if (acts.length && acts.every((a) => a.status === "done")) return reopenActions(ids);
+    opts.onCompleting?.(ids);
+    // The pen strikes through first, then the row is done (struck through at the bottom of its group, or gone when done is hidden).
     setStriking(new Set(ids));
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
@@ -309,10 +315,11 @@ export function useActionCommands(opts: {
     }, 280);
   };
 
+  // Back to the list each was done on.
   const reopen = () => {
     const ids = targets();
     if (!ids.length) return;
-    patchMany("actions", ids, { status: "next", completed_at: null }, `${n(ids)} back on Next Actions`);
+    reopenActions(ids);
   };
 
   const flag = () => {
@@ -371,7 +378,7 @@ export function useActionCommands(opts: {
     opts.doneView
       ? { id: "act.reopen", label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
       : { id: "act.done", label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
-    { id: "act.flag", label: "Flag for today", group: "Actions", keys: ["insert", "ctrl+i"], run: flag },
+    { id: "act.flag", label: "Flag for today", group: "Actions", keys: ["insert", "mod+i"], run: flag },
     { id: "act.move", label: "Move to project or list", group: "Actions", keys: ["v"], run: () => ed.move(pick()) },
     { id: "act.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(pick()) },
     { id: "act.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(pick()) },
@@ -401,5 +408,27 @@ export function useActionCommands(opts: {
     if (title.trim() !== a.title) mutate("Renamed", [{ type: "patch", table: "actions", id, data: { title: title.trim() } }]);
   };
 
-  return { commands, editing, setEditing, commitTitle, striking };
+  // The Complete box acts on its own row, not on the selection: strike through and complete, or bring back.
+  const completeOne = (id: ID) => {
+    opts.onCompleting?.([id]);
+    setStriking((prev) => new Set(prev).add(id));
+    window.setTimeout(() => {
+      completeActions([id]);
+      setStriking((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+    }, 280);
+  };
+  const reopenOne = (id: ID) => reopenActions([id]);
+
+  const flagOne = (id: ID) => {
+    const a = getState().actions.find((x) => x.id === id);
+    if (!a) return;
+    const on = a.flagged ? 0 : 1;
+    patchMany("actions", [id], { flagged: on }, on ? `${n([id])} flagged for today` : `${n([id])} unflagged`);
+  };
+
+  return { commands, editing, setEditing, commitTitle, striking, completeOne, reopenOne, flagOne };
 }

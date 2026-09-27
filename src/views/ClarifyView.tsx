@@ -3,6 +3,7 @@ import { FileText, Mail, StickyNote, Timer } from "lucide-react";
 import { getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { runWhenReady, useCommands, type Command } from "../keys.ts";
+import { RAIL } from "../components/Chrome.tsx";
 import { promptApiKey } from "../apiKey.ts";
 import { suggestRules } from "../rules.ts";
 import { ContextCode, Energy, KeyChoices, KeyHints, Tape } from "../components/bits.tsx";
@@ -50,8 +51,29 @@ const DISPOSITIONS: Record<Draft["disposition"], string> = {
   trash: "Trash",
 };
 
-export function ClarifyView({ regionActive, withClaude = false }: { regionActive: boolean; withClaude?: boolean }) {
+/** Where a Clarify run lives: its own screen by default, or inside another view (the Weekly Review) that stays put. */
+export interface ClarifyHost {
+  leave: () => void;
+  restart: (withClaude: boolean) => void;
+  /** Clarify can't run: file the Inbox by hand instead. */
+  fileInbox: () => void;
+  backLabel: string;
+  /** Offer "Work from Next Actions" once the Inbox is clear. */
+  offerNext: boolean;
+}
+
+export function ClarifyView({ regionActive, withClaude = false, host: hosted }: { regionActive: boolean; withClaude?: boolean; host?: ClarifyHost }) {
   const ui = useUI();
+  const host: ClarifyHost = hosted ?? {
+    leave: ui.leaveClarify,
+    restart: (claude) => ui.startClarify(ui.clarifyReturn(), claude),
+    fileInbox: () => {
+      ui.go("inbox");
+      runWhenReady("inbox.file");
+    },
+    backLabel: ui.clarifyReturn() === "review" ? "Back to the Weekly Review" : "Back to the Inbox",
+    offerNext: ui.clarifyReturn() !== "review",
+  };
   const meta = useMeta();
   // Claude is optional: K clarifies by hand on this screen; ⌥K asks Claude for proposals.
   const byHand = !withClaude;
@@ -132,7 +154,7 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
     const ready = Object.keys(j.proposals).filter((id) => !handled.has(id)).length;
     if (!ready) {
       notify("Stopped Claude before any proposals were ready. Your Inbox is unchanged.");
-      ui.leaveClarify();
+      host.leave();
     } else {
       notify(`Stopped Claude. Review the ${plural(ready, "proposal")} already made; the rest stay in the Inbox.`);
     }
@@ -328,8 +350,9 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
       }
       if (newProjectId) moveFiles("project", newProjectId);
       else if (created[0]) moveFiles("action", created[0]);
-      // Keep the original capture text with the first action so nothing is lost.
-      if (created[0] && current.text.trim() && current.text.trim() !== d.actions[0]?.title) {
+      // Clarifying by hand keeps the original capture text with the first action so nothing is lost; Claude's
+      // clarifications leave the notes alone (owner's decision): its proposal already carries what matters.
+      if (byHand && created[0] && current.text.trim() && current.text.trim() !== d.actions[0]?.title) {
         const i = ops.findIndex((o) => o.type === "create" && o.table === "actions" && (o.row as { id: string }).id === created[0]);
         if (i >= 0) (ops[i] as { row: Record<string, unknown> }).row.notes = `Captured: ${current.text.trim()}`;
       }
@@ -440,21 +463,18 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
   const ready = Boolean(current && draft);
   const err = startError ?? job?.error?.message;
   const stopped = Boolean(err && !draft);
-  const backLabel = ui.clarifyReturn() === "review" ? "Back to the Weekly Review" : "Back to the Inbox";
+  const backLabel = host.backLabel;
   const keyProblem = !meta.hasKey || /api key/i.test(err ?? "");
   // Ways forward when Claude can't run: add a key right here, or file the Inbox by hand.
   const addKey = () => promptApiKey(ui, () => void start(true));
-  const fileByHand = () => {
-    ui.go("inbox");
-    runWhenReady("inbox.file");
-  };
+  const fileByHand = host.fileInbox;
   const commands: Command[] = [
     { id: "cl.accept", label: "Accept proposal and continue", group: "Clarify", keys: ["mod+enter"], inInput: true, enabled: ready, run: () => {
       (document.activeElement as HTMLElement | null)?.blur?.();
       window.setTimeout(accept, 0);
     } },
-    { id: "cl.next", label: "Skip to next item", group: "Clarify", keys: ["ctrl+."], inInput: true, run: goNext },
-    { id: "cl.prev", label: "Previous item", group: "Clarify", keys: ["ctrl+,"], inInput: true, run: goPrev },
+    { id: "cl.next", label: "Skip to next item", group: "Clarify", keys: ["mod+."], inInput: true, run: goNext },
+    { id: "cl.prev", label: "Previous item", group: "Clarify", keys: ["mod+,"], inInput: true, run: goPrev },
     { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current), run: trashItem },
     { id: "cl.done", label: "Done it now (two-minute rule)", group: "Clarify", keys: ["e"], enabled: ready, run: () => {
       const i = rowOfFocus();
@@ -479,7 +499,7 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
       group: "Clarify",
       keys: ["alt+k"],
       run: () => {
-        if (byHand) return ui.startClarify(ui.clarifyReturn(), true);
+        if (byHand) return host.restart(true);
         if (job && !job.done) void fetch(`/api/clarify/${job.id}`, { method: "DELETE" });
         void start(true);
       },
@@ -495,7 +515,7 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
         const rowEl = el?.closest<HTMLElement>("[data-row]");
         if (el && rowEl && el !== rowEl) rowEl.focus();
         else if (el && card.current?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) el.blur();
-        else ui.leaveClarify();
+        else host.leave();
       },
     },
     { id: "cl.stop", label: "Stop Claude (keep reviewing what's ready)", group: "Clarify", keys: ["shift+escape"], inInput: true, enabled: Boolean(job && !job.done), run: () => void stop() },
@@ -520,7 +540,7 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
     { id: "cl.rules", label: "Ask Claude to turn your corrections into rules", group: "Clarify", keys: ["r"], enabled: finished && offerRules, run: askRules },
     { id: "cl.addkey", label: meta.hasKey ? "Change the API key" : "Add an API key", group: "Clarify", keys: ["enter"], enabled: stopped && keyProblem, run: addKey },
     { id: "cl.byhand", label: "File the Inbox", group: "Clarify", keys: ["v"], enabled: stopped, run: fileByHand },
-    { id: "cl.hand", label: "Clarify without Claude", group: "Clarify", keys: ["k"], enabled: stopped, run: () => ui.startClarify(ui.clarifyReturn()) },
+    { id: "cl.hand", label: "Clarify without Claude", group: "Clarify", keys: ["k"], enabled: stopped, run: () => host.restart(false) },
   );
   useCommands("clarify", commands, { priority: 15, active: regionActive });
 
@@ -534,9 +554,9 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
             ...(keyProblem
               ? [{ k: "enter", label: meta.hasKey ? "Enter a working API key and start" : "Add your Claude API key and start", run: addKey }]
               : [{ k: "alt+k", label: "Ask Claude again", run: () => void start(true) }]),
-            { k: "k", label: "Clarify without Claude", run: () => ui.startClarify(ui.clarifyReturn()) },
+            { k: "k", label: "Clarify without Claude", run: () => host.restart(false) },
             { k: "v", label: "File the Inbox", run: fileByHand },
-            { k: "escape", label: backLabel, run: ui.leaveClarify },
+            { k: "escape", label: backLabel, run: host.leave },
           ]}
         />
       </div>
@@ -548,7 +568,7 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
       <div className="clarify-state">
         <Tape size="md">Inbox zero</Tape>
         <p className="clarify-msg">Nothing left to clarify. Your lists are up to date.</p>
-        <KeyChoices choices={[{ k: "escape", label: backLabel, run: ui.leaveClarify }]} />
+        <KeyChoices choices={[{ k: "escape", label: backLabel, run: host.leave }]} />
       </div>
     );
   }
@@ -561,8 +581,8 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
         <KeyChoices
           choices={[
             ...(offerRules ? [{ k: "r", label: "Ask Claude to turn your corrections into rules", run: askRules }] : []),
-            { k: "escape", label: backLabel, run: ui.leaveClarify },
-            ...(ui.clarifyReturn() === "review" ? [] : [{ k: "ctrl+shift+2", label: "Work from Next Actions", run: () => ui.go("next") }]),
+            { k: "escape", label: backLabel, run: host.leave },
+            ...(!host.offerNext ? [] : [{ k: RAIL[1].key!, label: "Work from Next Actions", run: () => ui.go("next") }]),
           ]}
         />
       </div>
@@ -746,7 +766,7 @@ export function ClarifyView({ regionActive, withClaude = false }: { regionActive
           { k: "v", label: "File as" },
           { k: "e", label: "Done now" },
           { k: "backspace", label: "Trash" },
-          { k: "ctrl+.", label: "Skip" },
+          { k: "mod+.", label: "Skip" },
         ]}
       />
     </div>

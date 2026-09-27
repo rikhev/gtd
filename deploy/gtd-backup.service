@@ -1,5 +1,5 @@
 [Unit]
-Description=In-Tray nightly backup
+Description=Stiltje nightly backup
 
 [Service]
 Type=oneshot

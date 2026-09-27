@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip } from "lucide-react";
+import { X, Paperclip, Pin } from "lucide-react";
 import { mutate, newAction, notify, projectHealth, stallReason, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { runWhenReady, useCommands } from "../keys.ts";
-import { editors } from "../actionCommands.tsx";
+import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { ContextCode, Energy, KeyHints, Lamp, Marker, Tape } from "./bits.tsx";
+import { ContextCode, Energy, KeyHints, Lamp, Marker } from "./bits.tsx";
 import { formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
@@ -19,8 +19,11 @@ function TextField({
   placeholder,
   autoFocus,
   className,
+  mark,
 }: {
   label: string;
+  /** A small mark after the label, such as the project's health lamp. */
+  mark?: ReactNode;
   value: string;
   /** Return false to refuse the edit; the field then snaps back to the saved value. */
   onCommit: (v: string) => void | boolean;
@@ -45,7 +48,10 @@ function TextField({
   };
   return (
     <label className={`field ${className ?? ""}`}>
-      <span className="field-label">{label}</span>
+      <span className="field-label">
+        {label}
+        {mark}
+      </span>
       {multiline ? (
         <textarea {...common} rows={rows} className="field-text" data-autofocus={autoFocus || undefined} />
       ) : (
@@ -67,6 +73,11 @@ const DETAIL_HINTS: Record<string, { k: string; label: string }[]> = {
   stuff: [
     { k: "v", label: "File as" },
     { k: "k", label: "Clarify" },
+    { k: "f2", label: "Edit" },
+    { k: "escape", label: "Close" },
+  ],
+  project: [
+    { k: "t", label: "Add next action" },
     { k: "f2", label: "Edit" },
     { k: "escape", label: "Close" },
   ],
@@ -202,14 +213,11 @@ function ActionDetail({ a }: { a: Action }) {
   const ctx = s.contexts.find((c) => c.id === a.context_id);
   const proj = s.projects.find((p) => p.id === a.project_id);
   const rec = a.recurrence ? parseRecurrence(a.recurrence) : null;
-  const where = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", done: "Done", trashed: "Trash" }[a.status];
+  const done = a.status === "done";
   return (
     <>
-      <div className="detail-head">
-        <Marker flagged={Boolean(a.flagged)} done={a.status === "done"} />
-        <span className="detail-where">{where}</span>
-      </div>
-      <TextField label="Subject" value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      {/* Flagged for today or done is the one thing the fields don't say, so its mark rides after the label. */}
+      <TextField label="Subject" mark={a.flagged || done ? <Marker flagged={Boolean(a.flagged)} done={done} /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       <div className="field-grid">
         <PickField label="Project" k="P" onOpen={() => ed.project([a.id])}>
           {proj ? proj.title : none}
@@ -276,17 +284,28 @@ function ProjectDetail({ p }: { p: Project }) {
   const [showDone, setShowDone] = useState(false);
   const [draft, setDraft] = useState("");
   const area = s.areas.find((a) => a.id === p.area_id);
+  // T, as on the Projects list: straight into "Add a next action" while the pane has focus.
+  const active = useContext(DetailActive);
+  const addInput = useRef<HTMLInputElement>(null);
+  useCommands("detail-addnext", [{ id: "detail.addnext", label: "Add a next action to this project", group: "Details", keys: ["t"], run: () => addInput.current?.focus() }], { priority: 21, active });
+  // A next action needs a context, as everywhere else: Enter asks for it, then adds the action.
+  const addNext = () => {
+    const title = draft.trim();
+    if (!title) return;
+    askContext(ui, `Context for “${title}”`, (context_id, extra) => {
+      const a = newAction({ title, project_id: p.id, context_id, status: "next" });
+      mutate(`Next action added to “${p.title || "Untitled project"}”`, [...extra, { type: "create", table: "actions", row: { ...a } }]);
+      setDraft("");
+      window.setTimeout(() => addInput.current?.focus(), 0);
+    });
+  };
   const acts = s.actions.filter((a) => a.project_id === p.id).sort((a, b) => a.sort - b.sort);
   const open = acts.filter((a) => ["next", "waiting", "someday"].includes(a.status));
   const done = acts.filter((a) => a.status === "done").sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
   return (
     <>
-      <div className="detail-head">
-        <Lamp health={projectHealth(s, p)} />
-        {area ? <Tape>{area.name}</Tape> : <span className="detail-where">No area</span>}
-        <span className="detail-where">{{ active: "Active project", someday: "Someday / Maybe", done: "Completed", trashed: "Trash" }[p.status]}</span>
-      </div>
-      <TextField label="Project" value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      {/* Area and status live in their own fields below; the head only carries the project's health, beside its name. */}
+      <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
           {area ? area.name : none}
@@ -304,6 +323,11 @@ function ProjectDetail({ p }: { p: Project }) {
       <section className="detail-actions">
         <h3 className="detail-h">
           Actions <span className="count">{open.length}</span>
+          {active && (
+            <kbd className="kbd field-key detail-h-key" aria-hidden="true">
+              T
+            </kbd>
+          )}
         </h3>
         {stallReason(s, p) && (
           <p className="stamp-line">
@@ -323,16 +347,17 @@ function ProjectDetail({ p }: { p: Project }) {
           ))}
         </ul>
         <input
+          ref={addInput}
           className="field-text add-action"
           value={draft}
           placeholder="Add a next action"
           aria-label="Add a next action"
+          aria-keyshortcuts="T"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && draft.trim()) {
-              const a = newAction({ title: draft.trim(), project_id: p.id });
-              mutate("Action added", [{ type: "create", table: "actions", row: { ...a } }]);
-              setDraft("");
+              e.preventDefault();
+              addNext();
             }
           }}
         />
@@ -364,9 +389,6 @@ function ProjectDetail({ p }: { p: Project }) {
 function StuffDetail({ st }: { st: Stuff }) {
   return (
     <>
-      <div className="detail-head">
-        <span className="detail-where">Inbox · {st.kind === "email" ? "email" : st.kind === "file" ? "document" : "note"}</span>
-      </div>
       <TextField label="Stuff" value={st.text} multiline rows={8} autoFocus onCommit={(v) => patch("stuff", st.id, { text: v }, "Edited")} />
       <Files owner={{ kind: "stuff", id: st.id }} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
@@ -380,9 +402,6 @@ function RefDetail({ r }: { r: Ref }) {
   const proj = s.projects.find((p) => p.id === r.project_id);
   return (
     <>
-      <div className="detail-head">
-        <span className="detail-where">Reference</span>
-      </div>
       <TextField label="Title" value={r.title} onCommit={(v) => patch("refs", r.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       <PickField
         label="Project"
@@ -404,7 +423,7 @@ function RefDetail({ r }: { r: Ref }) {
   );
 }
 
-export function Detail({ target, active }: { target: Target; active: boolean }) {
+export function Detail({ target, active }: { target: Target | null; active: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
   const root = useRef<HTMLElement>(null);
@@ -413,15 +432,15 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
     "detail",
     [
       {
-        // One Escape, from anywhere in the pane: edits are saved on blur, the pane closes, you're back on the row.
+        // One Escape, from anywhere in the pane: edits are saved on blur, the pane closes (unless pinned), you're back on the row.
         id: "detail.back",
-        label: "Close details and go back to the list",
+        label: ui.detailPinned ? "Back to the list" : "Close details and go back to the list",
         group: "Details",
         keys: ["escape"],
         inInput: true,
         run: () => {
           (document.activeElement as HTMLElement | null)?.blur?.();
-          ui.openDetail(null);
+          if (!ui.detailPinned) ui.openDetail(null);
           ui.setRegion("list");
         },
       },
@@ -450,14 +469,14 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
         label: "File as…",
         group: "Details",
         keys: ["v"],
-        enabled: target.kind === "stuff",
+        enabled: target?.kind === "stuff",
         run: () => {
-          ui.openDetail(null);
+          if (!ui.detailPinned) ui.openDetail(null);
           ui.setRegion("list");
           runWhenReady("inbox.file");
         },
       },
-      { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["k"], enabled: target.kind === "stuff", run: () => ui.startClarify() },
+      { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["k"], enabled: target?.kind === "stuff", run: () => ui.startClarify() },
     ],
     { priority: 20, active },
   );
@@ -466,10 +485,11 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
   // Tab or F2 goes into the subject.
   useEffect(() => {
     if (active) root.current?.focus({ preventScroll: true });
-  }, [active, target.id]);
+  }, [active, target?.id]);
 
   // The pane is announced by what it shows: "Action details: Pay the VAT for Q3".
   const paneName = (() => {
+    if (!target) return "Details";
     const kind = ({ action: "Action", project: "Project", stuff: "Inbox item", ref: "Reference" } as Record<string, string>)[target.kind] ?? "Item";
     const title =
       target.kind === "action"
@@ -483,7 +503,8 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
   })();
 
   let body: ReactNode = null;
-  if (target.kind === "action") {
+  if (!target) body = null;
+  else if (target.kind === "action") {
     const a = s.actions.find((x) => x.id === target.id);
     body = a ? <ActionDetail key={a.id} a={a} /> : null;
   } else if (target.kind === "project") {
@@ -503,15 +524,28 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
         <h2 className="detail-title" id="detail-title">
           Details
         </h2>
-        <button type="button" className="icon-btn" aria-label="Close details" onClick={() => ui.openDetail(null)}>
-          <X size={14} strokeWidth={2} />
-        </button>
+        <span className="detail-bar-tools">
+          <button
+            type="button"
+            className={`icon-btn pin-btn ${ui.detailPinned ? "is-on" : ""}`}
+            aria-label="Pin details"
+            aria-pressed={ui.detailPinned}
+            aria-keyshortcuts="Alt+P"
+            title={ui.detailPinned ? "Pinned: stays open beside every list (⌥P)" : "Pin: keep the pane open beside every list (⌥P)"}
+            onClick={() => ui.setDetailPinned(!ui.detailPinned)}
+          >
+            <Pin size={14} strokeWidth={2} />
+          </button>
+          <button type="button" className="icon-btn" aria-label="Close details" onClick={() => ui.openDetail(null)}>
+            <X size={14} strokeWidth={2} />
+          </button>
+        </span>
       </div>
       <DetailActive.Provider value={active}>
         <div className="detail-body">
-          {body ?? <p className="muted-text">This item no longer exists.</p>}
+          {body ?? <p className="muted-text">{target ? "This item no longer exists." : "Nothing here has details. Move the cursor onto an item, action or project."}</p>}
           {/* The pane is a letter-key mode, so while it has focus it names its few keys (owner's decision). */}
-          {active && body && <KeyHints hints={DETAIL_HINTS[target.kind] ?? DETAIL_HINTS.other} />}
+          {active && body && target && <KeyHints hints={DETAIL_HINTS[target.kind] ?? DETAIL_HINTS.other} />}
         </div>
       </DetailActive.Provider>
     </aside>

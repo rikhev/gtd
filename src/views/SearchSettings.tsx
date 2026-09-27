@@ -1,13 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { mutate, notify, plural, updateMeta, useMeta, useStore } from "../store.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
-import { useCommands, type Command } from "../keys.ts";
-import { Grid, useListNav, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
+import { keyLabel, useCommands, type Command } from "../keys.ts";
+import { Grid, useListNav, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { ContextCode, Tape } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { CONTEXT_COLORS } from "../actionCommands.tsx";
 import { suggestRules } from "../rules.ts";
+import { isDark, setTheme, useTheme } from "../theme.ts";
 import { promptApiKey, removeApiKey } from "../apiKey.ts";
 import type { ID } from "../../shared/types.ts";
 
@@ -27,7 +28,9 @@ interface Hit {
 export function SearchView({ regionActive, query }: { regionActive: boolean; query: string }) {
   const ui = useUI();
   const s = useStore((x) => x);
-  const hits: GridGroup<Hit>[] = useMemo(() => {
+  const [sort, setSort] = useSort("search");
+  const sorters: Sorters<Hit> = useMemo(() => ({ subject: (h) => h.title, where: (h) => h.where }), []);
+  const found: GridGroup<Hit>[] = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
     const match = (...texts: (string | null | undefined)[]) => {
@@ -55,10 +58,16 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
       { key: "refs", label: "Reference", rows: refs },
     ].filter((g) => g.rows.length);
   }, [s, query]);
+  // Results keep their kind groups; a heading click sorts inside each.
+  const hits = useMemo(() => sortGroups(found, sorters, sort), [found, sorters, sort]);
 
   const nav = useListNav("search", useMemo(() => hits.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: true })), [hits]));
   const all = hits.flatMap((g) => g.rows);
   const focused = all.find((h) => h.key === nav.focus);
+  useEffect(() => {
+    ui.followDetail(focused ? { kind: focused.kind, id: focused.id } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focused?.key]);
 
   const commands: Command[] = [
     ...nav.commands,
@@ -82,6 +91,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
   return (
     <Grid
       listId="search"
+      sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
       columns={columns}
       groups={hits}
       getKey={(h) => h.key}
@@ -98,16 +108,23 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: rules, contexts, Claude, export                            */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "apikey" | "stall"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme"; id: ID; text: string; status?: string; color?: string };
 
 export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
   const meta = useMeta();
   const [editing, setEditing] = useState<string | null>(null);
+  const theme = useTheme();
 
   const groups: GridGroup<SRow>[] = useMemo(
     () => [
+      {
+        key: "appearance",
+        label: "Appearance",
+        hideCount: true,
+        rows: [{ key: "theme", kind: "theme" as const, id: "theme", text: "Theme" }],
+      },
       {
         key: "review",
         label: "Weekly Review",
@@ -127,7 +144,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         meta: s.rules.some((r) => r.status === "suggested")
           ? undefined
           : meta.hasKey
-            ? "Ask Claude (⌘K › Suggest rules) once you have corrected the same kind of proposal a few times"
+            ? `Ask Claude (${keyLabel("mod+k")} › Suggest rules) once you have corrected the same kind of proposal a few times`
             : "Rules come from correcting Claude's proposals, so they need an API key first",
       },
       {
@@ -137,17 +154,37 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         meta: s.rules.some((r) => r.status === "active") ? undefined : "None yet. Approve a suggested rule, or add your own",
       },
       {
+        // Areas of focus are managed here (the Projects list groups by them); creating one also works from any area picker.
+        key: "areas",
+        label: "Areas",
+        rows: [...s.areas].sort((a, b) => a.sort - b.sort).map((a) => ({ key: `a:${a.id}`, kind: "area" as const, id: a.id, text: a.name })),
+        meta: s.areas.length ? undefined : "None yet. N adds one; projects are grouped by area",
+      },
+      {
         key: "contexts",
         label: "Contexts",
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.rules, s.contexts, meta.hasKey, meta.stallWeeks],
+    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks],
   );
   const nav = useListNav("settings", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: true })), [groups]));
   const all = groups.flatMap((g) => g.rows);
   const cur = all.find((r) => r.key === nav.focus);
   const groupOfFocus = nav.focus && isGroupKey(nav.focus) ? nav.focus.slice(6) : groups.find((g) => g.rows.some((r) => r.key === nav.focus))?.key;
+
+  // Only rules, contexts and areas can be renamed or deleted; the other rows are settings, not list items.
+  const listRow = cur?.kind === "rule" || cur?.kind === "context" || cur?.kind === "area";
+  const moveArea = (id: ID, dir: -1 | 1) => {
+    const list = [...s.areas].sort((a, b) => a.sort - b.sort);
+    const i = list.findIndex((a) => a.id === id);
+    const other = list[i + dir];
+    if (!other) return;
+    mutate("Reordered", [
+      { type: "patch", table: "areas", id, data: { sort: other.sort } },
+      { type: "patch", table: "areas", id: other.id, data: { sort: list[i].sort } },
+    ], { silent: true });
+  };
 
   const commands: Command[] = [
     ...nav.commands,
@@ -174,6 +211,29 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         }),
     },
     {
+      id: "set.theme",
+      label: "Choose the theme: light, dark or the system's",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "theme",
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "Theme",
+          items: [
+            { id: "system", label: "Follow the system", hint: isDark("system") ? "Dark now" : "Light now" },
+            { id: "light", label: "Light" },
+            { id: "dark", label: "Dark" },
+          ],
+          current: theme.pref,
+          onPick: (id) => {
+            if (id !== "system" && id !== "light" && id !== "dark") return;
+            setTheme(id);
+            notify(id === "system" ? "Following the system theme" : `${id === "dark" ? "Dark" : "Light"} theme`);
+          },
+        }),
+    },
+    {
       id: "set.key",
       label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key",
       group: "Settings",
@@ -197,16 +257,20 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       enabled: cur?.kind === "rule" && cur.status === "suggested",
       run: () => cur && mutate("Rule approved: Claude will follow it", [{ type: "patch", table: "rules", id: cur.id, data: { status: "active" } }]),
     },
-    { id: "set.edit", label: "Edit", group: "Settings", keys: ["f2"], enabled: Boolean(cur) && cur?.kind !== "apikey", run: () => cur && setEditing(cur.key) },
+    { id: "set.edit", label: "Rename", group: "Settings", keys: ["f2"], enabled: listRow, run: () => cur && setEditing(cur.key) },
     { id: "set.suggest", label: "Ask Claude to suggest rules from your corrections", group: "Settings", keys: ["shift+k"], enabled: meta.hasKey, run: () => void suggestRules() },
     {
       id: "set.new",
-      label: groupOfFocus === "contexts" ? "New context" : "New rule",
+      label: groupOfFocus === "contexts" ? "New context" : groupOfFocus === "areas" ? "New area" : "New rule",
       group: "Settings",
       keys: ["n"],
       run: () => {
         const id = crypto.randomUUID();
-        if (groupOfFocus === "contexts") {
+        if (groupOfFocus === "areas") {
+          mutate("New area", [{ type: "create", table: "areas", row: { id, name: "", sort: Math.max(0, ...s.areas.map((a) => a.sort)) + 1 } }], { silent: true });
+          nav.setFocus(`a:${id}`);
+          setEditing(`a:${id}`);
+        } else if (groupOfFocus === "contexts") {
           mutate("New context", [{ type: "create", table: "contexts", row: { id, name: "@", color: CONTEXT_COLORS[s.contexts.length % CONTEXT_COLORS.length], sort: s.contexts.length } }], { silent: true });
           nav.setFocus(`c:${id}`);
           setEditing(`c:${id}`);
@@ -222,10 +286,16 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       label: cur?.status === "suggested" ? "Reject rule" : "Delete",
       group: "Settings",
       keys: ["backspace", "delete"],
-      enabled: Boolean(cur) && cur?.kind !== "apikey",
+      enabled: listRow,
       run: () => {
         if (!cur) return;
-        if (cur.kind === "context") {
+        if (cur.kind === "area") {
+          // Its projects keep going, just without an area.
+          mutate(`Area “${cur.text}” deleted`, [
+            { type: "delete", table: "areas", id: cur.id },
+            ...s.projects.filter((p) => p.area_id === cur.id).map((p) => ({ type: "patch" as const, table: "projects" as const, id: p.id, data: { area_id: null } })),
+          ]);
+        } else if (cur.kind === "context") {
           mutate("Context deleted", [
             { type: "delete", table: "contexts", id: cur.id },
             ...s.actions.filter((a) => a.context_id === cur.id).map((a) => ({ type: "patch" as const, table: "actions" as const, id: a.id, data: { context_id: null } })),
@@ -233,6 +303,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         } else mutate(cur.status === "suggested" ? "Rule rejected" : "Rule deleted", [{ type: "delete", table: "rules", id: cur.id }]);
       },
     },
+    { id: "set.areaup", label: "Move area up", group: "Settings", keys: ["alt+arrowup"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, -1) },
+    { id: "set.areadown", label: "Move area down", group: "Settings", keys: ["alt+arrowdown"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, 1) },
     {
       id: "set.color",
       label: "Change context colour",
@@ -261,10 +333,10 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         editing === r.key ? (
           <InlineEdit
             value={r.text}
-            placeholder={r.kind === "context" ? "Name the context" : "Describe the rule"}
+            placeholder={r.kind === "context" ? "Name the context" : r.kind === "area" ? "Name the area" : "Describe the rule"}
             onDone={(v) => {
               setEditing(null);
-              const table = r.kind === "rule" ? "rules" : "contexts";
+              const table = r.kind === "rule" ? "rules" : r.kind === "area" ? "areas" : "contexts";
               const field = r.kind === "rule" ? "text" : "name";
               let val = v.trim();
               if (r.kind === "context" && val && !val.startsWith("@")) val = `@${val}`;
@@ -272,6 +344,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
               else if (val !== r.text) mutate("Saved", [{ type: "patch", table, id: r.id, data: { [field]: val } }]);
             }}
           />
+        ) : r.kind === "theme" ? (
+          <span className="subject">
+            <span className="subject-text strong">Theme</span>
+            <span className="subject-more">Light, dark, or follow the system. Kept in this browser.</span>
+          </span>
         ) : r.kind === "stall" ? (
           <span className="subject">
             <span className="subject-text strong">Stalled after</span>
@@ -280,8 +357,10 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ) : r.kind === "apikey" ? (
           <span className="subject">
             <span className="subject-text strong">API key</span>
-            <span className="subject-more">{meta.hasKey ? `Stored in the server's .env; the browser only sees the last four characters. Clarify with Claude uses Claude Sonnet 5.` : "Lets Claude propose projects and actions when you clarify with Claude (⌥K). Everything else works without it."}</span>
+            <span className="subject-more">{meta.hasKey ? `Kept out of the browser: only its last four characters are ever shown. Clarify with Claude uses Claude Sonnet 5.` : "Lets Claude propose projects and actions when you clarify with Claude (⌥K). Everything else works without it."}</span>
           </span>
+        ) : r.kind === "area" ? (
+          <Tape>{r.text || "Untitled"}</Tape>
         ) : r.kind === "context" ? (
           <ContextCode ctx={{ id: r.id, name: r.text, color: r.color!, sort: 0 }} />
         ) : (
@@ -293,7 +372,9 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       label: "",
       width: "160px",
       render: (r) =>
-        r.kind === "stall" ? (
+        r.kind === "theme" ? (
+          <span>{theme.pref === "system" ? `System (${theme.dark ? "dark" : "light"})` : theme.pref === "dark" ? "Dark" : "Light"}</span>
+        ) : r.kind === "stall" ? (
           <span className="num">{plural(meta.stallWeeks, "week")}</span>
         ) : r.kind === "apikey" ? (
           meta.hasKey ? (
@@ -306,6 +387,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           )
         ) : r.status === "suggested" ? (
           <span className="muted-text small">Awaiting approval</span>
+        ) : r.kind === "area" ? (
+          <span className="num muted-text">{plural(s.projects.filter((p) => p.area_id === r.id && p.status === "active").length, "active project")}</span>
         ) : r.kind === "context" ? (
           <span className="num muted-text">{plural(s.actions.filter((a) => a.context_id === r.id && a.status === "next").length, "action")}</span>
         ) : null,

@@ -2,20 +2,29 @@ import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from
 import { Search, Check } from "lucide-react";
 import { capture, daysSinceReview, notify, useMeta, useNotice, useStore, isStalled, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { allCommandsForPalette, activeCommands, layerOf, useCommands, keyLabel, type Command } from "../keys.ts";
-import { InboxStack, Kbd, Tape } from "./bits.tsx";
+import { allCommandsForPalette, activeCommands, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
+import { Kbd, Tape } from "./bits.tsx";
+import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
 
-export const RAIL: { id: ViewId; key: string }[] = [
-  { id: "inbox", key: "ctrl+shift+1" },
-  { id: "next", key: "ctrl+shift+2" },
-  { id: "projects", key: "ctrl+shift+3" },
-  { id: "waiting", key: "ctrl+shift+4" },
-  { id: "someday", key: "ctrl+shift+5" },
-  { id: "reference", key: "ctrl+shift+6" },
-  { id: "review", key: "ctrl+shift+7" },
-  { id: "done", key: "ctrl+shift+8" },
-  { id: "areas", key: "ctrl+shift+9" },
+/**
+ * Control+1–7 on every system follow the rail from the top: the Inbox, then the lists in rail order.
+ * On the Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs.
+ * Elsewhere the page takes Ctrl+1–7 over the browser's tab switching (Chrome and Firefox allow it).
+ * The Weekly Review has no number (W starts it); Settings is ⌘⇧, (Ctrl+Shift+, elsewhere).
+ */
+// Control on every system: on the Mac that is "ctrl" (⌘ is "mod"), elsewhere Ctrl is "mod".
+const go = (n: number) => (IS_MAC ? `ctrl+${n}` : `mod+${n}`);
+
+export const RAIL: { id: ViewId; key?: string }[] = [
+  { id: "inbox", key: go(1) },
+  { id: "next", key: go(2) },
+  { id: "waiting", key: go(3) },
+  { id: "projects", key: go(4) },
+  { id: "someday", key: go(5) },
+  { id: "reference", key: go(6) },
+  { id: "done", key: go(7) },
+  { id: "review" },
 ];
 
 /**
@@ -23,8 +32,8 @@ export const RAIL: { id: ViewId; key: string }[] = [
  * GTD's weekly question ("is my system current?") with links to where each answer is fixed.
  */
 const LISTS: ViewId[][] = [
-  ["next", "waiting", "projects"],
-  ["someday", "reference", "areas", "done"],
+  ["inbox", "next", "waiting", "projects"],
+  ["someday", "reference", "done"],
 ];
 
 type Entry = { key: string; view: ViewId; label: string; name: string; start?: boolean };
@@ -57,6 +66,7 @@ export function Rail({ active }: { active: boolean }) {
   const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
 
   const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
+    if (id === "inbox") return sig.inbox ? { text: String(sig.inbox) } : null;
     if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : sig.flagged ? { text: `${sig.flagged} today` } : null;
     if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
@@ -74,13 +84,12 @@ export function Rail({ active }: { active: boolean }) {
     },
     ...(sig.stalled ? [{ key: "h-stalled", view: "projects" as ViewId, name: "Stalled projects", label: `${sig.stalled} stalled ${sig.stalled === 1 ? "project" : "projects"}` }] : []),
     ...(sig.chase ? [{ key: "h-chase", view: "waiting" as ViewId, name: "Follow-ups", label: `${sig.chase} ${sig.chase === 1 ? "follow-up" : "follow-ups"} due` }] : []),
-    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in tray", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} days`}` }] : []),
+    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} days`}` }] : []),
   ];
   const entries: Entry[] = [
-    { key: "inbox", view: "inbox", name: "Inbox", label: `Inbox, ${sig.inbox}` },
     ...LISTS.flat().map((id) => {
       const m = listMeta(id);
-      return { key: id, view: id, name: VIEW_TITLES[id], label: `${VIEW_TITLES[id]}${m ? `, ${m.text}` : ""}${id === "projects" && sig.stalled ? `, ${sig.stalled} stalled` : ""}` };
+      return { key: id, view: id, name: VIEW_TITLES[id], label: `${VIEW_TITLES[id]}${m ? `, ${id === "inbox" ? `${m.text} ${m.text === "1" ? "item" : "items"}` : m.text}` : ""}${id === "projects" && sig.stalled ? `, ${sig.stalled} stalled` : ""}` };
     }),
     ...health,
     { key: "settings", view: "settings", name: "Settings", label: "Settings" },
@@ -141,6 +150,7 @@ export function Rail({ active }: { active: boolean }) {
       tabIndex: cursor === i ? 0 : -1,
       "aria-current": current ? ("page" as const) : undefined,
       "aria-label": e.label,
+      "aria-keyshortcuts": keyAria(e.start ? "w" : e.key === "h-oldest" ? "k" : e.view === "settings" ? "mod+shift+," : (keyOf(e.view) ?? "")) || undefined,
       className: `${extra} ${current ? "is-current" : ""} ${active && cursor === i ? "is-cursor" : ""}`,
       onFocus: onFocusStop(i),
       onClick: () => open(e),
@@ -149,16 +159,7 @@ export function Rail({ active }: { active: boolean }) {
 
   return (
     <nav ref={navRef} className={`rail ${active ? "is-active" : ""}`} aria-label="Lists">
-      <button type="button" {...stop(entries[0], "tray")}>
-        {/* The tape is the tray's lip; the stack of sheets sits on it. */}
-        <span className="tray-mark">
-          <InboxStack count={sig.inbox} />
-          <Tape size="md">In-tray</Tape>
-        </span>
-        <span className="tray-count num" aria-hidden="true">
-          {sig.inbox}
-        </span>
-      </button>
+      <Pond />
       {/* A polite live region, so a new capture's count is announced. */}
       <span className="visually-hidden" aria-live="polite">
         {sig.inbox === 1 ? "1 item in the Inbox" : `${sig.inbox} items in the Inbox`}
@@ -175,6 +176,7 @@ export function Rail({ active }: { active: boolean }) {
                   <span className="rail-meta">
                     {id === "projects" && sig.stalled > 0 && <span className="stamp tiny">{sig.stalled} stalled</span>}
                     {m && <span className={`num ${m.tone === "due" ? "is-due" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
+                    <RailKey k={keyOf(id)} />
                   </span>
                 </button>
               </li>
@@ -197,7 +199,7 @@ export function Rail({ active }: { active: boolean }) {
                     <span className="rail-name">Weekly Review</span>
                     <span className="rail-meta">
                       <span className={`num ${reviewDue ? "is-due" : ""}`}>{reviewAge === null ? (reviewDue ? "due" : "not yet") : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
-                      <Kbd k="w" />
+                      <RailKey k="w" />
                     </span>
                   </>
                 )}
@@ -206,6 +208,7 @@ export function Rail({ active }: { active: boolean }) {
                     <span className="rail-name">Stalled projects</span>
                     <span className="rail-meta">
                       <span className="num is-due">{sig.stalled}</span>
+                      <RailKey k={keyOf("projects")} />
                     </span>
                   </>
                 )}
@@ -214,15 +217,16 @@ export function Rail({ active }: { active: boolean }) {
                     <span className="rail-name">Follow-ups due</span>
                     <span className="rail-meta">
                       <span className="num is-due">{sig.chase}</span>
+                      <RailKey k={keyOf("waiting")} />
                     </span>
                   </>
                 )}
                 {e.key === "h-oldest" && (
                   <>
-                    <span className="rail-name">Oldest in tray</span>
+                    <span className="rail-name">Oldest in Inbox</span>
                     <span className="rail-meta">
                       <span className={`num ${sig.oldestDays !== null && sig.oldestDays >= 7 ? "is-due" : ""}`}>{sig.oldestDays === 0 ? "today" : `${sig.oldestDays}d`}</span>
-                      <Kbd k="k" />
+                      <RailKey k="k" />
                     </span>
                   </>
                 )}
@@ -237,11 +241,25 @@ export function Rail({ active }: { active: boolean }) {
         <li>
           <button type="button" {...stop(entries[entries.length - 1], "rail-item")}>
             <span className="rail-name">Settings</span>
+            <span className="rail-meta">
+              <RailKey k="mod+shift+," />
+            </span>
           </button>
         </li>
       </ul>
     </nav>
   );
+}
+
+const keyOf = (v: ViewId) => RAIL.find((r) => r.id === v)?.key;
+
+/** Every rail stop shows its shortcut as a key cap, in one right-hand column (visual only; the key is in its accessible name). */
+function RailKey({ k }: { k?: string }) {
+  return k ? (
+    <kbd className="kbd rail-key" aria-hidden="true">
+      {keyLabel(k)}
+    </kbd>
+  ) : null;
 }
 
 /** On a phone the rail becomes a bottom tab bar: the Inbox, Next, Waiting, and More for the rest. */
@@ -250,7 +268,7 @@ export function TabBar() {
   const s = useStore((x) => x);
   const [more, setMore] = useState(false);
   const inbox = s.stuff.filter((x) => x.status === "inbox").length;
-  const rest: ViewId[] = ["projects", "someday", "reference", "review", "done", "areas", "settings"];
+  const rest: ViewId[] = ["projects", "someday", "reference", "review", "done", "settings"];
   const go = (v: ViewId) => {
     setMore(false);
     if (v === "review") ui.startReview();
@@ -278,7 +296,7 @@ export function TabBar() {
         "inbox",
         <>
           <span className="tab-name">Inbox</span>
-          <span className="tab-count num">{inbox}</span>
+          {inbox > 0 && <span className="tab-count num">{inbox}</span>}
         </>,
       )}
       {tab("next", <span className="tab-name">Next</span>)}

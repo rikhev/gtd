@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode, type SyntheticEvent } from "react";
 import { formatDate, formatTime, daysBetween, today } from "../../shared/dates.ts";
 import type { Action, Context } from "../../shared/types.ts";
 import { keyLabel } from "../keys.ts";
@@ -9,27 +9,96 @@ export function Tape({ children, tone = "black", size = "sm" }: { children: Reac
 }
 
 /**
- * The row marker: an empty ring; when flagged for today, the ring is inked in and circled by hand
- * (a loose pen loop that overshoots its start with a visible tail), so it differs in shape, not just size.
+ * The row marker: an empty ring, a pen tick when done. Flagged for today, it becomes a red flag on a pole,
+ * the mark classic Outlook uses for a task flagged for follow-up.
  */
-export function Marker({ flagged, done, chase }: { flagged: boolean; done?: boolean; chase?: boolean }) {
+export function Marker({ flagged, done, chase, quiet }: { flagged: boolean; done?: boolean; chase?: boolean; quiet?: boolean }) {
+  const today = flagged && !done;
+  // Beside a Done box the plain ring and the done tick would say what the box says: only the marks worth marking stay.
+  if (quiet && !today && !chase) return <span className="marker" aria-hidden="true" />;
   return (
     <span
-      className={`marker ${flagged ? "is-flagged" : ""} ${done ? "is-done" : ""} ${chase ? "is-chase" : ""}`}
-      role={flagged ? "img" : undefined}
-      aria-label={flagged ? "Flagged for today" : undefined}
-      title={flagged ? "Flagged for today" : undefined}
+      className={`marker ${today ? "is-flagged" : ""} ${done ? "is-done" : ""} ${chase ? "is-chase" : ""}`}
+      role={today ? "img" : undefined}
+      aria-label={today ? "Flagged for today" : undefined}
+      title={today ? "Flagged for today" : undefined}
     >
-      <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden>
-        <circle className="ring" cx="11" cy="11" r="4.2" />
-        <path
-          className="pen"
-          pathLength={1}
-          d="M17.4 5.6C14.2 2.6 7.4 2.9 4.5 6.9 2.1 10.3 3.2 15.9 7.6 17.8c4.3 1.9 9.6.1 11-3.9 1.1-3.2-.4-6.6-3.3-8.1-2.6-1.4-6.1-1.6-8.9-.4l-2.6 1.4"
-        />
-        <path className="tick" pathLength={1} d="M7.4 11.3l2.4 2.4 4.9-5.2" />
-      </svg>
+      {today ? (
+        <svg className="leaf" viewBox="0 0 22 22" width="22" height="22" aria-hidden>
+          {/* A flag on a pole, as classic Outlook flags a task for follow-up. */}
+          <path className="flag-pole" d="M6.5 4v14.5" />
+          <path className="flag-cloth" d="M7 4.6h9.2l-2.4 3.4 2.4 3.4H7z" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden>
+          <circle className="ring" cx="11" cy="11" r="4.2" />
+          <path className="tick" pathLength={1} d="M7.4 11.3l2.4 2.4 4.9-5.2" />
+        </svg>
+      )}
     </span>
+  );
+}
+
+/**
+ * The Complete box, as in classic Outlook's task list: one click marks the action done (the pen strikes it
+ * through), and in Done one click brings it back. It is mouse-only on purpose; the keyboard has E and ⇧E.
+ */
+export function DoneBox({ done, title, onToggle }: { done: boolean; title: string; onToggle: () => void }) {
+  const stop = (e: SyntheticEvent) => e.stopPropagation();
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={done}
+      aria-label={done ? `Mark “${title}” not done` : `Mark “${title}” done`}
+      title={done ? "Mark not done" : "Mark done"}
+      tabIndex={-1}
+      className={`done-box ${done ? "is-checked" : ""}`}
+      onMouseDown={stop}
+      onDoubleClick={stop}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+        <rect className="box" x="1" y="1" width="12" height="12" rx="2" />
+        <path className="check" d="M3.8 7.2l2.2 2.2 4.3-4.8" />
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * The flag column, as in classic Outlook: the row's marker is a button. One click flags the action for today
+ * (the red flag drops in); clicking the flag takes it off. Unflagged, hovering shows a faint outline flag so the
+ * target is findable. Mouse-only like the Complete box; the keyboard has Ins.
+ */
+export function FlagButton({ flagged, chase, title, onToggle }: { flagged: boolean; chase?: boolean; title: string; onToggle: () => void }) {
+  const stop = (e: SyntheticEvent) => e.stopPropagation();
+  return (
+    <button
+      type="button"
+      aria-pressed={flagged}
+      aria-label={flagged ? `Remove the today flag from “${title}”` : `Flag “${title}” for today`}
+      title={flagged ? "Flagged for today: click to remove" : "Flag for today"}
+      tabIndex={-1}
+      className={`flag-btn ${flagged ? "is-on" : ""}`}
+      onMouseDown={stop}
+      onDoubleClick={stop}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+    >
+      <Marker quiet flagged={flagged} chase={chase} />
+      {!flagged && (
+        <svg className="flag-ghost" viewBox="0 0 22 22" width="22" height="22" aria-hidden>
+          <path d="M6.5 4v14.5" />
+          <path d="M7 4.6h9.2l-2.4 3.4 2.4 3.4H7z" />
+        </svg>
+      )}
+    </button>
   );
 }
 
@@ -121,50 +190,6 @@ export function KeyHints({ hints }: { hints: { k: string; label: string }[] }) {
         </span>
       ))}
     </p>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* The in-tray: the IN-TRAY tape is the tray's front lip, and the stuff   */
-/* in it is a flat stack of sheet edges on top. One visible 2px step per  */
-/* item up to 8; past that the top sheet heaps askew. Paper only.         */
-/* ------------------------------------------------------------------ */
-
-const STACK_STEPS = 8;
-const shuffle = (i: number) => {
-  const v = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
-  return v - Math.floor(v) - 0.5;
-};
-
-/** The stack of sheets that sits on the tape. Decorative: the count beside it is what's announced. */
-export function InboxStack({ count }: { count: number }) {
-  const n = Math.min(count, STACK_STEPS);
-  const heaping = count > STACK_STEPS;
-  // Only a sheet that has just arrived slides in; nothing replays on load. The flag is held for the
-  // length of the animation, so re-renders right after a capture don't cut it short.
-  const prev = useRef(count);
-  const [arrived, setArrived] = useState(false);
-  useEffect(() => {
-    const grew = count > prev.current;
-    prev.current = count;
-    if (!grew) return;
-    setArrived(true);
-    const t = window.setTimeout(() => setArrived(false), 260);
-    return () => window.clearTimeout(t);
-  }, [count]);
-  return (
-    <span className="stack" aria-hidden="true">
-      {Array.from({ length: n }, (_, i) => {
-        const top = i === n - 1;
-        return (
-          <span
-            key={i}
-            className={`stack-sheet ${top && heaping ? "is-heap" : ""} ${top && arrived ? "is-new" : ""}`}
-            style={{ bottom: `${i * 2}px`, left: `${4 + shuffle(i) * 4}px`, right: `${4 - shuffle(i) * 4}px` }}
-          />
-        );
-      })}
-    </span>
   );
 }
 

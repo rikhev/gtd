@@ -112,7 +112,7 @@ export function verifyTotp(secretB32: string, code: string, notBefore: number): 
 }
 
 export function totpUri(secret: string, account = "owner") {
-  return `otpauth://totp/In-Tray:${encodeURIComponent(account)}?secret=${secret}&issuer=In-Tray&algorithm=SHA1&digits=6&period=30`;
+  return `otpauth://totp/Stiltje:${encodeURIComponent(account)}?secret=${secret}&issuer=Stiltje&algorithm=SHA1&digits=6&period=30`;
 }
 
 /* ---------------- recovery codes ---------------- */
@@ -216,7 +216,7 @@ export async function login(c: Context) {
   if (wait) return c.json({ ok: false, error: `Too many attempts. Try again in ${wait} minute${wait === 1 ? "" : "s"}.` }, 429);
 
   const auth = readAuth();
-  if (!auth) return c.json({ ok: false, error: "Login isn't set up on the server yet. Run npm run auth:setup there." }, 503);
+  if (!auth) return c.json({ ok: false, error: "Login isn't set up yet. Finish the login setup, then try again." }, 503);
 
   const { password = "", code = "" } = ((await c.req.json().catch(() => ({}))) ?? {}) as { password?: string; code?: string };
   const passOk = typeof password === "string" && password.length <= 1024 && verifyPassword(password, auth.passwordHash);

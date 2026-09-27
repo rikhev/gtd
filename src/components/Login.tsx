@@ -39,7 +39,7 @@ export function Login() {
       }
       await load();
     } catch {
-      setError("Couldn't reach the server. Check the connection and try again.");
+      setError("Couldn't reach Stiltje. Check the connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -49,11 +49,11 @@ export function Login() {
     <main className="login">
       <form className="login-sheet" onSubmit={submit} aria-label="Sign in">
         <div className="login-head">
-          <Tape size="md">In-tray</Tape>
+          <Tape size="md">Stiltje</Tape>
         </div>
         {!meta.authConfigured ? (
           <p className="login-note">
-            Login isn't set up on this server yet. On the server, run <code>npm run auth:setup</code> in the app folder, then reload this page.
+            Login isn't set up yet. Finish the login setup, then reload this page.
           </p>
         ) : (
           <>

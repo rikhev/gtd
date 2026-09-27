@@ -2,10 +2,13 @@ import { useEffect, useRef } from "react";
 
 /**
  * Keyboard engine.
- * Key strings: modifiers "mod" (⌘), "ctrl" (⌃), "alt" (⌥), "shift" (⇧) + a key.
+ * Key strings: modifiers "mod" (⌘ on the Mac, Ctrl elsewhere), "ctrl" (the Mac's own ⌃; never matches
+ * elsewhere, where Ctrl is "mod"), "alt" (⌥), "shift" (⇧) + a key.
  * Letters/digits match physical keys (e.code), so ⌥ combos and Swedish layouts work;
  * punctuation matches the produced character (e.key), so "?" works on any layout.
  */
+
+export const IS_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 export interface Command {
   id: string;
@@ -109,16 +112,19 @@ export function useCommands(
 
 export function eventToKey(e: KeyboardEvent): string {
   const parts: string[] = [];
-  if (e.metaKey) parts.push("mod");
-  if (e.ctrlKey) parts.push("ctrl");
+  // "mod" is the platform's command key: ⌘ on the Mac, Ctrl elsewhere (where the Windows key is left to the OS).
+  if (IS_MAC ? e.metaKey : e.ctrlKey) parts.push("mod");
+  if (IS_MAC && e.ctrlKey) parts.push("ctrl");
   if (e.altKey) parts.push("alt");
   let key: string;
   if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3).toLowerCase();
   else if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
+  // The comma key by position, so ⌘⇧, reads as "mod+shift+," even where ⇧, types "<".
+  else if (e.code === "Comma" && (e.metaKey || e.ctrlKey)) key = ",";
   else if (e.key === " ") key = "space";
   else key = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
   // Shift is implicit in produced punctuation such as "?".
-  const punct = key.length === 1 && !/[a-z0-9]/.test(key);
+  const punct = key.length === 1 && !/[a-z0-9]/.test(key) && !(e.code === "Comma" && (e.metaKey || e.ctrlKey));
   if (e.shiftKey && !punct) parts.push("shift");
   parts.push(key);
   return parts.join("+");
@@ -183,9 +189,24 @@ const SYMBOLS: Record<string, string> = {
   end: "End",
 };
 
+/** Outside the Mac, modifiers are spelled out and joined with "+", as Windows and Linux show them. */
+const WORDS: Record<string, string> = { mod: "Ctrl", ctrl: "Ctrl", alt: "Alt", shift: "Shift" };
+
 export function keyLabel(k: string): string {
+  const parts = k.split("+");
+  if (!IS_MAC && parts.length > 1) {
+    const key = parts.pop()!;
+    return [...parts.map((p) => WORDS[p] ?? p), SYMBOLS[key] ?? key.toUpperCase()].join("+");
+  }
+  return parts.map((p) => SYMBOLS[p] ?? p.toUpperCase()).join("");
+}
+
+const ARIA: Record<string, string> = { mod: IS_MAC ? "Meta" : "Control", ctrl: "Control", alt: "Alt", shift: "Shift", ",": "Comma", ".": "Period", space: "Space" };
+
+/** The key string as an aria-keyshortcuts value, e.g. "Control+1". */
+export function keyAria(k: string): string {
   return k
     .split("+")
-    .map((p) => SYMBOLS[p] ?? (p.length === 1 ? p.toUpperCase() : p.toUpperCase()))
-    .join("");
+    .map((p) => ARIA[p] ?? (p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)))
+    .join("+");
 }

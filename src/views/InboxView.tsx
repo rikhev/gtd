@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { getState, mutate, named, newAction, newProject, stamp, upload, useStore, uid } from "../store.ts";
+import { archiveDone, mutate, reopenActions, upload, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
-import { Grid, useListNav, type Column } from "../components/Grid.tsx";
+import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
+import { DoneBox } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { askContext, askWaitingOn, destinationItems } from "../actionCommands.tsx";
+import { doneNow, fileStuff, trashNow } from "../fileStuff.ts";
 import { formatDate } from "../../shared/dates.ts";
-import type { ID, Op, Stuff } from "../../shared/types.ts";
+import type { ID, Stuff } from "../../shared/types.ts";
 
 export function firstLine(text: string) {
   return text.split("\n").find((l) => l.trim())?.trim() ?? "";
@@ -29,20 +30,50 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
   const [editing, setEditing] = useState<ID | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const rows = useMemo(() => s.stuff.filter((x) => x.status === "inbox").sort((a, b) => a.created_at.localeCompare(b.created_at)), [s.stuff]);
   const filesBy = useMemo(() => {
     const m = new Map<string, number>();
-    s.files.forEach((f) => f.owner_kind === "stuff" && m.set(f.owner_id, (m.get(f.owner_id) ?? 0) + 1));
+    // A ticked-off item's files ride on its logged action, which shares its id.
+    s.files.forEach((f) => (f.owner_kind === "stuff" || f.owner_kind === "action") && m.set(f.owner_id, (m.get(f.owner_id) ?? 0) + 1));
     return m;
   }, [s.files]);
+  // Oldest first is the Inbox's own order; a heading click sorts by that column instead.
+  const [sort, setSort] = useSort("inbox");
+  const sorters: Sorters<Stuff> = useMemo(() => ({ subject: (st) => stuffTitle(st), files: (st) => filesBy.get(st.id) ?? null, when: (st) => st.created_at }), [filesBy]);
+  // Ticked-off items stay in the Inbox, struck through at the bottom, until archived (⇧E), as on every list.
+  const [showDone, setShowDone] = usePersisted("showdone:inbox", true);
+  const doneIds = useMemo(() => s.stuff.filter((x) => x.status === "done").map((x) => x.id), [s.stuff]);
+  const [striking, setStriking] = useState<Set<ID>>(new Set());
+  const rows = useMemo(() => {
+    const open = s.stuff.filter((x) => x.status === "inbox" || (showDone && x.status === "done")).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const sorted = sortGroups([{ key: "inbox", label: "", rows: open }], sorters, sort)[0].rows;
+    return [...sorted.filter((x) => x.status !== "done"), ...sorted.filter((x) => x.status === "done")];
+  }, [s.stuff, sorters, sort, showDone]);
 
   const navGroups = useMemo(() => [{ key: "inbox", rowKeys: rows.map((r) => r.id), showHeader: false }], [rows]);
   const nav = useListNav("inbox", navGroups);
   const focusId = nav.focus;
-  const n = (ids: ID[]) => named("stuff", ids, "item");
+
+  /** E and the Complete box: tick off (the pen strikes first), or untick when everything in hand is already done. */
+  const toggleDone = (ids: ID[]) => {
+    const items = s.stuff.filter((x) => ids.includes(x.id));
+    if (!items.length) return;
+    if (items.every((x) => x.status === "done")) return reopenActions(ids);
+    const open = items.filter((x) => x.status === "inbox").map((x) => x.id);
+    // The cursor stays in place, on the next open row, rather than following a done row to the bottom.
+    if (focusId && open.includes(focusId)) {
+      const i = rows.findIndex((x) => x.id === focusId);
+      const next = rows.slice(i + 1).find((x) => x.status === "inbox" && !open.includes(x.id)) ?? [...rows.slice(0, i)].reverse().find((x) => x.status === "inbox" && !open.includes(x.id));
+      if (next) nav.setFocus(next.id);
+    }
+    setStriking((prev) => new Set([...prev, ...open]));
+    window.setTimeout(() => {
+      doneNow(open);
+      setStriking((prev) => new Set([...prev].filter((id) => !open.includes(id))));
+    }, 280);
+  };
 
   useEffect(() => {
-    if (focusId && ui.detail?.kind === "stuff" && ui.detail.id !== focusId) ui.openDetail({ kind: "stuff", id: focusId });
+    ui.followDetail(focusId ? { kind: "stuff", id: focusId } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId]);
 
@@ -54,98 +85,23 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.revealTarget]);
 
-  /** Done already: log it as a completed action (the two-minute rule). */
-  const doneNow = (ids: ID[]) => {
-    const ops: Op[] = [];
-    for (const st of getState().stuff.filter((x) => ids.includes(x.id))) {
-      const a = newAction({ title: firstLine(st.text), status: "done", completed_at: stamp() });
-      ops.push({ type: "create", table: "actions", row: { ...a } });
-      ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } });
-    }
-    mutate(`${n(ids)} done and logged`, ops);
-  };
-  const trashNow = (ids: ID[]) => mutate(`${n(ids)} trashed`, ids.map((id) => ({ type: "patch", table: "stuff", id, data: { status: "trashed" } })));
-
-  /**
-   * File: the whole clarify decision in one picker. A list, an existing project,
-   * a new project (type its name), done now, or trash.
-   */
-  const quickFile = (ids: ID[]) => {
-    if (!ids.length) return;
-    ui.openPicker({
-      type: "list",
-      title: "File as",
-      // GTD order: the lists, then "under two minutes? do it now" (or trash it), then the projects.
-      items: [
-        ...destinationItems().filter((it) => it.section === "lists"),
-        { id: "__done", label: "Done already (two-minute rule)", section: "now" },
-        { id: "__trash", label: "Trash", section: "now" },
-        ...destinationItems().filter((it) => it.section === "projects"),
-      ],
-      placeholder: "Filter, or name a new project",
-      createLabel: (q) => `New project “${q}”, with this as its first action`,
-      onCreate: (q) => {
-        const p = newProject({ title: q });
-        // A project's first action is a next action, so it needs a context too.
-        askContext(ui, `Context for the first action of “${q}”`, (ctx, extra) => file(p.id, undefined, [{ type: "create", table: "projects", row: { ...p } }, ...extra], `project “${q}”`, ctx));
-      },
-      onPick: (target) => {
-        if (!target) return;
-        if (target === "__done") doneNow(ids);
-        else if (target === "__trash") trashNow(ids);
-        else if (target === "waiting") askWaitingOn(ui, null, (who) => file(target, who));
-        else if (target === "someday" || target === "reference") file(target);
-        // A next action (on its own or in a project) always gets a context.
-        else askContext(ui, "Context", (ctx, extra) => file(target, undefined, extra, undefined, ctx));
-      },
-    });
-    function file(target: string, who?: string, first: Op[] = [], into?: string, contextId?: ID) {
-        const ops: Op[] = [...first];
-        for (const st of getState().stuff.filter((x) => ids.includes(x.id))) {
-          const title = stuffTitle(st);
-          const rest = st.text.slice(st.text.indexOf(title) + title.length).trim();
-          const files = getState().files.filter((f) => f.owner_kind === "stuff" && f.owner_id === st.id);
-          let owner: { kind: string; id: ID };
-          if (target === "reference") {
-            const rid = uid();
-            ops.push({ type: "create", table: "refs", row: { id: rid, title, notes: rest, project_id: null, status: "active", created_at: stamp() } });
-            owner = { kind: "ref", id: rid };
-          } else {
-            const isList = ["next", "someday", "waiting"].includes(target);
-            const a = newAction({
-              title,
-              notes: rest,
-              status: isList ? (target as "next") : "next",
-              project_id: isList ? null : target,
-              waiting_since: target === "waiting" ? new Date().toISOString().slice(0, 10) : null,
-              waiting_who: target === "waiting" ? (who ?? null) : null,
-              context_id: contextId ?? null,
-            });
-            ops.push({ type: "create", table: "actions", row: { ...a } });
-            owner = { kind: "action", id: a.id };
-          }
-          files.forEach((f) => ops.push({ type: "patch", table: "files", id: f.id, data: { owner_kind: owner.kind, owner_id: owner.id } }));
-          ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } });
-        }
-        mutate(target === "waiting" ? `${n(ids)} → Waiting For (${who})` : into ? `${n(ids)} → new ${into}` : `${n(ids)} filed`, ops);
-    }
-  };
-
   const commands: Command[] = [
     ...nav.commands,
     { id: "inbox.new", label: "Capture", group: "Inbox", keys: ["n"], run: ui.focusCapture },
     { id: "inbox.clarify", label: "Clarify", group: "Inbox", keys: ["k"], run: () => ui.startClarify(), enabled: rows.length > 0 },
     { id: "inbox.open", label: "Open details", group: "Inbox", keys: ["enter"], run: () => focusId && ui.openDetail({ kind: "stuff", id: focusId }, true), enabled: Boolean(focusId) },
     { id: "inbox.rename", label: "Edit text", group: "Inbox", keys: ["f2"], run: () => focusId && setEditing(focusId), enabled: Boolean(focusId) },
-    { id: "inbox.file", label: "File", group: "Inbox", keys: ["v"], run: () => quickFile(nav.targets()), enabled: Boolean(focusId) },
+    { id: "inbox.file", label: "File", group: "Inbox", keys: ["v"], run: () => fileStuff(ui, nav.targets()), enabled: Boolean(focusId) },
     {
       id: "inbox.done",
-      label: "Done already (two-minute rule)",
+      label: "Done already (two-minute rule), or not done",
       group: "Inbox",
       keys: ["e"],
       enabled: Boolean(focusId),
-      run: () => doneNow(nav.targets()),
+      run: () => toggleDone(nav.targets()),
     },
+    { id: "inbox.archive", label: `Archive done items to Done${doneIds.length ? ` (${doneIds.length})` : ""}`, group: "Inbox", keys: ["shift+e"], enabled: doneIds.length > 0, run: () => archiveDone(doneIds, "the Inbox") },
+    { id: "inbox.showdone", label: showDone ? "Hide done items" : "Show done items", group: "View", run: () => setShowDone(!showDone) },
     {
       id: "inbox.trash",
       label: "Trash",
@@ -160,10 +116,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
       group: "Inbox",
       keys: ["shift+backspace", "shift+delete"],
       enabled: Boolean(focusId),
-      run: () => {
-        const ids = nav.targets();
-        mutate(`${n(ids)} deleted permanently`, ids.map((id) => ({ type: "delete", table: "stuff", id })));
-      },
+      run: () => trashNow(nav.targets(), true),
     },
     { id: "inbox.upload", label: "Upload files to the Inbox", group: "Inbox", keys: ["mod+o"], run: () => fileInput.current?.click() },
   ];
@@ -174,6 +127,12 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
 
   const columns: Column<Stuff>[] = [
     { key: "kind", label: "", width: "30px", render: (st) => <span className="kind-icon">{icon(st)}</span> },
+    {
+      key: "done",
+      label: "",
+      width: "26px",
+      render: (st) => <DoneBox done={st.status === "done" || striking.has(st.id)} title={stuffTitle(st) || "Untitled"} onToggle={() => !striking.has(st.id) && toggleDone([st.id])} />,
+    },
     {
       key: "subject",
       label: "Stuff",
@@ -214,6 +173,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
   return (
     <>
       <Grid
+        sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
         listId="inbox"
         columns={columns}
         groups={[{ key: "inbox", label: "", rows }]}
@@ -221,6 +181,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
         nav={nav}
         active={regionActive}
         showHeaders={false}
+        rowClass={(st) => [striking.has(st.id) ? `is-striking ${showDone ? "" : "is-leaving"}` : "", st.status === "done" ? "is-done" : ""].join(" ")}
         onOpen={(k) => ui.openDetail({ kind: "stuff", id: k }, true)}
         empty={
           <EmptyState

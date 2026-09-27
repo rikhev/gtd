@@ -1,4 +1,4 @@
-/* In-Tray — the GTD desk kit as a keyboard grid.
+/* Stiltje — GTD as a keyboard grid; the name is Swedish for dead calm, "mind like water".
    Tokens: office paper + ink, steel rail, blue-grey folder tabs, navy label tape,
    one corporate blue for focus and selection, traffic-light lamps for project health. */
 
@@ -11,17 +11,22 @@
   --ink-3: #686d74;
   --rule: #dcdedb;
   --rule-strong: #bcc0bd;
-  --steel: #dde0df;
-  --steel-2: #cdd1d0;
+  --steel: #dce2e6; /* a faint blue grey, the pond's own hue, so the water settles into the rail */
+  --steel-2: #cbd3d9;
   --steel-ink: #2b2e32;
   --folder: #a9bedb;
   --folder-2: #e6edf7;
   --folder-ink: #1d3456;
   --tape: #1b2a41;
   --rail-current: var(--paper);
+  /* The pond at the head of the rail: cool water a shade under the steel, bright crests over dark troughs. */
+  --water-far: #d2dae0;
+  --water-near: #bccad4;
+  --water-line: #f4f7f9;
+  --water-crest: #ffffff;
+  --water-trough: #6d8396;
+  --water-drop: #58728a;
   --stamp-on-steel: #9c2716;
-  --tray-paper: var(--sheet);
-  --tray-paper-edge: var(--ink-3);
   --tape-ink: #f2f5fa;
   --accent: #1f5fcc;
   --accent-contrast: #ffffff;
@@ -39,8 +44,9 @@
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Dark: when the system is dark and the app isn't pinned to light, or whenever it is pinned to dark. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --paper: #16171a;
     --sheet: #1c1d21;
@@ -49,17 +55,21 @@
     --ink-3: #93979c;
     --rule: #2b2d32;
     --rule-strong: #3d4046;
-    --steel: #202226;
-    --steel-2: #2c2f35;
+    --steel: #1e2227;
+    --steel-2: #2b3037;
     --steel-ink: #d6d7d6;
     --folder: #3e5a83;
     --folder-2: #1b2433;
     --folder-ink: #c9d8ef;
     --tape: #2a3d5c;
     --rail-current: #33363d;
+    --water-far: #242b32;
+    --water-near: #1b2631;
+    --water-line: #3a4754;
+    --water-crest: #a9c1d8;
+    --water-trough: #0b1116;
+    --water-drop: #93b3d1;
     --stamp-on-steel: #f2917f;
-    --tray-paper: #aeb3ba; /* lighter than the drawer, so paper reads as paper */
-    --tray-paper-edge: #5c6168;
     --tape-ink: #e8eef8;
     --accent: #5b95f5;
     --accent-contrast: #0b1426;
@@ -67,11 +77,50 @@
     --select-ink: #eef3fb;
     --go: #3dba72;
     --wait: #e2a634;
-    --tick: #262e37;
+    --tick: #2b3646;
     --stamp: #ec6d57;
     --pen: #e3dccb;
     --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #16171a;
+  --sheet: #1c1d21;
+  --ink: #eae8e1;
+  --ink-2: #b9bbbd;
+  --ink-3: #93979c;
+  --rule: #2b2d32;
+  --rule-strong: #3d4046;
+  --steel: #1e2227;
+  --steel-2: #2b3037;
+  --steel-ink: #d6d7d6;
+  --folder: #3e5a83;
+  --folder-2: #1b2433;
+  --folder-ink: #c9d8ef;
+  --tape: #2a3d5c;
+  --rail-current: #33363d;
+  --water-far: #242b32;
+  --water-near: #1b2631;
+  --water-line: #3a4754;
+  --water-crest: #a9c1d8;
+  --water-trough: #0b1116;
+  --water-drop: #93b3d1;
+  --stamp-on-steel: #f2917f;
+  --tape-ink: #e8eef8;
+  --accent: #5b95f5;
+  --accent-contrast: #0b1426;
+  --select: #1f3a63;
+  --select-ink: #eef3fb;
+  --go: #3dba72;
+  --wait: #e2a634;
+  --tick: #2b3646;
+  --stamp: #ec6d57;
+  --pen: #e3dccb;
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+}
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 * {
@@ -155,17 +204,24 @@ a:hover {
 
 .app {
   display: grid;
-  grid-template-columns: 212px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
 }
 
+/* The main column: top bar, view head and list on the left; the detail pane, when open, runs the full height
+   on the right, its header sharing the top bar's bottom rule. */
 .main {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   background: var(--paper);
+}
+.main > .topbar,
+.main > .viewhead {
+  grid-column: 1;
 }
 
 .topbar {
@@ -196,9 +252,15 @@ a:hover {
 }
 
 .work {
-  flex: 1;
-  display: flex;
-  min-height: 0;
+  display: contents;
+}
+.work > .list-region {
+  grid-column: 1;
+  grid-row: 3;
+}
+.work > .detail {
+  grid-column: 2;
+  grid-row: 1 / -1;
 }
 .list-region {
   flex: 1;
@@ -268,57 +330,32 @@ a:hover {
   color: var(--steel-ink);
 }
 
-/* The Inbox: the IN-TRAY tape as the tray's lip, a stack of sheet edges on it, and the count. */
-.tray {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 4px;
-  text-align: left;
-}
-.tray:hover {
-  background: var(--steel-2);
-}
-.tray-mark {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  flex: none; /* the tape keeps its full width at any count */
-}
-.tray-count {
-  font-family: var(--font-label);
-  font-weight: 700;
-  font-size: 30px;
-  line-height: 1;
-  color: var(--ink);
-}
-/* Sheets: a 1px paper face over a 1px edge line, 2px apart, each shuffled a little. */
-/* The stack's room is reserved (8 sheets and a heap), so the rail never shifts as the Inbox fills. */
-.stack {
+/* Mind like water: the rail opens on a still surface (steel air above a 1px horizon, water below that
+   fades into the drawer). Drops and their rings are drawn on the canvas only while they move. */
+.pond {
   position: relative;
-  display: block;
-  height: 20px;
+  flex: none;
+  height: 84px;
+  margin: -14px -10px -2px;
+  /* The horizon sits at 43px, on the same line as the top bar's and the detail pane's bottom rule. */
+  background: linear-gradient(to bottom, transparent 43px, var(--water-far) 43px, var(--water-near));
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent);
 }
-.stack-sheet {
+.pond::before {
+  content: "";
   position: absolute;
-  height: 2px;
-  background: var(--tray-paper);
-  border-bottom: 1px solid var(--tray-paper-edge);
+  left: 0;
+  right: 0;
+  top: 43px;
+  height: 1px;
+  background: var(--water-line);
 }
-/* Past 8 items the top sheet heaps: askew and lifted, a cue the count alone doesn't give. */
-.stack-sheet.is-heap {
-  transform: translateY(-3px) rotate(-3deg);
-}
-.stack-sheet.is-new {
-  animation: sheet-in 180ms var(--ease) both;
-}
-@keyframes sheet-in {
-  from {
-    transform: translateY(-4px);
-    opacity: 0;
-  }
+.pond canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* Lists: two runs split by a hairline, no stage headings. */
@@ -411,8 +448,7 @@ a:hover {
 }
 
 /* The open list: the sheet pulled forward (lighter than the drawer in both themes), with a hairline edge. */
-.rail-item.is-current,
-.tray.is-current {
+.rail-item.is-current {
   background: var(--rail-current);
   color: var(--ink);
   box-shadow: inset 0 0 0 1px var(--rule-strong), 0 1px 1.5px rgb(0 0 0 / 0.16);
@@ -420,13 +456,11 @@ a:hover {
 .rail-item.is-current .rail-name {
   font-weight: 650;
 }
-.rail-item.is-cursor,
-.tray.is-cursor {
+.rail-item.is-cursor {
   box-shadow: inset 0 0 0 2px var(--ink);
   background: var(--steel-2);
 }
-.rail-item.is-current.is-cursor,
-.tray.is-current.is-cursor {
+.rail-item.is-current.is-cursor {
   background: var(--rail-current);
 }
 
@@ -498,6 +532,9 @@ a:hover {
   border-radius: 3px;
   color: var(--ink-3);
 }
+.search svg {
+  flex: none; /* the magnifier keeps its size when the field is narrow (phone) */
+}
 .search input {
   border: 0;
   background: none;
@@ -518,7 +555,49 @@ a:hover {
 
 /* Narrow lists shed low-value columns (Column.drop) rather than scrolling sideways. */
 .grid {
+  position: relative;
   min-width: 320px;
+}
+/* Drag to reorder: the lifted row dims, a 2px accent line (a dot at its start) marks where it will land. */
+.drop-line {
+  position: fixed;
+  z-index: 4;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  border-radius: 1px;
+}
+.drop-line::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: var(--paper);
+  box-sizing: border-box;
+}
+.row.is-dragging {
+  opacity: 0.4;
+}
+body.is-dragging-row,
+body.is-dragging-row * {
+  cursor: grabbing !important;
+}
+/* Rectangle select: a hairline of the selection blue over a faint wash of it. */
+.band {
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: 2px;
+}
+body.is-banding {
+  user-select: none;
+  -webkit-user-select: none;
 }
 .grid-head,
 .row {
@@ -544,6 +623,45 @@ a:hover {
   padding: 0 8px;
   white-space: nowrap;
   overflow: hidden;
+}
+/* Sortable headings: the label is the button. The chevron shows on the sorted column (up A–Z, down Z–A) and,
+   faintly, on hover elsewhere, so a column says it can sort without cluttering the header at rest. */
+.gh-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.gh-sort:hover {
+  color: var(--ink);
+}
+.gh-arrow {
+  flex: none;
+  opacity: 0;
+}
+.gh-arrow path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.gh-sort:hover .gh-arrow {
+  opacity: 0.45;
+}
+.gh.is-sorted {
+  color: var(--ink);
+}
+.gh.is-sorted .gh-arrow {
+  opacity: 1;
 }
 .gh.end,
 .cell.end {
@@ -684,11 +802,6 @@ a:hover {
   border-bottom: 1px solid var(--rule-strong);
   cursor: default;
 }
-/* One empty row's height between a group's last row and the next group header. */
-.grid-group + .grid-group .group-head,
-.grid-group + .grid-group .group-head.is-folder {
-  margin-top: var(--row);
-}
 .group-label {
   font-family: var(--font-label);
   font-weight: 600;
@@ -709,35 +822,8 @@ a:hover {
   font-size: 12px;
   color: var(--ink-3);
 }
-.group-head.is-folder {
-  height: 34px;
-  margin-top: 18px;
-  background: var(--folder-2);
-  border-top: 1px solid var(--folder);
-  border-bottom: 1px solid color-mix(in srgb, var(--folder) 60%, var(--rule-strong));
-  position: relative;
-}
-.group-head.is-folder .tape {
-  position: relative;
-  top: -6px;
-  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.28), 0 0 0 3px var(--folder);
-  border-radius: 1px;
-}
-.group-head.is-folder .group-label.is-ctx {
-  color: var(--ink);
-}
 .group-count {
   color: var(--ink-3);
-}
-.group-head.is-folder .group-count {
-  color: var(--folder-ink);
-}
-/* The chevron and count sit on the tape's centre line: the tape is lifted as a tab, a little above the band's middle. */
-.group-head.is-folder > .chev,
-.group-head.is-folder > .group-count,
-.group-head.is-folder > .group-meta {
-  position: relative;
-  top: -6px;
 }
 .group-head.is-focus {
   box-shadow: inset 0 0 0 1px var(--ink-3);
@@ -745,11 +831,6 @@ a:hover {
 .grid.is-active .group-head.is-focus {
   background: var(--select);
   box-shadow: inset 0 0 0 1px var(--accent);
-}
-/* A folder band is already pale blue, close to selection: when focused it deepens so the cursor still shows.
-   The ring stays 1px (the owner asked for thin group focus). */
-.grid.is-active .group-head.is-folder.is-focus {
-  background: color-mix(in srgb, var(--accent) 22%, var(--folder-2));
 }
 .chev {
   width: 8px;
@@ -765,7 +846,7 @@ a:hover {
   transform: rotate(45deg) translate(-2px, -1px);
 }
 
-/* Row marker: ring, pen circle when flagged, tick when done. */
+/* Row marker: ring, a red flag when flagged for today, tick when done. */
 .marker {
   display: inline-flex;
   width: 22px;
@@ -779,7 +860,6 @@ a:hover {
   stroke: var(--ink-3);
   stroke-width: 1.25;
 }
-.marker .pen,
 .marker .tick {
   fill: none;
   stroke: var(--pen);
@@ -791,14 +871,30 @@ a:hover {
   opacity: 0;
   transition: stroke-dashoffset 380ms var(--ease), opacity 60ms;
 }
-.marker.is-flagged .pen {
-  stroke-dashoffset: 0;
-  opacity: 1;
+/* Flagged for today: a stamp-red flag on an ink pole, as in classic Outlook. */
+.marker .flag-pole {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 1.4;
+  stroke-linecap: round;
 }
-/* Flagged: the ring is inked in, inside the pen loop. */
-.marker.is-flagged .ring {
-  fill: var(--pen);
-  stroke: var(--pen);
+.marker .flag-cloth {
+  fill: var(--stamp);
+}
+/* Flagging drops the flag onto the row. */
+.marker.is-flagged .leaf {
+  animation: leaf-in 220ms var(--ease) both;
+}
+@keyframes leaf-in {
+  from {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marker.is-flagged .leaf {
+    animation: none;
+  }
 }
 .marker.is-done .tick {
   stroke-dashoffset: 0;
@@ -812,9 +908,89 @@ a:hover {
   stroke: var(--stamp);
   stroke-dasharray: 2 2;
 }
-.is-focus .marker .pen,
 .is-focus .marker .tick {
   stroke: var(--select-ink);
+}
+
+/* The flag column: the marker is a button. Unflagged, hovering it shows a faint outline flag. */
+.flag-btn {
+  position: relative;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 3px;
+  vertical-align: middle;
+  flex: none;
+}
+.flag-ghost {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+.flag-ghost path {
+  fill: none;
+  stroke: var(--ink-3);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.flag-btn:hover .flag-ghost {
+  opacity: 1;
+}
+.flag-btn:hover .marker.is-chase {
+  opacity: 0;
+}
+
+/* The Complete box (classic Outlook's task checkbox): a 12px square in the row's quiet ink; checked, a pen tick.
+   Hover inks the box so it reads as clickable; the row's own hover stays as it is. */
+.done-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 3px;
+  vertical-align: middle;
+  flex: none;
+}
+.done-box .box {
+  fill: var(--sheet);
+  stroke: var(--ink-3);
+  stroke-width: 1.25;
+}
+.done-box .check {
+  fill: none;
+  stroke: var(--pen);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+.done-box:hover .box {
+  stroke: var(--ink);
+}
+.done-box.is-checked .check {
+  opacity: 1;
+}
+.done-box.is-checked .box {
+  stroke: var(--ink-2);
+}
+.is-focus .done-box .check {
+  stroke: var(--select-ink);
+}
+.cell.c-done {
+  padding: 0;
+  display: flex;
+  align-items: center;
 }
 
 /* Done: a pen line strikes through the subject, then the row folds away. */
@@ -824,7 +1000,8 @@ a:hover {
   background-position: 0 58%;
   animation: strike 200ms var(--ease) forwards;
 }
-.row.is-striking {
+/* Only a row that is leaving folds away (done actions hidden); otherwise it stays, struck through, and sinks. */
+.row.is-striking.is-leaving {
   animation: fold 180ms 190ms ease-in forwards;
 }
 .is-focus.is-striking .subject-text {
@@ -844,10 +1021,29 @@ a:hover {
     transform: translateX(8px);
   }
 }
+/* Done, as in classic Outlook: the whole row greyed out and the subject struck through. Dates lose their
+   overdue red and context codes their colour: nothing on a done row asks for attention. */
 .row.is-done .subject-text {
   text-decoration: line-through;
   text-decoration-color: var(--ink-3);
-  color: var(--ink-2);
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.row.is-done .cell {
+  color: var(--ink-3);
+}
+.row.is-done .date.is-overdue,
+.row.is-done .date.is-soon {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+.row.is-done .ctx {
+  text-decoration-color: var(--rule-strong);
+}
+.row.is-done .energy i,
+.row.is-done .energy span {
+  opacity: 0.5;
 }
 .row.is-deferred {
   color: var(--ink-3);
@@ -1017,7 +1213,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 36px;
+  height: 44px; /* the top bar's height: the pane's header rule continues the top bar's */
   padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--rule);
 }
@@ -1037,15 +1233,6 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-.detail-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.detail-where {
-  color: var(--ink-2);
-  font-size: 12px;
 }
 .detail-meta {
   color: var(--ink-3);
@@ -1074,6 +1261,19 @@ a:hover {
   gap: 3px;
   min-width: 0;
 }
+/* A project's health lamp, or an action's flag or done mark, rides after its label, sized to the caps. */
+.field-label .marker {
+  margin-left: 6px;
+  vertical-align: middle;
+  /* Rides in the label without making it taller than any other field label. */
+  margin-block: -8px;
+}
+.field-label .lamp {
+  width: 8px;
+  height: 8px;
+  margin-left: 7px;
+  vertical-align: 0;
+}
 .field-label,
 .p-lbl {
   font-family: var(--font-label);
@@ -1091,6 +1291,11 @@ a:hover {
   padding: 5px 8px;
   resize: vertical;
   line-height: 1.45;
+}
+/* A one-line text field is exactly as tall as a picker field, so side-by-side fields line up. */
+input.field-text {
+  height: 28px;
+  padding-block: 0;
 }
 .field-text:focus {
   outline: none;
@@ -1152,6 +1357,24 @@ a:hover {
 .icon-btn:hover {
   background: var(--steel);
   color: var(--ink);
+}
+
+/* Pin: tilted and quiet when loose; upright in accent on a selection chip when the pane is pinned. */
+.detail-bar-tools {
+  display: inline-flex;
+  gap: 2px;
+}
+.pin-btn svg {
+  transform: rotate(45deg);
+  transition: transform 160ms var(--ease);
+}
+.pin-btn.is-on {
+  background: var(--select);
+  color: var(--accent);
+}
+.pin-btn.is-on svg {
+  transform: none;
+  fill: currentColor;
 }
 
 .detail-files ul,
@@ -1943,17 +2166,6 @@ a:hover {
   gap: 6px;
   color: var(--ink-2);
 }
-.big-count {
-  font-size: 15px;
-  margin: 0;
-}
-.big-count .num {
-  font-family: var(--font-label);
-  font-weight: 700;
-  font-size: 40px;
-  line-height: 1;
-  margin-right: 6px;
-}
 .flag-note {
   display: inline-flex;
   align-items: center;
@@ -2045,11 +2257,12 @@ a:hover {
     font-weight: 650;
     box-shadow: inset 0 2px 0 var(--ink);
   }
+  /* Like the rail: a plain count, only when something is waiting. */
   .tab-count {
-    font-family: var(--font-label);
-    font-weight: 700;
-    font-size: 22px;
-    color: var(--ink);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
   }
   .tabbar-more {
     position: absolute;
@@ -2293,30 +2506,16 @@ a:hover {
   white-space: nowrap;
 }
 
-/* Get clear lists the pile itself: plain lines, like the stuff in the tray. */
-.review-pile {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  width: min(560px, 100%);
-  border-top: 1px solid var(--rule);
-}
-.review-pile li {
-  height: var(--row);
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--rule);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 /* A detail field's label with its key cap on the right. */
 .field-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+}
+/* The Actions heading carries its key like a field does: T adds a next action. */
+.detail-h-key {
+  margin-left: auto;
 }
 .field-key {
   font-size: 11px;
@@ -2335,9 +2534,12 @@ a:hover {
 
 /* In dark mode the navy tape on the graphite rail gets a hairline edge, so it reads as tape, not a dim blob. */
 @media (prefers-color-scheme: dark) {
-  .rail .tape {
+  :root:not([data-theme="light"]) .rail .tape {
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--folder) 70%, transparent);
   }
+}
+:root[data-theme="dark"] .rail .tape {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--folder) 70%, transparent);
 }
 
 /* A next action without a context can't be accepted: its Context chip says so in stamp red. */
@@ -2348,3 +2550,15 @@ a:hover {
   color: var(--stamp);
   font-weight: 600;
 }
+
+/* Rail shortcut legends: one right-hand column of equal-width key caps. */
+.rail .rail-key {
+  min-width: 30px;
+  padding: 0 3px;
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+  color: var(--ink-2);
+  flex: none;
+}
+

@@ -13,7 +13,7 @@ export function promptApiKey(ui: UI, onSaved?: () => void) {
       const v = s.trim();
       if (!v) return { ok: false, text: "Paste the key from the Claude Console" };
       if (!v.startsWith("sk-ant-")) return { ok: false, text: "Claude API keys start with sk-ant-" };
-      return { ok: true, text: `Checks the key ending ${v.slice(-4)} with Claude, then saves it on this Mac` };
+      return { ok: true, text: `Checks the key ending ${v.slice(-4)} with Claude, then saves it` };
     },
     onPick: (key) => void saveApiKey(key).then((ok) => ok && onSaved?.()),
   });
@@ -41,5 +41,5 @@ export async function removeApiKey() {
   const res = await fetch("/api/settings/key", { method: "DELETE" });
   const j = (await res.json()) as { hasKey: boolean; keyHint: string | null };
   updateMeta({ hasKey: j.hasKey, keyHint: j.keyHint });
-  notify(j.hasKey ? "Key removed from .env, but a key is still set in the environment the server started with" : "API key removed. Clarify and Review are off until you add one.");
+  notify(j.hasKey ? "Key removed, but Stiltje was started with another key, which stays in use until it restarts without it" : "API key removed. Clarify with Claude is off until you add one.");
 }

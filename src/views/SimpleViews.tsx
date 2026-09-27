@@ -3,14 +3,14 @@ import { Paperclip } from "lucide-react";
 import { getState, mutate, newAction, patchMany, plural, stamp, uid, upload, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
-import { Grid, useListNav, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
-import { DateCell, Lamp, Marker, Tape } from "../components/bits.tsx";
+import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
+import { DateCell, Lamp, Marker } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { editors, projectItems } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { formatDate } from "../../shared/dates.ts";
-import type { Area, ID, Op, Ref } from "../../shared/types.ts";
+import type { ID, Op, Ref } from "../../shared/types.ts";
 
 /* ------------------------------------------------------------------ */
 /* Someday / Maybe: someday projects and someday actions together       */
@@ -25,7 +25,9 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
   const aEd = editors(ui);
   const pEd = projectEditors(ui);
 
-  const groups: GridGroup<SomedayRow>[] = useMemo(() => {
+  const [sort, setSort] = useSort("someday");
+  const sorters: Sorters<SomedayRow> = useMemo(() => ({ subject: (r) => r.title, proj: (r) => r.project, back: (r) => r.bring_back }), []);
+  const baseGroups: GridGroup<SomedayRow>[] = useMemo(() => {
     const projects = s.projects
       .filter((p) => p.status === "someday")
       .sort((a, b) => a.sort - b.sort)
@@ -46,6 +48,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       { key: "actions", label: "Actions", rows: actions },
     ];
   }, [s.projects, s.actions]);
+  const groups = useMemo(() => sortGroups(baseGroups, sorters, sort), [baseGroups, sorters, sort]);
 
   const nav = useListNav("someday", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: true })), [groups]));
   const all = groups.flatMap((g) => g.rows);
@@ -67,7 +70,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
   }, [ui.revealTarget]);
 
   useEffect(() => {
-    if (focusRow && ui.detail && ui.detail.id !== focusRow.id) ui.openDetail({ kind: focusRow.kind, id: focusRow.id });
+    ui.followDetail(focusRow ? { kind: focusRow.kind, id: focusRow.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRow?.key]);
 
@@ -157,6 +160,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
 
   return (
     <Grid
+      sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
       listId="someday"
       columns={columns}
       groups={groups}
@@ -179,17 +183,26 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
   const s = useStore((x) => x);
   const [editing, setEditing] = useState<ID | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const rows = useMemo(() => s.refs.filter((r) => r.status === "active").sort((a, b) => a.title.localeCompare(b.title)), [s.refs]);
   const filesBy = useMemo(() => {
     const m = new Map<string, number>();
     s.files.forEach((f) => f.owner_kind === "ref" && m.set(f.owner_id, (m.get(f.owner_id) ?? 0) + 1));
     return m;
   }, [s.files]);
+  // A–Z by title is the list's own order; a heading click sorts by that column instead.
+  const [sort, setSort] = useSort("reference");
+  const sorters: Sorters<Ref> = useMemo(
+    () => ({ subject: (r) => r.title, proj: (r) => s.projects.find((p) => p.id === r.project_id)?.title, files: (r) => filesBy.get(r.id) ?? null, when: (r) => r.created_at }),
+    [s.projects, filesBy],
+  );
+  const rows = useMemo(
+    () => sortGroups([{ key: "refs", label: "", rows: s.refs.filter((r) => r.status === "active").sort((a, b) => a.title.localeCompare(b.title)) }], sorters, sort)[0].rows,
+    [s.refs, sorters, sort],
+  );
   const nav = useListNav("reference", useMemo(() => [{ key: "refs", rowKeys: rows.map((r) => r.id), showHeader: false }], [rows]));
   const focusId = nav.focus;
 
   useEffect(() => {
-    if (focusId && ui.detail?.kind === "ref" && ui.detail.id !== focusId) ui.openDetail({ kind: "ref", id: focusId });
+    ui.followDetail(focusId ? { kind: "ref", id: focusId } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId]);
   useEffect(() => {
@@ -288,6 +301,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
   return (
     <>
       <Grid
+        sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
         listId="reference"
         columns={columns}
         groups={[{ key: "refs", label: "", rows }]}
@@ -316,113 +330,3 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
 /* Areas of focus                                                       */
 /* ------------------------------------------------------------------ */
 
-export function AreasView({ regionActive }: { regionActive: boolean }) {
-  const s = useStore((x) => x);
-  const [editing, setEditing] = useState<ID | null>(null);
-  const rows = useMemo(() => [...s.areas].sort((a, b) => a.sort - b.sort), [s.areas]);
-  const nav = useListNav("areas", useMemo(() => [{ key: "areas", rowKeys: rows.map((r) => r.id), showHeader: false }], [rows]));
-  const focusId = nav.focus && !isGroupKey(nav.focus) ? nav.focus : null;
-
-  const stats = useMemo(() => {
-    const m = new Map<string, { projects: number; stalled: number; actions: number }>();
-    for (const a of s.areas) m.set(a.id, { projects: 0, stalled: 0, actions: 0 });
-    for (const p of s.projects.filter((p) => p.status === "active" && p.area_id)) {
-      const st = m.get(p.area_id!);
-      if (!st) continue;
-      st.projects++;
-      const open = s.actions.filter((a) => a.project_id === p.id && ["next", "waiting"].includes(a.status));
-      st.actions += open.length;
-      if (!open.length) st.stalled++;
-    }
-    return m;
-  }, [s]);
-
-  const reorder = (dir: -1 | 1) => {
-    if (!focusId) return;
-    const i = rows.findIndex((r) => r.id === focusId);
-    const other = rows[i + dir];
-    if (!other) return;
-    mutate("Reordered", [
-      { type: "patch", table: "areas", id: rows[i].id, data: { sort: other.sort } },
-      { type: "patch", table: "areas", id: other.id, data: { sort: rows[i].sort } },
-    ], { silent: true });
-  };
-
-  const commands: Command[] = [
-    ...nav.commands,
-    {
-      id: "area.new",
-      label: "New area",
-      group: "Areas",
-      keys: ["n"],
-      run: () => {
-        const id = uid();
-        mutate("New area", [{ type: "create", table: "areas", row: { id, name: "", sort: Math.max(0, ...s.areas.map((a) => a.sort)) + 1 } }], { silent: true });
-        nav.setFocus(id);
-        setEditing(id);
-      },
-    },
-    { id: "area.rename", label: "Rename", group: "Areas", keys: ["f2", "enter"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
-    { id: "area.up", label: "Move up", group: "Areas", keys: ["alt+arrowup"], enabled: Boolean(focusId), run: () => reorder(-1) },
-    { id: "area.down", label: "Move down", group: "Areas", keys: ["alt+arrowdown"], enabled: Boolean(focusId), run: () => reorder(1) },
-    {
-      id: "area.delete",
-      label: "Delete area (projects keep going)",
-      group: "Areas",
-      keys: ["backspace", "delete"],
-      enabled: Boolean(focusId),
-      run: () => {
-        if (!focusId) return;
-        mutate("Area deleted", [
-          { type: "delete", table: "areas", id: focusId },
-          ...s.projects.filter((p) => p.area_id === focusId).map((p) => ({ type: "patch" as const, table: "projects" as const, id: p.id, data: { area_id: null } })),
-        ]);
-      },
-    },
-  ];
-  useCommands("list:areas", commands, { priority: 10, active: regionActive });
-
-  const columns: Column<Area>[] = [
-    {
-      key: "subject",
-      label: "Area of focus",
-      width: "minmax(200px, 1fr)",
-      render: (a) =>
-        editing === a.id ? (
-          <InlineEdit
-            value={a.name}
-            placeholder="Name the area"
-            onDone={(v) => {
-              setEditing(null);
-              if (!v.trim() && !a.name) mutate("Discarded", [{ type: "delete", table: "areas", id: a.id }], { silent: true });
-              else if (v.trim() !== a.name) mutate("Renamed", [{ type: "patch", table: "areas", id: a.id, data: { name: v.trim() } }]);
-            }}
-          />
-        ) : (
-          <Tape size="md">{a.name || "Untitled"}</Tape>
-        ),
-    },
-    { key: "projects", label: "Active projects", width: "120px", align: "end", render: (a) => <span className="num">{stats.get(a.id)?.projects ?? 0}</span> },
-    { key: "actions", label: "Open actions", width: "110px", align: "end", render: (a) => <span className="num">{stats.get(a.id)?.actions ?? 0}</span> },
-    {
-      key: "stalled",
-      label: "Stalled",
-      width: "90px",
-      align: "end",
-      render: (a) => (stats.get(a.id)?.stalled ? <span className="stamp">{stats.get(a.id)?.stalled}</span> : <span className="dash" aria-hidden="true">–</span>),
-    },
-  ];
-
-  return (
-    <Grid
-      listId="areas"
-      columns={columns}
-      groups={[{ key: "areas", label: "", rows }]}
-      getKey={(a) => a.id}
-      nav={nav}
-      active={regionActive}
-      showHeaders={false}
-      empty={<EmptyState title="No areas of focus" lines={["Add areas such as Work, Home and Health to group projects."]} />}
-    />
-  );
-}

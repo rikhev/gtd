@@ -86,7 +86,7 @@ async function main() {
     return;
   }
 
-  console.log("Setting up the In-Tray login.\n");
+  console.log("Setting up the Stiltje login.\n");
   const passwordHash = hashPassword(await askPassword());
   const secret = newTotpSecret();
   const uri = totpUri(secret);

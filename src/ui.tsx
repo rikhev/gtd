@@ -10,7 +10,6 @@ export type ViewId =
   | "reference"
   | "review"
   | "done"
-  | "areas"
   | "settings"
   | "search"
   | "clarify";
@@ -67,6 +66,11 @@ export interface UI {
   setRegion: (r: Region) => void;
   detail: Target | null;
   openDetail: (t: Target | null, focus?: boolean) => void;
+  /** Pinned, the detail pane stays open beside every list and follows the cursor; Esc only steps back to the list. */
+  detailPinned: boolean;
+  setDetailPinned: (on: boolean) => void;
+  /** A list reports what its cursor is on: the pane follows it when pinned, or when it is already open. */
+  followDetail: (t: Target | null) => void;
   openPicker: (p: PickerSpec) => void;
   pickerOpen: boolean;
   focusCapture: () => void;
@@ -107,7 +111,6 @@ export const VIEW_TITLES: Record<ViewId, string> = {
   reference: "Reference",
   review: "Weekly Review",
   done: "Done",
-  areas: "Areas",
   settings: "Settings",
   search: "Search",
   clarify: "Clarify",

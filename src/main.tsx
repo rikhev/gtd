@@ -6,6 +6,10 @@ import "./styles.css";
 import App from "./App.tsx";
 import { Login } from "./components/Login.tsx";
 import { load, signedOut, useMeta } from "./store.ts";
+import { applyTheme } from "./theme.ts";
+
+// The chosen theme is on <html> before anything renders, so the page never flashes the other one.
+applyTheme();
 
 // Any API call that comes back 401 means the session ended: show the sign-in screen.
 const nativeFetch = window.fetch.bind(window);

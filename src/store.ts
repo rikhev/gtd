@@ -256,6 +256,8 @@ export function newAction(data: Partial<Action>): Action {
     created_at: stamp(),
     completed_at: null,
     updated_at: stamp(),
+    done_from: null,
+    archived_at: null,
     ...data,
   };
 }
@@ -275,6 +277,7 @@ export function newProject(data: Partial<Project>): Project {
     sort: maxSort + 1,
     created_at: stamp(),
     completed_at: null,
+    archived_at: null,
     ...data,
   };
 }
@@ -298,7 +301,9 @@ export function completeActions(ids: ID[]) {
   for (const id of ids) {
     const a = find("actions", id);
     if (!a || a.status === "done") continue;
-    ops.push({ type: "patch", table: "actions", id, data: { status: "done", completed_at: stamp(), flagged: 0 } });
+    // Done stays on its own list, struck through, until archived to Done.
+    const from = a.status === "waiting" || a.status === "someday" ? a.status : "next";
+    ops.push({ type: "patch", table: "actions", id, data: { status: "done", completed_at: stamp(), flagged: 0, done_from: from, archived_at: null } });
     const r = a.recurrence ? parseRecurrence(a.recurrence) : null;
     if (r) {
       const t = today();
@@ -320,6 +325,45 @@ export function completeActions(ids: ID[]) {
   }
   if (!ops.length) return;
   mutate(`${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}`, ops);
+}
+
+/**
+ * Not done after all: back to the list it was done on (Next Actions for anything archived before we tracked it).
+ * Stuff ticked done in the Inbox shares its id with the action that logs it: while it is still in the Inbox, it goes back to being stuff.
+ */
+export function reopenActions(ids: ID[]) {
+  const acts = ids.map((id) => find("actions", id)).filter((a): a is Action => Boolean(a && a.status === "done"));
+  if (!acts.length) return;
+  const ops: Op[] = [];
+  for (const a of acts) {
+    const st = a.done_from === "inbox" ? find("stuff", a.id) : undefined;
+    if (st && st.status === "done") {
+      ops.push({ type: "delete", table: "actions", id: a.id });
+      ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "inbox", processed_at: null } });
+      getState().files.filter((f) => f.owner_kind === "action" && f.owner_id === a.id).forEach((f) => ops.push({ type: "patch", table: "files", id: f.id, data: { owner_kind: "stuff" } }));
+    } else ops.push({ type: "patch", table: "actions", id: a.id, data: { status: a.done_from && a.done_from !== "inbox" ? a.done_from : "next", completed_at: null, done_from: null, archived_at: null } });
+  }
+  mutate(`${named("actions", acts.map((a) => a.id), "action")} not done`, ops);
+}
+
+/** Done actions still on their list, optionally only those on one list. */
+export function unarchivedDone(list?: "next" | "waiting" | "someday" | "inbox") {
+  return getState().actions.filter((a) => a.status === "done" && !a.archived_at && (!list || (a.done_from ?? "next") === list));
+}
+
+/** Moves done actions off their lists into Done. */
+export function archiveDone(ids: ID[], where = "") {
+  const acts = ids.map((id) => find("actions", id)).filter((a): a is Action => Boolean(a && a.status === "done" && !a.archived_at));
+  if (!acts.length) return;
+  const at = stamp();
+  mutate(
+    `${plural(acts.length, "done action")} archived to Done${where ? ` from ${where}` : ""}`,
+    acts.flatMap((a): Op[] => [
+      { type: "patch", table: "actions", id: a.id, data: { archived_at: at } },
+      // Ticked-off Inbox stuff leaves the Inbox with its action.
+      ...(a.done_from === "inbox" && find("stuff", a.id)?.status === "done" ? [{ type: "patch" as const, table: "stuff" as const, id: a.id, data: { status: "processed" } }] : []),
+    ]),
+  );
 }
 
 export function patchMany(table: TableName, ids: ID[], data: Record<string, unknown>, label: string) {
@@ -388,6 +432,11 @@ export function isChase(a: Action, t = today()) {
 
 /* ---------------- server helpers ---------------- */
 
+/** Something new landed in the Inbox (a capture or an upload, never a load or an undo): the rail's pond takes a drop. */
+function landed(n: number) {
+  window.dispatchEvent(new CustomEvent("gtd:landed", { detail: n }));
+}
+
 export async function capture(text: string) {
   const id = uid();
   const row = {
@@ -399,6 +448,7 @@ export async function capture(text: string) {
     processed_at: null,
   };
   applyLocal([{ type: "create", table: "stuff", row }]);
+  landed(1);
   undoStack.push({ label: "Capture", inverse: [{ type: "patch", table: "stuff", id, data: { status: "trashed" } }] });
   const res = await fetch("/api/capture", {
     method: "POST",
@@ -427,6 +477,7 @@ export async function upload(files: File[] | FileList, owner?: { kind: string; i
       ...stuff.map((row: Record<string, unknown>) => ({ type: "create" as const, table: "stuff" as const, row })),
       ...frows.map((row: Record<string, unknown>) => ({ type: "create" as const, table: "files" as const, row })),
     ]);
+    if (stuff.length) landed(stuff.length);
     notify(owner ? `Attached ${plural(list.length, "file")}` : `${plural(list.length, "file")} captured to the Inbox`);
   } catch (e) {
     notify(`Upload failed: ${(e as Error).message}`, { tone: "error" });

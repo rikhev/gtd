@@ -25,6 +25,10 @@ export interface Action {
   completed_at: string | null;
   /** Last edited or completed; a project with nothing touched for the stall threshold is stalled. */
   updated_at: string | null;
+  /** Done but not yet archived: the list it was done on, where it stays (struck through) until archived. */
+  done_from: "next" | "waiting" | "someday" | "inbox" | null;
+  /** When a done action was archived to the Done list; null while it still sits on its own list. */
+  archived_at: string | null;
 }
 
 export interface Project {
@@ -39,13 +43,15 @@ export interface Project {
   sort: number;
   created_at: string;
   completed_at: string | null;
+  /** Set when a completed project is archived off the Projects list. */
+  archived_at: string | null;
 }
 
 export interface Stuff {
   id: ID;
   text: string;
   kind: "text" | "email" | "file";
-  status: "inbox" | "processed" | "trashed";
+  status: "inbox" | "done" | "processed" | "trashed";
   created_at: string;
   processed_at: string | null;
 }

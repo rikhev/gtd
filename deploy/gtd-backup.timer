@@ -1,5 +1,5 @@
 [Unit]
-Description=Run the In-Tray backup every night
+Description=Run the Stiltje backup every night
 
 [Timer]
 OnCalendar=*-*-* 03:30:00
