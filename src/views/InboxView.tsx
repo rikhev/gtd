@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { getState, mutate, newAction, plural, stamp, upload, useStore, uid } from "../store.ts";
+import { getState, mutate, named, newAction, newProject, stamp, upload, useStore, uid } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, type Column } from "../components/Grid.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { projectItems } from "../actionCommands.tsx";
+import { askWaitingOn, destinationItems } from "../actionCommands.tsx";
 import { formatDate } from "../../shared/dates.ts";
 import type { ID, Op, Stuff } from "../../shared/types.ts";
 
@@ -39,7 +39,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
   const navGroups = useMemo(() => [{ key: "inbox", rowKeys: rows.map((r) => r.id), showHeader: false }], [rows]);
   const nav = useListNav("inbox", navGroups);
   const focusId = nav.focus;
-  const n = (ids: ID[]) => plural(ids.length, "item");
+  const n = (ids: ID[]) => named("stuff", ids, "item");
 
   useEffect(() => {
     if (focusId && ui.detail?.kind === "stuff" && ui.detail.id !== focusId) ui.openDetail({ kind: "stuff", id: focusId });
@@ -54,22 +54,47 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.revealTarget]);
 
-  /** File without Claude: straight to a list or project. */
+  /** Done already: log it as a completed action (the two-minute rule). */
+  const doneNow = (ids: ID[]) => {
+    const ops: Op[] = [];
+    for (const st of getState().stuff.filter((x) => ids.includes(x.id))) {
+      const a = newAction({ title: firstLine(st.text), status: "done", completed_at: stamp() });
+      ops.push({ type: "create", table: "actions", row: { ...a } });
+      ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } });
+    }
+    mutate(`${n(ids)} done and logged`, ops);
+  };
+  const trashNow = (ids: ID[]) => mutate(`${n(ids)} trashed`, ids.map((id) => ({ type: "patch", table: "stuff", id, data: { status: "trashed" } })));
+
+  /**
+   * File without Claude: the whole clarify decision in one picker. A list, an existing project,
+   * a new project (type its name), done now, or trash.
+   */
   const quickFile = (ids: ID[]) => {
     if (!ids.length) return;
     ui.openPicker({
       type: "list",
       title: "File as",
       items: [
-        { id: "next", label: "Next action", hint: "List" },
-        { id: "someday", label: "Someday / Maybe", hint: "List" },
-        { id: "waiting", label: "Waiting For", hint: "List" },
-        { id: "reference", label: "Reference", hint: "Keep" },
-        ...projectItems().map((p) => ({ ...p, hint: "Project action" })),
+        ...destinationItems(),
+        { id: "__done", label: "Done already (two-minute rule)", section: "now" },
+        { id: "__trash", label: "Trash", section: "now" },
       ],
+      createLabel: (q) => `New project “${q}”, with this as its first action`,
+      onCreate: (q) => {
+        const p = newProject({ title: q });
+        file(p.id, undefined, [{ type: "create", table: "projects", row: { ...p } }], `project “${q}”`);
+      },
       onPick: (target) => {
         if (!target) return;
-        const ops: Op[] = [];
+        if (target === "__done") doneNow(ids);
+        else if (target === "__trash") trashNow(ids);
+        else if (target === "waiting") askWaitingOn(ui, null, (who) => file(target, who));
+        else file(target);
+      },
+    });
+    function file(target: string, who?: string, first: Op[] = [], into?: string) {
+        const ops: Op[] = [...first];
         for (const st of getState().stuff.filter((x) => ids.includes(x.id))) {
           const title = stuffTitle(st);
           const rest = st.text.slice(st.text.indexOf(title) + title.length).trim();
@@ -87,6 +112,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
               status: isList ? (target as "next") : "next",
               project_id: isList ? null : target,
               waiting_since: target === "waiting" ? new Date().toISOString().slice(0, 10) : null,
+              waiting_who: target === "waiting" ? (who ?? null) : null,
             });
             ops.push({ type: "create", table: "actions", row: { ...a } });
             owner = { kind: "action", id: a.id };
@@ -94,9 +120,8 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
           files.forEach((f) => ops.push({ type: "patch", table: "files", id: f.id, data: { owner_kind: owner.kind, owner_id: owner.id } }));
           ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } });
         }
-        mutate(`${n(ids)} filed`, ops);
-      },
-    });
+        mutate(target === "waiting" ? `${n(ids)} → Waiting For (${who})` : into ? `${n(ids)} → new ${into}` : `${n(ids)} filed`, ops);
+    }
   };
 
   const commands: Command[] = [
@@ -112,16 +137,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
       group: "Inbox",
       keys: ["e"],
       enabled: Boolean(focusId),
-      run: () => {
-        const ids = nav.targets();
-        const ops: Op[] = [];
-        for (const st of getState().stuff.filter((x) => ids.includes(x.id))) {
-          const a = newAction({ title: firstLine(st.text), status: "done", completed_at: stamp() });
-          ops.push({ type: "create", table: "actions", row: { ...a } });
-          ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } });
-        }
-        mutate(`${n(ids)} done and logged`, ops);
-      },
+      run: () => doneNow(nav.targets()),
     },
     {
       id: "inbox.trash",
@@ -129,10 +145,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
       group: "Inbox",
       keys: ["backspace", "delete"],
       enabled: Boolean(focusId),
-      run: () => {
-        const ids = nav.targets();
-        mutate(`${n(ids)} trashed`, ids.map((id) => ({ type: "patch", table: "stuff", id, data: { status: "trashed" } })));
-      },
+      run: () => trashNow(nav.targets()),
     },
     {
       id: "inbox.delete",
@@ -145,7 +158,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
         mutate(`${n(ids)} deleted permanently`, ids.map((id) => ({ type: "delete", table: "stuff", id })));
       },
     },
-    { id: "inbox.upload", label: "Upload files", group: "Inbox", keys: ["mod+o"], run: () => fileInput.current?.click() },
+    { id: "inbox.upload", label: "Upload files to the Inbox", group: "Inbox", keys: ["mod+o"], run: () => fileInput.current?.click() },
   ];
   useCommands("list:inbox", commands, { priority: 10, active: regionActive });
 
@@ -162,6 +175,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
         editing === st.id ? (
           <InlineEdit
             value={st.text}
+            placeholder="Capture anything"
             onDone={(v) => {
               setEditing(null);
               if (v.trim() && v !== st.text) mutate("Edited", [{ type: "patch", table: "stuff", id: st.id, data: { text: v } }]);
@@ -184,7 +198,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
             <Paperclip size={12} strokeWidth={2} aria-hidden /> {filesBy.get(st.id)}
           </span>
         ) : (
-          <span className="dash">–</span>
+          <span className="dash" aria-hidden="true">–</span>
         ),
     },
     { key: "when", label: "Captured", width: "96px", render: (st) => <span className="date">{formatDate(st.created_at.slice(0, 10))}</span> },

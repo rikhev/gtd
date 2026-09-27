@@ -1,11 +1,12 @@
 import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
 import type { UI } from "./ui.tsx";
-import { completeActions, getState, mutate, newAction, newProject, patchMany, plural, stamp, uid } from "./store.ts";
+import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, stamp, uid } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
-export const CONTEXT_COLORS = ["#2f6fb5", "#c0392b", "#1f8a4c", "#b7791f", "#6b4fa0", "#0f8a8a", "#a3476e", "#5b6b2e"];
+/** No red (kept for trouble: overdue, stalled, errors) and no green (kept for the "on track" lamp). */
+export const CONTEXT_COLORS = ["#2f6fb5", "#5b6b7e", "#8a5a2b", "#b7791f", "#6b4fa0", "#0f8a8a", "#a3476e", "#5b6b2e"];
 
 export function createContextOp(name: string): { id: ID; op: Op } {
   const s = getState();
@@ -26,11 +27,56 @@ export function createAreaOp(name: string): { id: ID; op: Op } {
   return { id, op: { type: "create", table: "areas", row: { id, name, sort: getState().areas.length } } };
 }
 
+/** Everyone and everything the Waiting For list is waiting on right now, most recent first. */
+export function waitingNames(): string[] {
+  const waiting = getState().actions.filter((a) => a.status === "waiting");
+  const seen = new Map<string, string>();
+  for (const a of waiting) {
+    const who = a.waiting_who?.trim();
+    if (!who) continue;
+    const when = a.waiting_since ?? a.created_at;
+    const key = who.toLowerCase();
+    if (!seen.has(key) || (seen.get(key) ?? "") < when) seen.set(key, when);
+  }
+  const names = new Map<string, string>();
+  for (const a of waiting) if (a.waiting_who?.trim()) names.set(a.waiting_who.trim().toLowerCase(), a.waiting_who.trim());
+  return [...seen.entries()].sort((x, y) => y[1].localeCompare(x[1])).map(([k]) => names.get(k)!);
+}
+
+/**
+ * Waiting For always needs someone or something to wait on. This asks for it (pick a
+ * previous name or type a new one) and only then applies; Esc leaves everything as it was.
+ */
+export function askWaitingOn(ui: UI, current: string | null, apply: (who: string) => void, title = "Waiting on") {
+  ui.openPicker({
+    type: "list",
+    title,
+    items: waitingNames().map((w) => ({ id: w, label: w })),
+    current,
+    mustChoose: true,
+    placeholder: "Who or what are you waiting on?",
+    createLabel: (q) => `Waiting on “${q}”`,
+    onCreate: (q) => apply(q.trim()),
+    onPick: (who) => who && apply(who),
+  });
+}
+
 export function contextItems() {
   return getState()
     .contexts.slice()
     .sort((a, b) => a.sort - b.sort)
     .map((c) => ({ id: c.id, label: c.name, color: c.color }));
+}
+
+/** Where an item can go, in one order and with one set of names everywhere (Move and the Inbox's File as). */
+export function destinationItems(prefix = "") {
+  return [
+    { id: `${prefix}next`, label: "Next Actions", hint: "List", section: "lists" },
+    { id: `${prefix}waiting`, label: "Waiting For", hint: "List", section: "lists" },
+    { id: `${prefix}someday`, label: "Someday / Maybe", hint: "List", section: "lists" },
+    { id: `${prefix}reference`, label: "Reference", hint: "Keep as reference", section: "lists" },
+    ...projectItems().map((p) => ({ ...p, hint: p.hint ? `Project · ${p.hint}` : "Project", section: "projects" })),
+  ];
 }
 
 export function projectItems() {
@@ -48,7 +94,7 @@ export function areaItems() {
     .map((a) => ({ id: a.id, label: a.name }));
 }
 
-const n = (ids: ID[]) => plural(ids.length, "action");
+const n = (ids: ID[]) => named("actions", ids, "action");
 
 /* Field editors shared by list keys and the detail pane. */
 export function editors(ui: UI) {
@@ -147,28 +193,21 @@ export function editors(ui: UI) {
     },
     delegate(ids: ID[]) {
       if (!ids.length) return;
-      ui.openPicker({
-        type: "text",
-        title: "Delegate to",
-        current: one(ids)?.waiting_who ?? "",
-        placeholder: "Who is it waiting on?",
-        preview: (s) => (s.trim() ? { ok: true, text: `Moves to Waiting For · since today` } : { ok: false, text: "Type a name" }),
-        onPick: (who) =>
-          patchMany("actions", ids, { status: "waiting", waiting_who: who.trim(), waiting_since: today(), flagged: 0 }, `${n(ids)} → Waiting For (${who.trim()})`),
-      });
+      askWaitingOn(ui, one(ids)?.waiting_who ?? null, (who) =>
+        patchMany("actions", ids, { status: "waiting", waiting_who: who, waiting_since: today(), flagged: 0 }, `${n(ids)} → Waiting For (${who})`),
+      );
     },
     move(ids: ID[]) {
       if (!ids.length) return;
-      const lists = [
-        { id: "list:next", label: "Next Actions", hint: "List" },
-        { id: "list:waiting", label: "Waiting For", hint: "List" },
-        { id: "list:someday", label: "Someday / Maybe", hint: "List" },
-        { id: "list:reference", label: "Reference", hint: "Keep as reference" },
-      ];
       ui.openPicker({
         type: "list",
         title: "Move to",
-        items: [...lists, ...projectItems().map((p) => ({ ...p, hint: "Project" }))],
+        // Say where the item already is (for a single item), so the picker answers "where is it now?" too.
+        items: destinationItems("list:").map((it) => {
+          const a = ids.length === 1 ? one(ids) : undefined;
+          const here = a && (it.id === `list:${a.status}` || it.id === a.project_id);
+          return here ? { ...it, hint: `${it.hint} · current` } : it;
+        }),
         createLabel: (q) => `Create project “${q}” and move`,
         onCreate: (q) => {
           const p = newProject({ title: q });
@@ -192,10 +231,14 @@ export function editors(ui: UI) {
             mutate(`${n(ids)} → Reference`, ops);
           } else if (target.startsWith("list:")) {
             const status = target.slice(5) as ActionStatus;
-            const label = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe" }[status as "next"];
-            const data: Record<string, unknown> = { status };
-            if (status === "waiting") data.waiting_since = today();
-            patchMany("actions", ids, data, `${n(ids)} → ${label}`);
+            if (status === "waiting") {
+              askWaitingOn(ui, one(ids)?.waiting_who ?? null, (who) =>
+                patchMany("actions", ids, { status: "waiting", waiting_who: who, waiting_since: today(), flagged: 0 }, `${n(ids)} → Waiting For (${who})`),
+              );
+              return;
+            }
+            const label = { next: "Next Actions", someday: "Someday / Maybe" }[status as "next"];
+            patchMany("actions", ids, { status }, `${n(ids)} → ${label}`);
           } else {
             const name = getState().projects.find((p) => p.id === target)?.title ?? "project";
             patchMany("actions", ids, { project_id: target }, `${n(ids)} → ${name}`);
@@ -227,8 +270,15 @@ export function useActionCommands(opts: {
   const timer = useRef<number | undefined>(undefined);
   const ed = editors(ui);
 
-  const complete = () => {
+  // A command on a group heading has nothing to act on: say so instead of doing nothing.
+  const pick = () => {
     const ids = targets();
+    if (!ids.length) notify("That's a group heading. Move onto an action first.");
+    return ids;
+  };
+
+  const complete = () => {
+    const ids = pick();
     if (!ids.length) return;
     // The pen strikes through first; the rows fold away a beat later.
     setStriking(new Set(ids));
@@ -246,7 +296,7 @@ export function useActionCommands(opts: {
   };
 
   const flag = () => {
-    const ids = targets();
+    const ids = pick();
     if (!ids.length) return;
     const acts = getState().actions.filter((a) => ids.includes(a.id));
     const on = acts.some((a) => !a.flagged) ? 1 : 0;
@@ -278,11 +328,17 @@ export function useActionCommands(opts: {
   };
 
   const create = () => {
-    const a = newAction({ status, ...(opts.defaults?.() ?? {}) });
-    if (status === "waiting") a.waiting_since = today();
-    mutate("New action", [{ type: "create", table: "actions", row: { ...a } }], { silent: true });
-    opts.onCreated?.(a.id);
-    setEditing(a.id);
+    const defaults = opts.defaults?.() ?? {};
+    const make = (extra: Partial<Action> = {}) => {
+      const a = newAction({ status, ...defaults, ...extra });
+      mutate("New action", [{ type: "create", table: "actions", row: { ...a } }], { silent: true });
+      opts.onCreated?.(a.id);
+      setEditing(a.id);
+    };
+    // A new Waiting For item starts with who or what it waits on (the cursor's group is
+    // offered first); Esc creates nothing.
+    if (status === "waiting") askWaitingOn(ui, defaults.waiting_who ?? null, (who) => make({ waiting_who: who, waiting_since: today() }), "New item: waiting on");
+    else make();
   };
 
   const has = () => targets().length > 0;
@@ -290,23 +346,24 @@ export function useActionCommands(opts: {
   const commands: Command[] = [
     { id: "act.new", label: "New action", group: "Actions", keys: ["n"], run: create },
     { id: "act.open", label: "Open details", group: "Actions", keys: ["enter"], run: () => opts.focusId && ui.openDetail({ kind: "action", id: opts.focusId }, true) },
+    { id: "act.jump", label: "Jump to its project", group: "Actions", keys: ["j"], run: () => opts.focusId && ui.jumpToProject(opts.focusId) },
     { id: "act.rename", label: "Edit subject", group: "Actions", keys: ["f2"], run: () => opts.focusId && setEditing(opts.focusId) },
     opts.doneView
       ? { id: "act.reopen", label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
       : { id: "act.done", label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
     { id: "act.flag", label: "Flag for today", group: "Actions", keys: ["insert", "ctrl+i"], run: flag },
-    { id: "act.move", label: "Move to project or list", group: "Actions", keys: ["v"], run: () => ed.move(targets()) },
-    { id: "act.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(targets()) },
-    { id: "act.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(targets()) },
+    { id: "act.move", label: "Move to project or list", group: "Actions", keys: ["v"], run: () => ed.move(pick()) },
+    { id: "act.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(pick()) },
+    { id: "act.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(pick()) },
     opts.waitingView
-      ? { id: "act.followup", label: "Follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(targets(), "followup") }
-      : { id: "act.due", label: "Due date", group: "Fields", keys: ["d"], run: () => ed.date(targets(), "due") },
-    { id: "act.defer", label: "Start date", group: "Fields", keys: ["s"], run: () => ed.date(targets(), "defer") },
-    { id: "act.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["t"], run: () => ed.time(targets()) },
-    { id: "act.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(targets()) },
-    { id: "act.repeat", label: "Repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(targets()) },
-    { id: "act.bringback", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], run: () => ed.date(targets(), "bring_back") },
-    { id: "act.delegate", label: "Delegate → Waiting For", group: "Actions", keys: ["shift+f"], run: () => ed.delegate(targets()) },
+      ? { id: "act.followup", label: "Follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(pick(), "followup") }
+      : { id: "act.due", label: "Due date", group: "Fields", keys: ["d"], run: () => ed.date(pick(), "due") },
+    { id: "act.defer", label: "Start date", group: "Fields", keys: ["s"], run: () => ed.date(pick(), "defer") },
+    { id: "act.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["t"], run: () => ed.time(pick()) },
+    { id: "act.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(pick()) },
+    { id: "act.repeat", label: "Repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(pick()) },
+    { id: "act.bringback", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], run: () => ed.date(pick(), "bring_back") },
+    { id: "act.delegate", label: "Delegate → Waiting For", group: "Actions", keys: ["shift+f"], run: () => ed.delegate(pick()) },
     { id: "act.trash", label: "Trash", group: "Actions", keys: ["backspace", "delete"], run: () => trash(false) },
     { id: "act.delete", label: "Delete permanently", group: "Actions", keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },
     { id: "act.up", label: "Move row up", group: "Actions", keys: ["alt+arrowup"], run: () => reorder(-1) },

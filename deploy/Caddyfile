@@ -1,5 +1,5 @@
 # Add this block to /etc/caddy/Caddyfile. Caddy fetches and renews the HTTPS certificate itself.
-gtd.rikard.me {
+gtd.hevosmaa.net {
 	encode zstd gzip
 	request_body {
 		max_size 50MB

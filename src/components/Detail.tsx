@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip } from "lucide-react";
-import { mutate, newAction, upload, useStore } from "../store.ts";
+import { mutate, newAction, notify, projectHealth, upload, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { useCommands } from "../keys.ts";
 import { editors } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { ContextCode, Energy, Marker, Tape } from "./bits.tsx";
-import { formatLong, formatTime, parseRecurrence, recurrenceLabel } from "../../shared/dates.ts";
+import { ContextCode, Energy, KeyHints, Lamp, Marker, Tape } from "./bits.tsx";
+import { formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
 /** Text field that commits on blur (one undo step per edit, not per keystroke). */
@@ -22,7 +22,8 @@ function TextField({
 }: {
   label: string;
   value: string;
-  onCommit: (v: string) => void;
+  /** Return false to refuse the edit; the field then snaps back to the saved value. */
+  onCommit: (v: string) => void | boolean;
   multiline?: boolean;
   rows?: number;
   placeholder?: string;
@@ -32,7 +33,7 @@ function TextField({
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   const commit = () => {
-    if (v !== value) onCommit(v);
+    if (v !== value && onCommit(v) === false) setV(value);
   };
   const common = {
     value: v,
@@ -61,18 +62,83 @@ function TextField({
   );
 }
 
+const DETAIL_HINTS: Record<string, { k: string; label: string }[]> = {
+  action: [
+    { k: "d", label: "Due" },
+    { k: "p", label: "Project" },
+    { k: "c", label: "Context" },
+    { k: "f2", label: "Edit" },
+    { k: "escape", label: "Close" },
+  ],
+  project: [
+    { k: "d", label: "Due" },
+    { k: "a", label: "Area" },
+    { k: "v", label: "Status" },
+    { k: "f2", label: "Edit" },
+    { k: "escape", label: "Close" },
+  ],
+  other: [
+    { k: "f2", label: "Edit" },
+    { k: "escape", label: "Close" },
+  ],
+};
+
+/** Whether the detail pane is the active region: its fields' letter keys only work then. */
+const DetailActive = createContext(false);
+
 function PickField({ label, children, onOpen, k }: { label: string; children: ReactNode; onOpen: () => void; k?: string }) {
+  // The key shown beside a field (D for Due, P for Project…) opens its picker while the pane has focus.
+  const active = useContext(DetailActive);
+  useCommands(`detail-field:${label}`, k ? [{ id: `detail.field.${label}`, label: `${label}…`, group: "Details", keys: [k.toLowerCase()], run: () => open() }] : [], { priority: 21, active: active && Boolean(k) });
+  // Screen readers hear the field, its value and its key: "Due, Fri 25 Sep 2026, D".
+  const id = useId();
+  // Opening from the key or a click first puts focus on this field, so the picker anchors under it.
+  const btn = useRef<HTMLButtonElement>(null);
+  const open = () => {
+    btn.current?.focus({ preventScroll: true });
+    onOpen();
+  };
   return (
     <div className="field">
-      <span className="field-label">{label}</span>
-      <button type="button" className="field-pick" onClick={onOpen} aria-label={`${label}${k ? ` (${k})` : ""}`}>
-        {children}
+      <span className="field-label" id={`${id}-l`}>
+        {label}
+      </span>
+      <button
+        type="button"
+        ref={btn}
+        className="field-pick"
+        onClick={open}
+        aria-labelledby={`${id}-l ${id}-v`}
+        aria-keyshortcuts={k}
+        title={typeof children === "string" ? children : undefined}
+      >
+        <span className="field-pick-value" id={`${id}-v`}>
+          {children}
+        </span>
       </button>
     </div>
   );
 }
 
-const none = <span className="dash">–</span>;
+/** A due or follow-up date in the pane, styled and spoken like the list does when it has passed. */
+function DueLong({ date, done }: { date: string; done?: boolean }) {
+  const overdue = !done && date < today();
+  return (
+    <span className={`date ${overdue ? "is-overdue" : ""}`}>
+      {formatLong(date)}
+      {overdue && <span className="visually-hidden">, overdue</span>}
+    </span>
+  );
+}
+
+const none = (
+  <>
+    <span className="dash" aria-hidden="true">
+      –
+    </span>
+    <span className="visually-hidden">not set</span>
+  </>
+);
 
 function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }) {
   const files = useStore((s) => s.files).filter((f) => f.owner_kind === owner.kind && f.owner_id === owner.id);
@@ -151,7 +217,7 @@ function ActionDetail({ a }: { a: Action }) {
           <ContextCode ctx={ctx} />
         </PickField>
         <PickField label="Due" k="D" onOpen={() => ed.date([a.id], "due")}>
-          {a.due ? formatLong(a.due) : none}
+          {a.due ? <DueLong date={a.due} done={a.status === "done"} /> : none}
         </PickField>
         <PickField label="Start" k="S" onOpen={() => ed.date([a.id], "defer")}>
           {a.defer ? formatLong(a.defer) : none}
@@ -171,9 +237,19 @@ function ActionDetail({ a }: { a: Action }) {
       </div>
       {a.status === "waiting" && (
         <div className="field-grid">
-          <TextField label="Waiting on" value={a.waiting_who ?? ""} onCommit={(v) => patch("actions", a.id, { waiting_who: v || null })} />
+          <TextField
+            label="Waiting on"
+            value={a.waiting_who ?? ""}
+            onCommit={(v) => {
+              if (!v.trim()) {
+                notify("A Waiting For item needs someone or something to wait on. Move it with V to take it out of Waiting For.", { tone: "error" });
+                return false;
+              }
+              patch("actions", a.id, { waiting_who: v.trim() });
+            }}
+          />
           <PickField label="Follow up" onOpen={() => ed.date([a.id], "followup")}>
-            {a.followup ? formatLong(a.followup) : none}
+            {a.followup ? <DueLong date={a.followup} done={a.status !== "waiting"} /> : none}
           </PickField>
           <div className="field">
             <span className="field-label">Since</span>
@@ -204,18 +280,11 @@ function ProjectDetail({ p }: { p: Project }) {
   return (
     <>
       <div className="detail-head">
+        <Lamp health={projectHealth(s, p)} />
         {area ? <Tape>{area.name}</Tape> : <span className="detail-where">No area</span>}
         <span className="detail-where">{{ active: "Active project", someday: "Someday / Maybe", done: "Completed", trashed: "Trash" }[p.status]}</span>
       </div>
       <TextField label="Project" value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
-      <TextField
-        label="Successful outcome"
-        value={p.outcome}
-        multiline
-        rows={2}
-        onCommit={(v) => patch("projects", p.id, { outcome: v })}
-        placeholder="What does done look like?"
-      />
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
           {area ? area.name : none}
@@ -224,7 +293,7 @@ function ProjectDetail({ p }: { p: Project }) {
           {{ active: "Active", someday: "Someday", done: "Done", trashed: "Trash" }[p.status]}
         </PickField>
         <PickField label="Due" k="D" onOpen={() => ed.date([p.id], "due")}>
-          {p.due ? formatLong(p.due) : none}
+          {p.due ? <DueLong date={p.due} done={p.status === "done"} /> : none}
         </PickField>
         <PickField label="Bring back" k="B" onOpen={() => ed.date([p.id], "bring_back")}>
           {p.bring_back ? formatLong(p.bring_back) : none}
@@ -234,7 +303,7 @@ function ProjectDetail({ p }: { p: Project }) {
         <h3 className="detail-h">
           Actions <span className="count">{open.length}</span>
         </h3>
-        {open.length === 0 && <p className="stamp-line"><span className="stamp">Stalled</span> No next action. Add one below.</p>}
+        {projectHealth(s, p) === "stalled" && <p className="stamp-line"><span className="stamp">Stalled</span> No next action. Add one below.</p>}
         <ul>
           {open.map((a) => (
             <li key={a.id}>
@@ -249,7 +318,7 @@ function ProjectDetail({ p }: { p: Project }) {
         <input
           className="field-text add-action"
           value={draft}
-          placeholder="Add a next action and press Enter"
+          placeholder="Add a next action"
           aria-label="Add a next action"
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -337,15 +406,24 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
     "detail",
     [
       {
+        // One Escape, from anywhere in the pane: edits are saved on blur, the pane closes, you're back on the row.
         id: "detail.back",
-        label: "Back to the list",
+        label: "Close details and go back to the list",
         group: "Details",
         keys: ["escape"],
         inInput: true,
         run: () => {
           (document.activeElement as HTMLElement | null)?.blur?.();
+          ui.openDetail(null);
           ui.setRegion("list");
         },
+      },
+      {
+        id: "detail.edit",
+        label: "Edit the subject",
+        group: "Details",
+        keys: ["f2"],
+        run: () => root.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus(),
       },
       {
         id: "detail.save",
@@ -363,11 +441,10 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
     { priority: 20, active },
   );
 
+  // Opening the pane puts focus on the pane itself, not in a field: a stray letter can't edit the title.
+  // Tab or F2 goes into the subject.
   useEffect(() => {
-    if (active) {
-      const el = root.current?.querySelector<HTMLElement>("[data-autofocus]") ?? root.current?.querySelector<HTMLElement>("input, textarea, button");
-      el?.focus();
-    }
+    if (active) root.current?.focus({ preventScroll: true });
   }, [active, target.id]);
 
   let body: ReactNode = null;
@@ -386,14 +463,22 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
   }
 
   return (
-    <aside ref={root} className={`detail ${active ? "is-active" : ""}`} aria-label="Details">
+    <aside ref={root} className={`detail ${active ? "is-active" : ""}`} aria-labelledby="detail-title" tabIndex={-1}>
       <div className="detail-bar">
-        <span className="detail-title">Details</span>
+        <h2 className="detail-title" id="detail-title">
+          Details
+        </h2>
         <button type="button" className="icon-btn" aria-label="Close details" onClick={() => ui.openDetail(null)}>
           <X size={14} strokeWidth={2} />
         </button>
       </div>
-      <div className="detail-body">{body ?? <p className="muted-text">This item no longer exists.</p>}</div>
+      <DetailActive.Provider value={active}>
+        <div className="detail-body">
+          {body ?? <p className="muted-text">This item no longer exists.</p>}
+          {/* The pane is a letter-key mode, so while it has focus it names its few keys (owner's decision). */}
+          {active && body && <KeyHints hints={DETAIL_HINTS[target.kind] ?? DETAIL_HINTS.other} />}
+        </div>
+      </DetailActive.Provider>
     </aside>
   );
 }

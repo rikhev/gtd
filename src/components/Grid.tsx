@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Command } from "../keys.ts";
+import { isEditable, type Command } from "../keys.ts";
 import { Tape } from "./bits.tsx";
 
 export interface Column<T> {
@@ -7,14 +7,21 @@ export interface Column<T> {
   label: string;
   width: string;
   align?: "end";
+  /** When the list gets too narrow (e.g. beside the detail pane), columns with the lowest number go first. */
+  drop?: number;
   render: (row: T) => ReactNode;
 }
+
+/** Smallest width a column can take: a fixed px width, or the minimum of a minmax(). */
+const minWidth = (w: string) => Number((/^minmax\((\d+)px/.exec(w) ?? /^(\d+)px/.exec(w))?.[1] ?? 0);
 
 export interface GridGroup<T> {
   key: string;
   label: string;
   /** Folder-tab header with a tape label (projects) vs. a plain ruled header. */
   folder?: boolean;
+  /** Context colour: drawn as the 2px hairline code under the group label. */
+  color?: string;
   meta?: ReactNode;
   rows: T[];
 }
@@ -90,8 +97,26 @@ export function useListNav(
     return m;
   }, [groups]);
 
+  // After ⌘Z, the cursor goes to the row that came back (if it is in this list).
+  const restored = useRef<string[]>([]);
+  useEffect(() => {
+    const on = (e: Event) => {
+      restored.current = (e as CustomEvent<string[]>).detail;
+      window.setTimeout(() => (restored.current = []), 600); // only for the re-render the undo causes
+    };
+    window.addEventListener("gtd:undo", on);
+    return () => window.removeEventListener("gtd:undo", on);
+  }, []);
+
   // After rows vanish (done, moved, trashed) the cursor lands on the row that took their place.
   useEffect(() => {
+    const back = restored.current.find((id) => items.includes(id));
+    if (back) {
+      restored.current = [];
+      lastIndex.current = items.indexOf(back);
+      if (back !== focus) setFocusState(back);
+      return;
+    }
     if (focus && items.includes(focus)) {
       lastIndex.current = items.indexOf(focus);
       return;
@@ -239,21 +264,68 @@ interface GridProps<T> {
   onOpen?: (key: string) => void;
   empty: ReactNode;
   showHeaders?: boolean;
+  /** Column headings; off for lists whose rows explain themselves (Settings). */
+  head?: boolean;
 }
 
-export function Grid<T>({ listId, columns, groups, getKey, nav, active, rowClass, onOpen, empty, showHeaders }: GridProps<T>) {
+/** DOM id for a row, so the focused grid can point screen readers at it. */
+const rowDomId = (listId: string, key: string) => `r-${listId}-${key}`.replace(/[^A-Za-z0-9_-]/g, "_");
+
+export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, active, rowClass, onOpen, empty, showHeaders, head = true }: GridProps<T>) {
+  const box = useRef<HTMLDivElement>(null);
+  // Shed the least useful columns rather than scroll sideways when space runs out.
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setWidth(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const columns = useMemo(() => {
+    if (!width) return allColumns;
+    let cols = allColumns;
+    const need = (cs: Column<T>[]) => cs.reduce((n, c) => n + minWidth(c.width), 0) + 16;
+    const order = allColumns.filter((c) => c.drop !== undefined).sort((a, b) => a.drop! - b.drop!);
+    for (const c of order) {
+      if (need(cols) <= width) break;
+      cols = cols.filter((x) => x !== c);
+    }
+    return cols;
+  }, [allColumns, width]);
   const template = columns.map((c) => c.width).join(" ");
+  // The grid holds real keyboard focus while its region is active, so screen readers follow the cursor.
+  useEffect(() => {
+    if (!active || !box.current) return;
+    const el = document.activeElement;
+    const busy = el && el !== document.body && (isEditable(el) || el.closest(".picker, .palette, .overlay, .detail"));
+    if (!busy && !box.current.contains(el)) box.current.focus({ preventScroll: true });
+  }, [active, listId]);
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   const multi = showHeaders ?? groups.length > 1;
   return (
-    <div className={`grid ${active ? "is-active" : ""}`} data-list={listId} role="grid" aria-rowcount={total} style={{ ["--cols" as string]: template }}>
-      <div className="grid-head" role="row">
-        {columns.map((c) => (
-          <div key={c.key} role="columnheader" className={`gh gh-${c.key} ${c.align === "end" ? "end" : ""}`}>
-            {c.label}
-          </div>
-        ))}
-      </div>
+    <div
+      ref={box}
+      className={`grid ${active ? "is-active" : ""}`}
+      data-list={listId}
+      role="grid"
+      aria-labelledby="view-title"
+      aria-multiselectable="true"
+      aria-rowcount={total}
+      aria-activedescendant={nav.focus ? rowDomId(listId, nav.focus) : undefined}
+      tabIndex={active ? 0 : -1}
+      style={{ ["--cols" as string]: template }}
+    >
+      {/* No column headings over an empty list: they would label nothing. */}
+      {head && (total > 0 || (multi && groups.some((g) => g.label))) && (
+        <div className="grid-head" role="row">
+          {columns.map((c) => (
+            <div key={c.key} role="columnheader" className={`gh gh-${c.key} ${c.align === "end" ? "end" : ""}`}>
+              {c.label}
+            </div>
+          ))}
+        </div>
+      )}
       {total === 0 && !groups.some((g) => multi && g.label) ? (
         <div className="grid-empty">{empty}</div>
       ) : (
@@ -265,7 +337,9 @@ export function Grid<T>({ listId, columns, groups, getKey, nav, active, rowClass
               {multi && (
                 <div
                   role="row"
+                  id={rowDomId(listId, gk)}
                   aria-expanded={!collapsed}
+                  aria-label={`${g.label || "Group"}, ${g.rows.length} ${g.rows.length === 1 ? "item" : "items"}`}
                   data-key={gk}
                   data-focused={nav.focus === gk || undefined}
                   className={`group-head ${g.folder ? "is-folder" : ""} ${nav.focus === gk ? "is-focus" : ""}`}
@@ -275,7 +349,13 @@ export function Grid<T>({ listId, columns, groups, getKey, nav, active, rowClass
                   }}
                 >
                   <span className={`chev ${collapsed ? "" : "open"}`} aria-hidden />
-                  {g.folder ? <Tape>{g.label}</Tape> : <span className="group-label">{g.label}</span>}
+                  {g.folder ? (
+                    <Tape>{g.label}</Tape>
+                  ) : (
+                    <span className={`group-label ${g.color ? "is-ctx" : ""}`}>
+                      {g.label}
+                    </span>
+                  )}
                   <span className="group-count">{g.rows.length}</span>
                   {g.meta && <span className="group-meta">{g.meta}</span>}
                 </div>
@@ -289,7 +369,8 @@ export function Grid<T>({ listId, columns, groups, getKey, nav, active, rowClass
                     <div
                       key={k}
                       role="row"
-                      aria-selected={ticked || focused}
+                      id={rowDomId(listId, k)}
+                      aria-selected={ticked}
                       data-key={k}
                       data-focused={focused || undefined}
                       className={`row ${focused ? "is-focus" : ""} ${ticked ? "is-ticked" : ""} ${rowClass?.(row) ?? ""}`}

@@ -31,5 +31,5 @@ const P = [
   ] },
 ].filter((p) => p.stuff_id);
 const ins = db.prepare("INSERT OR REPLACE INTO proposals (stuff_id, data, created_at) VALUES (?, ?, ?)");
-for (const p of P) ins.run(p.stuff_id, JSON.stringify(p), new Date().toISOString());
+for (const p of P) ins.run(p.stuff_id, JSON.stringify({ ...p, v: 3 }), new Date().toISOString());
 console.log("proposals", P.length);

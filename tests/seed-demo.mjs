@@ -19,9 +19,9 @@ const action = (title, o = {}) => {
   ops.push({ type: "create", table: "actions", row: { id: id(), title, notes: "", project_id: null, context_id: null, due: null, defer: null, time_min: null, energy: null, flagged: 0, status: "next", waiting_who: null, waiting_since: null, followup: null, recurrence: null, bring_back: null, sort: sort++, created_at: stamp(-10), completed_at: null, ...o } });
 };
 
-project("shred", "Shredder test report delivered to Nordplast", "Work", "Test results and recommendation signed off by Nordplast", { due: day(9) });
+project("shred", "Deliver the shredder test report to Nordplast", "Work", "", { due: day(9) });
 project("cad", "CAD licences renewed for the design team", "Work");
-project("garage", "Garage converted to a workshop", "Home", "Power, lighting and a bench in place");
+project("garage", "Convert the garage into a workshop", "Home");
 project("passport", "Passports renewed before the Lisbon trip", "Home", "", { due: day(21) });
 project("fitness", "Running a 10K in under 55 minutes", "Health");
 project("tax", "2025 tax return filed", "Finance");

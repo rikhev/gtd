@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { getState, isStalled, mutate, newProject, patchMany, plural, stamp, useStore } from "../store.ts";
+import { getState, isStalled, mutate, named, newProject, patchMany, projectHealth, stamp, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
-import { DateCell, Tape } from "../components/bits.tsx";
+import { DateCell, Lamp, Tape } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, createAreaOp } from "../actionCommands.tsx";
@@ -13,8 +13,8 @@ import type { ID, Op, Project } from "../../shared/types.ts";
 type Filter = "active" | "all";
 
 export function projectEditors(ui: ReturnType<typeof useUI>) {
-  const n = (ids: ID[]) => plural(ids.length, "project");
-  return {
+  const n = (ids: ID[]) => named("projects", ids, "project");
+  const api = {
     area(ids: ID[]) {
       if (!ids.length) return;
       const one = ids.length === 1 ? getState().projects.find((p) => p.id === ids[0]) : undefined;
@@ -49,9 +49,36 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         items: [
           { id: "active", label: "Active projects" },
           { id: "someday", label: "Someday / Maybe" },
+          ...getState()
+            .projects.filter((p) => !ids.includes(p.id) && (p.status === "active" || p.status === "someday"))
+            .sort((a, b) => a.title.localeCompare(b.title))
+            .map((p) => ({ id: `merge:${p.id}`, label: `Merge into “${p.title || "Untitled project"}”`, hint: "Merge" })),
         ],
-        onPick: (st) => st && patchMany("projects", ids, { status: st }, `${n(ids)} → ${st === "active" ? "Active" : "Someday / Maybe"}`),
+        onPick: (st) => {
+          if (!st) return;
+          if (st.startsWith("merge:")) api.merge(ids, st.slice(6));
+          else patchMany("projects", ids, { status: st }, `${n(ids)} → ${st === "active" ? "Active" : "Someday / Maybe"}`);
+        },
       });
+    },
+    /** Move actions, reference notes and files into the target, keep the notes, then trash the source. */
+    merge(ids: ID[], targetId: ID) {
+      const s = getState();
+      const target = s.projects.find((p) => p.id === targetId);
+      if (!target) return;
+      const ops: Op[] = [];
+      let notes = target.notes;
+      for (const id of ids) {
+        const src = s.projects.find((p) => p.id === id);
+        if (!src || id === targetId) continue;
+        s.actions.filter((a) => a.project_id === id).forEach((a) => ops.push({ type: "patch", table: "actions", id: a.id, data: { project_id: targetId } }));
+        s.refs.filter((r) => r.project_id === id).forEach((r) => ops.push({ type: "patch", table: "refs", id: r.id, data: { project_id: targetId } }));
+        s.files.filter((f) => f.owner_kind === "project" && f.owner_id === id).forEach((f) => ops.push({ type: "patch", table: "files", id: f.id, data: { owner_id: targetId } }));
+        if (src.notes.trim()) notes = [notes, `From “${src.title}”:\n${src.notes}`].filter((x) => x.trim()).join("\n\n");
+        ops.push({ type: "patch", table: "projects", id, data: { status: "trashed" } });
+      }
+      ops.push({ type: "patch", table: "projects", id: targetId, data: { notes, area_id: target.area_id ?? s.projects.find((p) => ids.includes(p.id))?.area_id ?? null } });
+      mutate(`${n(ids)} merged into “${target.title}”`, ops);
     },
     complete(ids: ID[]) {
       if (!ids.length) return;
@@ -78,6 +105,7 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       mutate(permanent ? `${n(ids)} deleted permanently` : `${n(ids)} and their actions trashed`, ops);
     },
   };
+  return api;
 }
 
 export function ProjectsView({ regionActive }: { regionActive: boolean }) {
@@ -102,8 +130,13 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   }, [s.actions]);
   const firstNext = useMemo(() => {
     const m = new Map<string, string>();
-    [...s.actions].sort((a, b) => a.sort - b.sort).forEach((a) => {
+    const sorted = [...s.actions].sort((a, b) => a.sort - b.sort);
+    sorted.forEach((a) => {
       if (a.project_id && a.status === "next" && !m.has(a.project_id)) m.set(a.project_id, a.title);
+    });
+    // A project that is only waiting shows who it waits on: that explains its amber lamp.
+    sorted.forEach((a) => {
+      if (a.project_id && a.status === "waiting" && !m.has(a.project_id)) m.set(a.project_id, `Waiting · ${a.waiting_who ?? "someone"}`);
     });
     return m;
   }, [s.actions]);
@@ -129,6 +162,8 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   }, [focusId]);
   useEffect(() => {
     if (ui.revealTarget?.kind === "project") {
+      const g = groups.find((x) => x.rows.some((r) => r.id === ui.revealTarget!.id));
+      if (g) nav.toggleGroup(g.key, true);
       nav.setFocus(ui.revealTarget.id);
       ui.clearReveal();
     }
@@ -165,12 +200,13 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "proj.new", label: "New project", group: "Projects", keys: ["n"], run: create },
     { id: "proj.open", label: "Open project", group: "Projects", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "project", id: focusId }, true) },
+    { id: "proj.jump", label: "Jump to its next action", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
     { id: "proj.rename", label: "Rename", group: "Projects", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "proj.done", label: "Complete project", group: "Projects", keys: ["e"], enabled: has, run: () => ed.complete(nav.targets()) },
     { id: "proj.area", label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
     { id: "proj.due", label: "Due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },
     { id: "proj.back", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], enabled: has, run: () => ed.date(nav.targets(), "bring_back") },
-    { id: "proj.move", label: "Move to Someday / Active", group: "Projects", keys: ["v"], enabled: has, run: () => ed.move(nav.targets()) },
+    { id: "proj.move", label: "Move to Someday / Active, or merge into another project", group: "Projects", keys: ["v"], enabled: has, run: () => ed.move(nav.targets()) },
     { id: "proj.trash", label: "Trash project", group: "Projects", keys: ["backspace", "delete"], enabled: has, run: () => ed.trash(nav.targets(), false) },
     { id: "proj.delete", label: "Delete permanently", group: "Projects", keys: ["shift+backspace", "shift+delete"], enabled: has, run: () => ed.trash(nav.targets(), true) },
     { id: "proj.up", label: "Move row up", group: "Projects", keys: ["alt+arrowup"], enabled: Boolean(focusId), run: () => reorder(-1) },
@@ -185,8 +221,8 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           type: "list",
           title: "View",
           items: [
-            { id: "area", label: groupByArea ? "Don't group by area" : "Group by area" },
-            { id: "filter", label: filter === "active" ? "Show someday and completed projects" : "Show active projects only" },
+            { id: "area", label: groupByArea ? "Don't group by area" : "Group by area", section: "group" },
+            { id: "filter", label: filter === "active" ? "Show someday and completed projects" : "Show active projects only", section: "show" },
           ],
           onPick: (id) => {
             if (id === "area") setGroupByArea(!groupByArea);
@@ -202,7 +238,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       key: "mark",
       label: "",
       width: "30px",
-      render: (p) => <span className={`proj-dot ${p.status}`} aria-label={p.status} />,
+      render: (p) => <Lamp health={projectHealth(s, p)} />,
     },
     {
       key: "subject",
@@ -212,6 +248,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         editing === p.id ? (
           <InlineEdit
             value={p.title}
+            placeholder="Name the project"
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !p.title) mutate("Discarded empty project", [{ type: "delete", table: "projects", id: p.id }], { silent: true });
@@ -227,9 +264,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", render: (p: Project) => (p.area_id ? <Tape>{areaById.get(p.area_id)?.name}</Tape> : <span className="dash">–</span>) }]),
-    { key: "next", label: "Next action", width: "minmax(160px, 1fr)", render: (p) => (firstNext.get(p.id) ? <span className="muted-text">{firstNext.get(p.id)}</span> : <span className="dash">–</span>) },
-    { key: "open", label: "Open", width: "52px", align: "end", render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
+    ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", drop: 2, render: (p: Project) => (p.area_id ? <Tape>{areaById.get(p.area_id)?.name}</Tape> : <span className="dash" aria-hidden="true">–</span>) }]),
+    { key: "next", label: "Next action", width: "minmax(160px, 1fr)", drop: 3, render: (p) => (firstNext.get(p.id) ? <span className="muted-text">{firstNext.get(p.id)}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
     { key: "due", label: "Due", width: "84px", render: (p) => <DateCell date={p.due} /> },
   ];
 

@@ -70,8 +70,8 @@ function seed() {
   if (count.n > 0) return;
   const contexts: [string, string][] = [
     ["@computer", "#2f6fb5"],
-    ["@phone", "#c0392b"],
-    ["@errands", "#1f8a4c"],
+    ["@phone", "#5b6b7e"],
+    ["@errands", "#8a5a2b"],
     ["@home", "#b7791f"],
     ["@office", "#6b4fa0"],
     ["@agenda", "#0f8a8a"],
@@ -82,6 +82,21 @@ function seed() {
   ["Work", "Home", "Health", "Finance"].forEach((name, i) => insA.run(randomUUID(), name, i));
 }
 seed();
+
+// The project title is the outcome; any text left in the old separate outcome field moves into the notes once.
+db.exec(`UPDATE projects
+  SET notes = CASE WHEN trim(notes) = '' THEN 'Outcome: ' || outcome ELSE 'Outcome: ' || outcome || char(10) || char(10) || notes END,
+      outcome = ''
+  WHERE trim(outcome) <> ''`);
+
+// Actions back on Next or Someday no longer wait on anyone; clear what earlier versions left behind.
+db.exec(`UPDATE actions SET waiting_who = NULL, waiting_since = NULL, followup = NULL
+  WHERE status IN ('next', 'someday') AND (waiting_who IS NOT NULL OR waiting_since IS NOT NULL OR followup IS NOT NULL)`);
+
+// Red belongs to trouble (overdue, stalled, errors), so contexts no longer use it.
+db.exec(`UPDATE contexts SET color = '#5b6b7e' WHERE lower(color) = '#c0392b'`);
+// Green belongs to the "on track" lamp, so contexts no longer use it either.
+db.exec(`UPDATE contexts SET color = '#8a5a2b' WHERE lower(color) = '#1f8a4c'`);
 
 export function loadState(): State {
   const all = <T,>(t: string) => db.prepare(`SELECT * FROM ${t}`).all() as T[];

@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Check } from "lucide-react";
-import { capture, daysSinceReview, useMeta, useNotice, useStore, isStalled, isDeferred, isChase } from "../store.ts";
+import { capture, daysSinceReview, notify, useNotice, useStore, isStalled, isDeferred, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { allCommandsForPalette, activeCommands, useCommands, keyLabel, type Command } from "../keys.ts";
 import { Kbd, Tape, Tray } from "./bits.tsx";
@@ -16,6 +16,13 @@ export const RAIL: { id: ViewId; key: string }[] = [
   { id: "review", key: "ctrl+shift+7" },
   { id: "done", key: "ctrl+shift+8" },
   { id: "areas", key: "ctrl+shift+9" },
+];
+
+/** GTD's own stages group the drawer: lists you organise into, and what you reflect on. */
+const RAIL_SECTIONS: { title: string; ids: ViewId[] }[] = [
+  { title: "Organize", ids: ["next", "projects", "waiting", "someday", "reference"] },
+  { title: "Reflect", ids: ["review", "done", "areas"] },
+  { title: "Settings", ids: ["settings"] },
 ];
 
 export function Rail({ active }: { active: boolean }) {
@@ -65,42 +72,67 @@ export function Rail({ active }: { active: boolean }) {
     ],
     { priority: 10, active },
   );
+  // Spoken form of a rail entry: "Projects, 7, 1 stalled", "Weekly Review, last done 3 days ago".
+  const railLabel = (id: ViewId) => {
+    const name = VIEW_TITLES[id];
+    if (id === "settings") return name;
+    if (id === "review") return `${name}, ${reviewAge === null ? "not done yet" : reviewAge === 0 ? "done today" : `last done ${reviewAge} days ago`}`;
+    if (id === "done") return counts.done ? `${name}, ${counts.done} today` : name;
+    return `${name}, ${counts[id] ?? 0}${id === "projects" && stalled ? `, ${stalled} stalled` : ""}`;
+  };
+  // While the rail is the active region its cursor is real keyboard focus, so screen readers follow it.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (active) navRef.current?.querySelector<HTMLElement>(`[data-rail="${cursor}"]`)?.focus({ preventScroll: true });
+  }, [active, cursor]);
 
   return (
-    <nav className={`rail ${active ? "is-active" : ""}`} aria-label="Lists">
-      <button type="button" className={`tray ${ui.view === "inbox" ? "is-current" : ""} ${active && cursor === 0 ? "is-cursor" : ""}`} onClick={() => ui.go("inbox")}>
+    <nav ref={navRef} className={`rail ${active ? "is-active" : ""}`} aria-label="Lists">
+      <button type="button" data-rail={0} tabIndex={cursor === 0 ? 0 : -1} aria-current={ui.view === "inbox" ? "page" : undefined} className={`tray ${ui.view === "inbox" ? "is-current" : ""} ${active && cursor === 0 ? "is-cursor" : ""}`} onClick={() => ui.go("inbox")}>
         <span className="tray-label">
-          <Tape tone={ui.view === "inbox" ? "yellow" : "black"} size="md">
-            In-tray
-          </Tape>
+          <Tape size="md">In-tray</Tape>
           <span className="tray-count num" aria-label={`${counts.inbox} in the Inbox`}>
             {counts.inbox}
           </span>
         </span>
         <Tray count={counts.inbox} />
       </button>
-      <ul className="rail-list">
-        {items.slice(1).map((id, i) => (
-          <li key={id} className={id === "settings" ? "rail-sep" : undefined}>
-            <button
-              type="button"
-              className={`rail-item ${ui.view === id ? "is-current" : ""} ${active && cursor === i + 1 ? "is-cursor" : ""}`}
-              aria-current={ui.view === id ? "page" : undefined}
-              onClick={() => ui.go(id)}
-            >
-              {ui.view === id ? <Tape tone="yellow">{VIEW_TITLES[id]}</Tape> : <span className="rail-name">{VIEW_TITLES[id]}</span>}
-              <span className="rail-meta">
-                {id === "projects" && stalled > 0 && <span className="stamp tiny">{stalled} stalled</span>}
-                {id === "review" ? (
-                  <span className={`num ${reviewAge === null || reviewAge > 7 ? "is-due" : ""}`}>{reviewAge === null ? "never" : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
-                ) : id === "settings" ? null : (
-                  <span className="num">{counts[id] || ""}</span>
-                )}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {RAIL_SECTIONS.map((section) => (
+        <section key={section.title} className="rail-section" aria-label={section.title}>
+          {section.title !== "Settings" && <h2 className="rail-heading">{section.title}</h2>}
+          <ul className="rail-list">
+            {section.ids.map((id) => {
+              const i = items.indexOf(id);
+              const current = ui.view === id;
+              return (
+                <li key={id}>
+                  <button
+                    type="button"
+                    className={`rail-item ${current ? "is-current" : ""} ${active && cursor === i ? "is-cursor" : ""}`}
+                    data-rail={i}
+                    tabIndex={cursor === i ? 0 : -1}
+                    aria-current={current ? "page" : undefined}
+                    aria-label={railLabel(id)}
+                    onClick={() => ui.go(id)}
+                  >
+                    <span className="rail-name">{VIEW_TITLES[id]}</span>
+                    <span className="rail-meta">
+                      {id === "projects" && stalled > 0 && <span className="stamp tiny">{stalled} stalled</span>}
+                      {id === "review" ? (
+                        // Red only once a review is actually overdue; "never" on day one is a fact, not a scolding.
+                        <span className={`num ${reviewAge !== null && reviewAge > 7 ? "is-due" : ""}`}>{reviewAge === null ? "not yet" : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
+                      ) : id === "settings" ? null : (
+                        // Done counts today's completions, and says so; the other lists count what is in them.
+                        <span className="num">{id === "done" ? (counts.done ? `${counts.done} today` : "") : counts[id] || ""}</span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
     </nav>
   );
 }
@@ -122,6 +154,8 @@ export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void }
         inInput: true,
         run: () => {
           (document.activeElement as HTMLElement | null)?.blur?.();
+          // An unsent draft stays in the bar; say so, rather than leave it silently behind.
+          if (text.trim()) notify("Draft kept in the capture bar. It isn't in the Inbox until you send it.");
           onDone();
         },
       },
@@ -201,45 +235,61 @@ export const SearchBox = forwardRef<HTMLInputElement, { value: string; onChange:
   );
 });
 
-export function StatusLine() {
+/** Action feedback ("3 actions moved · ⌘Z undo", errors) as a small toast that appears only when something happens. */
+export function Toast() {
   const n = useNotice();
-  const meta = useMeta();
-  const s = useStore((x) => x);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     if (!n) return;
     setVisible(true);
-    const t = window.setTimeout(() => setVisible(false), n.tone === "error" ? 12000 : 6000);
+    const t = window.setTimeout(() => setVisible(false), n.tone === "error" ? 12000 : 5000);
     return () => window.clearTimeout(t);
   }, [n]);
-  const deferred = s.actions.filter((a) => a.status === "next" && isDeferred(a)).length;
-  const flagged = s.actions.filter((a) => a.flagged && a.status === "next").length;
   return (
-    <footer className="status" role="status" aria-live="polite">
-      <span className={`status-msg ${visible ? "is-on" : ""} ${n?.tone === "error" ? "is-error" : ""}`}>
-        {n && (
-          <>
-            {n.text}
-            {n.undo && (
-              <span className="status-undo">
-                <Kbd k="mod+z" /> undo
-              </span>
-            )}
-          </>
-        )}
-      </span>
-      <span className="status-facts">
-        {flagged > 0 && <span>{flagged} flagged for today</span>}
-        {deferred > 0 && <span>{deferred} deferred</span>}
-        <span className={meta.hasKey ? "" : "is-warn"}>{meta.hasKey ? "Claude ready" : "No Claude API key"}</span>
-      </span>
-    </footer>
+    <div className={`toast ${visible && n ? "is-on" : ""} ${n?.tone === "error" ? "is-error" : ""}`} role="status" aria-live="polite">
+      {n && (
+        <>
+          <span className="toast-text">{n.text}</span>
+          {n.undo && (
+            <span className="toast-undo">
+              <Kbd k="mod+z" /> undo
+            </span>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
 /* Command palette and shortcut overlay                                 */
 /* ------------------------------------------------------------------ */
+
+/** Palette order: what you used lately, then this screen's own commands, then going places, then cursor movement. */
+const GENERIC_GROUPS: Record<string, number> = { Details: 2, "Go to": 2, Capture: 2, Help: 2, Edit: 2, Data: 2, Settings: 2, Move: 3, Select: 3 };
+const RECENT_KEY = "palette:recent";
+function recentIds(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as string[];
+  } catch {
+    return [];
+  }
+}
+function rememberCommand(id: string) {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...recentIds().filter((x) => x !== id)].slice(0, 5)));
+  } catch {
+    /* private window: no recents */
+  }
+}
+
+const PALETTE_SECTIONS = ["Recent", "This screen", "Go to and more", "Moving around"] as const;
+/** Which heading a command falls under while browsing the palette. */
+function paletteSection(c: Command): 0 | 1 | 2 | 3 {
+  if (recentIds().includes(c.id)) return 0;
+  const g = GENERIC_GROUPS[c.group];
+  return g === 3 ? 3 : g === 2 ? 2 : 1;
+}
 
 export function Palette({ commands, close }: { commands: Command[]; close: () => void }) {
   const [q, setQ] = useState("");
@@ -250,11 +300,16 @@ export function Palette({ commands, close }: { commands: Command[]; close: () =>
 
   const list = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return commands;
+    const recent = recentIds();
+    const rank = (c: Command) => {
+      const r = recent.indexOf(c.id);
+      return r >= 0 ? r - 10 : (GENERIC_GROUPS[c.group] ?? 1);
+    };
+    if (!needle) return [...commands].sort((a, b) => rank(a) - rank(b));
     const words = needle.split(/\s+/);
     return commands
       .filter((c) => words.every((w) => `${c.label} ${c.group}`.toLowerCase().includes(w)))
-      .sort((a, b) => Number(!a.label.toLowerCase().startsWith(needle)) - Number(!b.label.toLowerCase().startsWith(needle)));
+      .sort((a, b) => Number(!a.label.toLowerCase().startsWith(needle)) - Number(!b.label.toLowerCase().startsWith(needle)) || rank(a) - rank(b));
   }, [q, commands]);
   useEffect(() => setHi(0), [q]);
   useEffect(() => {
@@ -263,18 +318,23 @@ export function Palette({ commands, close }: { commands: Command[]; close: () =>
 
   const run = (c?: Command) => {
     if (!c) return;
+    rememberCommand(c.id);
     close();
     window.setTimeout(() => c.run(), 0);
   };
 
   return (
     <div className="overlay" onMouseDown={close}>
-      <div className="palette" role="dialog" aria-label="Command palette" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(e) => e.stopPropagation()}>
         <input
           ref={input}
           className="palette-input"
           value={q}
           placeholder="Type a command"
+          role="combobox"
+          aria-label="Command"
+          aria-expanded="true"
+          aria-autocomplete="list"
           aria-controls="palette-list"
           aria-activedescendant={`pal-${hi}`}
           onChange={(e) => setQ(e.target.value)}
@@ -292,7 +352,13 @@ export function Palette({ commands, close }: { commands: Command[]; close: () =>
           }}
         />
         <ul className="palette-list" id="palette-list" role="listbox">
-          {list.map((c, i) => (
+          {list.map((c, i) => [
+            // Section headings (only while browsing, not filtering): Recent · This screen · Go to and more · Moving around.
+            !q.trim() && (i === 0 || paletteSection(list[i - 1]) !== paletteSection(c)) && (
+              <li key={`h-${paletteSection(c)}`} className="pal-section" role="presentation">
+                {PALETTE_SECTIONS[paletteSection(c)]}
+              </li>
+            ),
             <li
               key={c.id}
               id={`pal-${i}`}
@@ -308,8 +374,8 @@ export function Palette({ commands, close }: { commands: Command[]; close: () =>
               <span className="pal-label">{c.label}</span>
               <span className="pal-group">{c.group}</span>
               <span className="pal-keys">{(c.keys?.[0] ?? c.displayKeys?.[0]) && <Kbd k={(c.keys?.[0] ?? c.displayKeys?.[0])!} />}</span>
-            </li>
-          ))}
+            </li>,
+          ])}
           {list.length === 0 && <li className="is-hint">No command matches “{q}”.</li>}
         </ul>
       </div>
@@ -319,21 +385,29 @@ export function Palette({ commands, close }: { commands: Command[]; close: () =>
 
 export function HelpOverlay({ close }: { close: () => void }) {
   const [snapshot] = useState(() => activeCommands().filter((c) => (c.keys?.length || c.displayKeys?.length) && !c.hidden));
+  // Take focus so a screen reader reads the dialog, and hand it back on close.
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null;
+    box.current?.focus();
+    return () => back?.focus?.({ preventScroll: true });
+  }, []);
   useCommands("help", [{ id: "help.close", label: "Close", group: "Help", keys: ["escape", "?"], inInput: true, run: close }], { priority: 300, exclusive: true });
   const groups = useMemo(() => {
     const m = new Map<string, Command[]>();
-    const seen = new Set<string>();
+    // A key does one thing at a time: list only the command it would run now (the first claimant).
+    const claimed = new Set<string>();
     for (const c of snapshot) {
-      const sig = `${c.label}|${c.keys?.join()}`;
-      if (seen.has(sig)) continue;
-      seen.add(sig);
+      const keys = c.keys?.length ? c.keys : (c.displayKeys ?? []);
+      if (keys.length && keys.every((k) => claimed.has(k))) continue;
+      keys.forEach((k) => claimed.add(k));
       m.set(c.group, [...(m.get(c.group) ?? []), c]);
     }
     return [...m.entries()];
   }, [snapshot]);
   return (
     <div className="overlay" onMouseDown={close}>
-      <div className="help" role="dialog" aria-label="Keyboard shortcuts on this screen" onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={box} className="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts on this screen" tabIndex={-1} onMouseDown={(e) => e.stopPropagation()}>
         <div className="help-head">
           <Tape size="md">Keys on this screen</Tape>
           <span className="muted-text small">

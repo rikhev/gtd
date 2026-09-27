@@ -182,8 +182,18 @@ async function send(ops: Op[]) {
 }
 
 /** Apply ops optimistically, persist, and record an undo entry. */
-export function mutate(label: string, ops: Op[], opts: { silent?: boolean } = {}) {
-  if (!ops.length) return;
+/** An action that leaves Waiting For for Next or Someday stops waiting on anyone. */
+function dropStaleWaiting(ops: Op[]): Op[] {
+  return ops.map((op) =>
+    op.type === "patch" && op.table === "actions" && (op.data.status === "next" || op.data.status === "someday")
+      ? { ...op, data: { waiting_who: null, waiting_since: null, followup: null, ...op.data } }
+      : op,
+  );
+}
+
+export function mutate(label: string, rawOps: Op[], opts: { silent?: boolean } = {}) {
+  if (!rawOps.length) return;
+  const ops = dropStaleWaiting(rawOps);
   const inverse = invert(ops);
   applyLocal(ops);
   void send(ops);
@@ -201,6 +211,9 @@ export function undo() {
   applyLocal(entry.inverse);
   void send(entry.inverse);
   notify(`Undid: ${entry.label}`);
+  // Lists put their cursor back on the row that was just restored.
+  const ids = entry.inverse.map((op) => (op.type === "create" ? (op.row.id as string) : op.id));
+  window.dispatchEvent(new CustomEvent("gtd:undo", { detail: ids }));
 }
 
 /* ---------------- helpers ---------------- */
@@ -258,6 +271,15 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 export { plural };
 
 /** Mark actions done; recurring ones spawn their next occurrence. */
+/** A toast's subject: the item itself when there is one ("“Pay the VAT”"), else a count ("3 actions"). */
+export function named(table: "actions" | "projects" | "stuff" | "refs", ids: ID[], noun: string): string {
+  if (ids.length !== 1) return plural(ids.length, noun);
+  const row = (state[table] as unknown as { id: ID; title?: string; text?: string }[]).find((r) => r.id === ids[0]);
+  const raw = (row?.title ?? row?.text ?? "").split("\n")[0].trim();
+  if (!raw) return plural(1, noun);
+  return `“${raw.length > 42 ? `${raw.slice(0, 40).trimEnd()}…` : raw}”`;
+}
+
 export function completeActions(ids: ID[]) {
   const ops: Op[] = [];
   let spawned = 0;
@@ -285,8 +307,7 @@ export function completeActions(ids: ID[]) {
     }
   }
   if (!ops.length) return;
-  const done = ids.length;
-  mutate(`${plural(done, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}`, ops);
+  mutate(`${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}`, ops);
 }
 
 export function patchMany(table: TableName, ids: ID[], data: Record<string, unknown>, label: string) {
@@ -301,6 +322,18 @@ export function patchMany(table: TableName, ids: ID[], data: Record<string, unkn
 export function isStalled(s: State, p: Project): boolean {
   if (p.status !== "active") return false;
   return !s.actions.some((a) => a.project_id === p.id && (a.status === "next" || a.status === "waiting"));
+}
+
+export type ProjectHealth = "ok" | "waiting" | "stalled" | "someday" | "done";
+
+/** Traffic light: green has a next action, amber only waits on others, red has nothing moving. */
+export function projectHealth(s: State, p: Project): ProjectHealth {
+  if (p.status === "someday") return "someday";
+  if (p.status === "done" || p.status === "trashed") return "done";
+  const open = s.actions.filter((a) => a.project_id === p.id);
+  if (open.some((a) => a.status === "next")) return "ok";
+  if (open.some((a) => a.status === "waiting")) return "waiting";
+  return "stalled";
 }
 
 export function lastReview(s: State): string | null {

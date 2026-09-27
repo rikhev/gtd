@@ -15,7 +15,7 @@ npm run dev                 # http://localhost:5173
 
 ## Run it on a server
 
-See [DEPLOY.md](DEPLOY.md). It sets up HTTPS, the password + authenticator login, a systemd service, nightly backups, and one-command updates with `./deploy/push.sh`.
+See [DEPLOY.md](DEPLOY.md). It sets up HTTPS, the password + authenticator login, a systemd service, nightly backups, and git-based updates: commit, then `./deploy/deploy.sh`.
 
 ## Keys
 
@@ -30,6 +30,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `Space` `⇧↑↓` `⌘A` | Tick a row / extend the range / select all |
 | `←` `→` | Collapse or expand a group |
 | `Enter` `F2` `N` | Open details / rename / new row |
+| `J` | Jump from an action to its project, and from the project back to that action |
 | `E` | Mark done. Recurring actions schedule their next occurrence |
 | `V` `C` `P` `A` | Move to a project or list / context / project / area |
 | `D` `S` `B` `R` | Due date / start date / bring back (tickler) / repeat |
@@ -50,7 +51,8 @@ These keys work inside Clarify:
 | `⌘↵` | Accept Claude's proposal |
 | `↑` `↓` | Move between proposed actions (the cursor starts on the first one) |
 | `F2` or `Enter` | Edit the action text. `Tab` moves through the fields |
-| `Esc` | Field → row, then leave Clarify (the rest stay in the Inbox) |
+| `Esc` | Field → row, then leave Clarify. Leaving stops Claude; proposals already made are kept for next time |
+| `⇧Esc` | Stop Claude but keep reviewing the proposals that are ready (also the "Stop" link while Claude is reading) |
 | `C` `P` `D` `S` `T` `G` `V` `⇧F` | Correct a field |
 | `N` / `⌥⌫` | Add / remove an action |
 | `E` | Done now (two-minute rule) |

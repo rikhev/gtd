@@ -4,7 +4,7 @@ import { getState, mutate, newAction, patchMany, plural, stamp, uid, upload, use
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
-import { DateCell, Marker, Tape } from "../components/bits.tsx";
+import { DateCell, Lamp, Marker, Tape } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { editors, projectItems } from "../actionCommands.tsx";
@@ -95,6 +95,14 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
         setEditing(`a:${a.id}`);
       },
     },
+    {
+      id: "some.jump",
+      label: focusRow?.kind === "project" ? "Jump to its next action" : "Jump to its project",
+      group: "Someday",
+      keys: ["j"],
+      enabled: Boolean(focusRow),
+      run: () => focusRow && (focusRow.kind === "project" ? ui.jumpToAction(focusRow.id) : ui.jumpToProject(focusRow.id)),
+    },
     { id: "some.open", label: "Open details", group: "Someday", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     { id: "some.rename", label: "Rename", group: "Someday", keys: ["f2"], enabled: Boolean(focusRow), run: () => focusRow && setEditing(focusRow.key) },
     { id: "some.activate", label: "Activate (make it current)", group: "Someday", keys: ["e"], enabled: has, run: activate },
@@ -120,7 +128,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
   useCommands("list:someday", commands, { priority: 10, active: regionActive });
 
   const columns: Column<SomedayRow>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <span className="proj-dot someday" /> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health="someday" /> : <Marker flagged={false} />) },
     {
       key: "subject",
       label: "Someday / Maybe",
@@ -129,6 +137,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
         editing === r.key ? (
           <InlineEdit
             value={r.title}
+            placeholder={r.kind === "project" ? "Name the project" : "Describe something you might do"}
             onDone={(v) => {
               setEditing(null);
               const table = r.kind === "project" ? "projects" : "actions";
@@ -142,7 +151,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "proj", label: "Project", width: "minmax(120px, 200px)", render: (r) => (r.project ? <span className="proj-cell">{r.project}</span> : <span className="dash">–</span>) },
+    { key: "proj", label: "Project", width: "minmax(120px, 200px)", render: (r) => (r.project ? <span className="proj-cell">{r.project}</span> : <span className="dash" aria-hidden="true">–</span>) },
     { key: "back", label: "Bring back", width: "100px", render: (r) => <DateCell date={r.bring_back} kind="plain" /> },
   ];
 
@@ -245,6 +254,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
         editing === r.id ? (
           <InlineEdit
             value={r.title}
+            placeholder="Title the reference"
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !r.title) mutate("Discarded", [{ type: "delete", table: "refs", id: r.id }], { silent: true });
@@ -258,7 +268,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "proj", label: "Project", width: "minmax(120px, 200px)", render: (r) => <span className="proj-cell">{s.projects.find((p) => p.id === r.project_id)?.title ?? <span className="dash">–</span>}</span> },
+    { key: "proj", label: "Project", width: "minmax(120px, 200px)", render: (r) => <span className="proj-cell">{s.projects.find((p) => p.id === r.project_id)?.title ?? <span className="dash" aria-hidden="true">–</span>}</span> },
     {
       key: "files",
       label: "Files",
@@ -269,7 +279,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
             <Paperclip size={12} strokeWidth={2} aria-hidden /> {filesBy.get(r.id)}
           </span>
         ) : (
-          <span className="dash">–</span>
+          <span className="dash" aria-hidden="true">–</span>
         ),
     },
     { key: "when", label: "Filed", width: "96px", render: (r) => <span className="date">{formatDate(r.created_at.slice(0, 10))}</span> },
@@ -381,6 +391,7 @@ export function AreasView({ regionActive }: { regionActive: boolean }) {
         editing === a.id ? (
           <InlineEdit
             value={a.name}
+            placeholder="Name the area"
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !a.name) mutate("Discarded", [{ type: "delete", table: "areas", id: a.id }], { silent: true });
@@ -398,7 +409,7 @@ export function AreasView({ regionActive }: { regionActive: boolean }) {
       label: "Stalled",
       width: "90px",
       align: "end",
-      render: (a) => (stats.get(a.id)?.stalled ? <span className="stamp">{stats.get(a.id)?.stalled}</span> : <span className="dash">–</span>),
+      render: (a) => (stats.get(a.id)?.stalled ? <span className="stamp">{stats.get(a.id)?.stalled}</span> : <span className="dash" aria-hidden="true">–</span>),
     },
   ];
 

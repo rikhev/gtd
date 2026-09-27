@@ -7,6 +7,7 @@ import { ContextCode, Tape } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { CONTEXT_COLORS } from "../actionCommands.tsx";
+import { suggestRules } from "../rules.ts";
 import { promptApiKey, removeApiKey } from "../apiKey.ts";
 import type { ID } from "../../shared/types.ts";
 
@@ -39,7 +40,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
       .filter((a) => a.status !== "trashed" && match(a.title, a.notes, a.waiting_who))
       .map((a) => ({ key: `a:${a.id}`, kind: "action" as const, id: a.id, title: a.title, where: where[a.status], home: home[a.status] as ViewId }));
     const projects = s.projects
-      .filter((p) => p.status !== "trashed" && match(p.title, p.outcome, p.notes))
+      .filter((p) => p.status !== "trashed" && match(p.title, p.notes))
       .map((p) => ({ key: `p:${p.id}`, kind: "project" as const, id: p.id, title: p.title, where: p.status === "someday" ? "Someday / Maybe" : "Projects", home: (p.status === "someday" ? "someday" : "projects") as ViewId }));
     const stuff = s.stuff
       .filter((x) => x.status === "inbox" && match(x.text))
@@ -114,13 +115,19 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       },
       {
         key: "suggested",
-        label: "Suggested rules (from your corrections)",
+        label: "Suggested rules",
         rows: s.rules.filter((r) => r.status === "suggested").map((r) => ({ key: `r:${r.id}`, kind: "rule" as const, id: r.id, text: r.text, status: r.status })),
+        meta: s.rules.some((r) => r.status === "suggested")
+          ? undefined
+          : meta.hasKey
+            ? "Ask Claude (⌘K › Suggest rules) once you have corrected the same kind of proposal a few times"
+            : "Rules come from correcting Claude's proposals, so they need an API key first",
       },
       {
         key: "rules",
-        label: "Rules Claude follows when clarifying",
+        label: "Claude's rules",
         rows: s.rules.filter((r) => r.status === "active").map((r) => ({ key: `r:${r.id}`, kind: "rule" as const, id: r.id, text: r.text, status: r.status })),
+        meta: s.rules.some((r) => r.status === "active") ? undefined : "None yet. Approve a suggested rule, or add your own",
       },
       {
         key: "contexts",
@@ -162,6 +169,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       run: () => cur && mutate("Rule approved: Claude will follow it", [{ type: "patch", table: "rules", id: cur.id, data: { status: "active" } }]),
     },
     { id: "set.edit", label: "Edit", group: "Settings", keys: ["f2"], enabled: Boolean(cur) && cur?.kind !== "apikey", run: () => cur && setEditing(cur.key) },
+    { id: "set.suggest", label: "Ask Claude to suggest rules from your corrections", group: "Settings", keys: ["shift+k"], enabled: meta.hasKey, run: () => void suggestRules() },
     {
       id: "set.new",
       label: groupOfFocus === "contexts" ? "New context" : "New rule",
@@ -207,7 +215,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ui.openPicker({
           type: "list",
           title: "Colour",
-          items: CONTEXT_COLORS.map((c, i) => ({ id: c, label: ["Blue", "Red", "Green", "Ochre", "Violet", "Teal", "Plum", "Olive"][i], color: c })),
+          items: CONTEXT_COLORS.map((c, i) => ({ id: c, label: ["Blue", "Slate", "Sienna", "Ochre", "Violet", "Teal", "Plum", "Olive"][i], color: c })),
           current: cur.color,
           onPick: (c) => c && mutate("Colour changed", [{ type: "patch", table: "contexts", id: cur.id, data: { color: c } }]),
         }),
@@ -218,12 +226,13 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const columns: Column<SRow>[] = [
     {
       key: "subject",
-      label: "Setting",
+      label: "Name",
       width: "minmax(260px, 1fr)",
       render: (r) =>
         editing === r.key ? (
           <InlineEdit
             value={r.text}
+            placeholder={r.kind === "context" ? "Name the context" : "Describe the rule"}
             onDone={(v) => {
               setEditing(null);
               const table = r.kind === "rule" ? "rules" : "contexts";
@@ -237,7 +246,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ) : r.kind === "apikey" ? (
           <span className="subject">
             <span className="subject-text strong">API key</span>
-            <span className="subject-more">{meta.hasKey ? `Stored in .env on this Mac. Clarify and Review use Claude Sonnet 5.` : "Needed for Clarify and the Weekly Review."}</span>
+            <span className="subject-more">{meta.hasKey ? `Stored in the server's .env; the browser only sees the last four characters. Clarify and Claude's review flags use Claude Sonnet 5.` : "Needed for Clarify and Claude's review flags. The Weekly Review works without it."}</span>
           </span>
         ) : r.kind === "context" ? (
           <ContextCode ctx={{ id: r.id, name: r.text, color: r.color!, sort: 0 }} />
@@ -269,14 +278,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
 
   return (
     <div className="settings">
-      <div className="settings-facts">
-        <div>
-          <Tape>Export</Tape>
-          <p>
-            <a href="/api/export/zip">Markdown files (.zip)</a> · <a href="/api/export/json">JSON</a>. Both are also in the command palette.
-          </p>
-        </div>
-      </div>
       <Grid
         listId="settings"
         columns={columns}
@@ -285,8 +286,18 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         nav={nav}
         active={regionActive}
         showHeaders
+        head={false}
         empty={null}
       />
+      {/* Export last: the things you set come first, taking your data out comes after. */}
+      <div className="settings-facts">
+        <div>
+          <Tape>Export</Tape>
+          <p>
+            <a href="/api/export/zip">Markdown files (.zip)</a> · <a href="/api/export/json">JSON</a>. Both are also in the command palette.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { applyOps, db, FILES_DIR, insertRow, loadState, now, patchRow } from "./db.ts";
 import { extract, guessMime, looksLikeEmail } from "./extract.ts";
-import { analyzeReview, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
+import { analyzeReview, cancelClarify, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
 import { exportJson, exportZip } from "./export.ts";
 import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
 import { today } from "../shared/dates.ts";
@@ -44,7 +44,7 @@ function runTickler() {
   for (const p of s.projects) {
     if (p.bring_back && p.bring_back <= t && ["active", "someday"].includes(p.status)) {
       // Projects come back as a reminder; their actions stay put.
-      back(`Revisit project: ${p.title}`, p.outcome, "none", p.id);
+      back(`Revisit project: ${p.title}`, p.notes, "none", p.id);
       ops.push({ type: "patch", table: "projects", id: p.id, data: { bring_back: null } });
     }
   }
@@ -158,6 +158,11 @@ app.post("/api/clarify", async (c) => {
   const { fresh } = (await c.req.json().catch(() => ({}))) as { fresh?: boolean };
   const job = startClarify(Boolean(fresh));
   return c.json(jobStatus(job.id));
+});
+
+app.delete("/api/clarify/:id", (c) => {
+  const s = cancelClarify(c.req.param("id"));
+  return s ? c.json(s) : c.json({ error: "gone" }, 404);
 });
 
 app.get("/api/clarify/:id", (c) => {

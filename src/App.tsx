@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
-import { Rail, RAIL, CaptureBar, SearchBox, StatusLine, Palette, HelpOverlay } from "./components/Chrome.tsx";
+import { Rail, RAIL, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { ActionsView } from "./views/ActionsView.tsx";
@@ -37,13 +37,15 @@ export default function App() {
   const [region, setRegion] = useState<Region>("list");
   const [detail, setDetail] = useState<Target | null>(null);
   const [picker, setPicker] = useState<PickerSpec | null>(null);
+  const [pickerSeq, setPickerSeq] = useState(0);
   const [palette, setPalette] = useState<Command[] | null>(null);
   const [help, setHelp] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [revealTarget, setRevealTarget] = useState<Target | null>(null);
   const [clarifyRun, setClarifyRun] = useState(0);
-  const [reviewRun, setReviewRun] = useState(0);
+  const clarifyReturn = useRef<ViewId>("inbox");
   const prevView = useRef<ViewId>("next");
+  const jumpOrigin = useRef<{ actionId: string; projectId: string } | null>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -83,6 +85,8 @@ export default function App() {
     setRegion("list");
     setDetail(null);
     (document.activeElement as HTMLElement | null)?.blur?.();
+    // Land on the new view's list, so the keyboard and screen readers start where the cursor is.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
   }, []);
 
   const ui: UI = useMemo(
@@ -100,7 +104,11 @@ export default function App() {
         if (!t) setRegion("list");
         else if (focus) setRegion("detail");
       },
-      openPicker: (p) => setPicker(p),
+      openPicker: (p) => {
+        // A new picker always starts empty, even when it follows straight on from another one.
+        setPickerSeq((n) => n + 1);
+        setPicker(p);
+      },
       pickerOpen: Boolean(picker),
       focusCapture: () => captureRef.current?.focus(),
       openPalette: () => setPalette(allCommandsForPalette()),
@@ -113,17 +121,48 @@ export default function App() {
       },
       searchQuery,
       setSearchQuery,
-      startClarify: () => {
+      startClarify: (returnTo?: ViewId) => {
+        clarifyReturn.current = returnTo ?? "inbox";
         setClarifyRun((n) => n + 1);
         go("clarify");
       },
-      startReview: () => {
-        setReviewRun((n) => n + 1);
-        go("review");
-      },
+      leaveClarify: () => go(clarifyReturn.current),
+      clarifyReturn: () => clarifyReturn.current,
+      // Resumes the review in progress (see reviewSession.ts); a new one starts after Finish.
+      startReview: () => go("review"),
       reveal: (t) => {
         const home = homeOf(t);
         go(home);
+        setRevealTarget(t);
+      },
+      jumpToProject: (actionId) => {
+        const s = getState();
+        const a = s.actions.find((x) => x.id === actionId);
+        const p = a?.project_id ? s.projects.find((x) => x.id === a.project_id && x.status !== "trashed") : undefined;
+        if (!a || !p) {
+          notify("This action isn't part of a project. P assigns one.");
+          return;
+        }
+        jumpOrigin.current = { actionId, projectId: p.id };
+        go(p.status === "someday" ? "someday" : "projects");
+        setRevealTarget({ kind: "project", id: p.id });
+        notify(`Project: ${p.title}`);
+      },
+      jumpToAction: (projectId) => {
+        const s = getState();
+        const open = (id: string) => s.actions.some((x) => x.id === id && ["next", "waiting", "someday"].includes(x.status));
+        const origin = jumpOrigin.current;
+        let target = origin && origin.projectId === projectId && open(origin.actionId) ? origin.actionId : undefined;
+        if (!target) {
+          const acts = s.actions.filter((x) => x.project_id === projectId).sort((a, b) => a.sort - b.sort);
+          target = (acts.find((x) => x.status === "next") ?? acts.find((x) => x.status === "waiting") ?? acts.find((x) => x.status === "someday"))?.id;
+        }
+        if (!target) {
+          notify("This project has no next action yet. Enter opens it so you can add one.");
+          return;
+        }
+        const t = { kind: "action" as const, id: target };
+        go(homeOf(t));
         setRevealTarget(t);
       },
       revealTarget,
@@ -161,7 +200,7 @@ export default function App() {
     { id: "g.region", label: "Next region (lists → items → details)", group: "Move", keys: ["alt+tab", "ctrl+f6"], inInput: true, run: () => cycleRegion(1) },
     { id: "g.regionback", label: "Previous region", group: "Move", keys: ["alt+shift+tab", "ctrl+shift+f6"], inInput: true, run: () => cycleRegion(-1) },
     { id: "g.detailtoggle", label: detail ? "Close details" : "Open details", group: "Move", run: () => (detail ? ui.openDetail(null) : undefined) },
-    { id: "g.paste", label: "Paste text, an email or a file into the Inbox", group: "Capture", displayKeys: ["mod+v"], run: () => notify("Press ⌘V with a list focused to paste into the Inbox") },
+    { id: "g.paste", label: "Paste into the Inbox", group: "Capture", displayKeys: ["mod+v"], run: () => notify("Press ⌘V with a list focused to paste into the Inbox") },
     { id: "g.upload", label: "Upload files to the Inbox", group: "Capture", keys: ["mod+o"], run: () => document.querySelector<HTMLInputElement>("#global-upload")?.click() },
     { id: "g.exportzip", label: "Export everything as Markdown (.zip)", group: "Data", run: () => (window.location.href = "/api/export/zip") },
     { id: "g.exportjson", label: "Export everything as JSON", group: "Data", run: () => (window.location.href = "/api/export/json") },
@@ -210,11 +249,19 @@ export default function App() {
 
   const listActive = region === "list" && !picker && !palette && !help;
   const t = today();
+  const deferredNext = s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length;
   const counts: Partial<Record<ViewId, string>> = {
     inbox: plural(inboxCount, "item"),
-    next: plural(s.actions.filter((a) => (a.status === "next" && !isDeferred(a, t)) || isChase(a, t)).length, "action"),
+    // Deferred actions stay out of the count; the suffix says how many wait for their start date (⌥V shows them).
+    next: [
+      plural(s.actions.filter((a) => (a.status === "next" && !isDeferred(a, t)) || isChase(a, t)).length, "action"),
+      ...(deferredNext ? [`${deferredNext} deferred`] : []),
+    ].join(" · "),
     projects: plural(s.projects.filter((p) => p.status === "active").length, "active project"),
     waiting: plural(s.actions.filter((a) => a.status === "waiting").length, "item"),
+    someday: plural(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
+    reference: plural(s.refs.filter((r) => r.status === "active").length, "reference"),
+    done: plural(s.actions.filter((a) => a.status === "done").length, "action"),
   };
 
   let body;
@@ -247,7 +294,7 @@ export default function App() {
       body = <ClarifyView key={clarifyRun} regionActive={listActive} />;
       break;
     case "review":
-      body = <ReviewView key={reviewRun} regionActive={listActive} />;
+      body = <ReviewView regionActive={listActive} />;
       break;
     case "search":
       body = <SearchView regionActive={listActive} query={searchQuery} />;
@@ -289,7 +336,7 @@ export default function App() {
             />
           </header>
           <div className="viewhead">
-            <h1 className="viewtitle">{VIEW_TITLES[view]}</h1>
+            <h1 className="viewtitle" id="view-title">{VIEW_TITLES[view]}</h1>
             {counts[view] && <span className="viewcount">{counts[view]}</span>}
           </div>
           <div className="work">
@@ -299,8 +346,8 @@ export default function App() {
             {detail && <Detail target={detail} active={region === "detail" && !picker && !palette && !help} />}
           </div>
         </div>
-        <StatusLine />
-        {picker && <Picker spec={picker} close={() => setPicker(null)} />}
+        <Toast />
+        {picker && <Picker key={pickerSeq} spec={picker} close={() => setPicker(null)} />}
         {palette && <Palette commands={palette} close={() => setPalette(null)} />}
         {help && <HelpOverlay close={() => setHelp(false)} />}
         <input

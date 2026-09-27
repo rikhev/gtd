@@ -9,6 +9,8 @@ import { today } from "../shared/dates.ts";
 import type { FileRow, Proposal, ReviewFlag, State, Stuff } from "../shared/types.ts";
 
 const MODEL = "claude-sonnet-5";
+/** Bump when the clarify instructions change, so older cached proposals are regenerated. */
+const PROMPT_VERSION = 5;
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -18,20 +20,20 @@ function getClient(): Anthropic {
 
 export function describeError(e: unknown): { code: string; message: string } {
   if (e instanceof Anthropic.AuthenticationError) {
-    return { code: "auth", message: "Claude rejected the API key. Enter a working key in Settings." };
+    return { code: "auth", message: "Claude rejected the API key." };
   }
   if (e instanceof Anthropic.RateLimitError) {
-    return { code: "rate", message: "Claude is rate-limiting requests. Wait a minute, then press K again." };
+    return { code: "rate", message: "Claude is rate-limiting requests. Wait a minute and try again." };
   }
   if (e instanceof Anthropic.APIConnectionError) {
-    return { code: "network", message: "Couldn't reach the Claude API. Check the network connection, then press K again." };
+    return { code: "network", message: "Couldn't reach the Claude API. Check the network connection." };
   }
   if (e instanceof Anthropic.APIError) {
     return { code: `api_${e.status}`, message: `Claude API error ${e.status}: ${e.message}` };
   }
   const msg = (e as Error)?.message ?? String(e);
   if (/api.?key|credential|auth/i.test(msg)) {
-    return { code: "auth", message: "No Claude API key yet. Add one in Settings, then ask Claude again." };
+    return { code: "auth", message: "No Claude API key yet." };
   }
   return { code: "unknown", message: msg };
 }
@@ -97,7 +99,11 @@ export function clearApiKey() {
 /* ------------------------------------------------------------------ */
 
 const ProposedActionSchema = z.object({
-  title: z.string().describe("Concrete, physical, verb-first next action, e.g. 'Call Anna about the Q3 figures'"),
+  title: z
+    .string()
+    .describe(
+      "In English. ONE concrete, physical, verb-first step that can be done in one sitting, e.g. 'Call Anna about the Q3 figures'. Never a bundle: no lists, no 'and', no parentheses enumerating sub-tasks. Under 80 characters.",
+    ),
   kind: z.enum(["next", "waiting", "someday"]),
   project: z
     .string()
@@ -118,7 +124,7 @@ const ProposalSchema = z.object({
   new_project: z
     .object({ title: z.string(), area: z.string().nullable() })
     .nullable()
-    .describe("A new multi-step outcome, phrased as a finished result. Null if no new project is needed."),
+    .describe("A new multi-step project. Its title is verb-first like a next action, e.g. 'Update the user guide for the new software' (never 'Updated user guide…'). Null if no new project is needed."),
   actions: z.array(ProposedActionSchema),
   reference: z.object({ title: z.string(), notes: z.string() }).nullable(),
 });
@@ -144,10 +150,15 @@ Today is ${d.toLocaleDateString("en-GB", { weekday: "long" })} ${today()}.
 For each item ask: is it actionable?
 - Not actionable: "trash" (no value), "reference" (worth keeping; give a clear title and short notes), or "someday" (maybe later; put a someday action in "actions" with kind "someday").
 - Actionable: define the very next physical, visible action. Write every action title verb-first and concrete ("Email Per the shredder test results", never "shredder test"). Rewrite vague captures into a proper next action.
-- If the outcome needs more than one action, it is a project. Attach it to an existing project (use its id) when one fits; otherwise create "new_project" with a title phrased as the finished result, and set the actions' project to "new". Only propose the next one or two actions of a project, not a full plan.
+- ONE STEP PER ACTION. A next action is a single physical step, never a bundle. If a title would need "and", a list, a range of items or parentheses enumerating parts ("Update pages 26–55 (manual mode image, map limits, photos…)"), it is not one action: it is a project, and each part becomes its own action.
+- If the outcome needs more than one action, it is a project. Attach it to an existing project (use its id) when one fits; otherwise create "new_project" and set the actions' project to "new". Name projects in the same verb-first format as next actions, starting with an imperative verb: "Update the user guide for the new software", "Renew passports before the Lisbon trip", "Plan the Q4 team offsite". Never phrase a project title as a finished state ("Updated user guide…", "Passports renewed…"). The title is the project's whole definition of done, so make it specific enough to know when it is finished.
+  - Independent pieces of work the source lists explicitly (separate corrections, separate pages, separate questions to answer) each get their own action, up to about 15.
+  - For sequential work where later steps depend on earlier ones, propose only the first step or two, not the whole plan.
 - Delegated or waiting on someone: an action with kind "waiting" and waiting_who set.
 - Set two_minute true when the action would take under two minutes.
+- When several inbox items belong to the same new project, give each of them a new_project with exactly the same title (identical wording), so they end up in one project. Prefer an existing project over a new one whenever it fits.
 - Documents and emails can contain several separate commitments. Split them into several actions (and at most one new project) within that item's proposal.
+- LANGUAGE: write everything you produce in English (action titles, project titles, reference titles and notes, waiting-for names stay as names), even when the captured stuff is in Swedish or another language. Translate faithfully; keep proper nouns, product names and short quoted phrases as they are.
 - Choose contexts from the existing list where possible: ${contexts || "(none yet)"}. A new context must start with "@".
 - Areas of focus: ${areas || "(none)"}.
 - Only set due dates that are stated or clearly implied. Leave fields null when unknown; do not invent detail.
@@ -198,7 +209,7 @@ function itemContent(item: Stuff, files: FileRow[]): Anthropic.ContentBlockParam
   return blocks;
 }
 
-async function clarifyChunk(state: State, items: Stuff[]): Promise<Proposal[]> {
+async function clarifyChunk(state: State, items: Stuff[], signal?: AbortSignal): Promise<Proposal[]> {
   const content: Anthropic.ContentBlockParam[] = [];
   for (const it of items) {
     content.push(...itemContent(it, state.files.filter((f) => f.owner_kind === "stuff" && f.owner_id === it.id)));
@@ -212,7 +223,7 @@ async function clarifyChunk(state: State, items: Stuff[]): Promise<Proposal[]> {
     output_config: { effort: "medium", format: zodOutputFormat(ClarifyOutput) },
     system: clarifySystem(state),
     messages: [{ role: "user", content }],
-  });
+  }, { signal });
   if (response.stop_reason === "refusal") throw new Error("Claude declined to clarify these items.");
   if (response.stop_reason === "max_tokens") throw new Error("Claude's answer was cut off; try clarifying fewer items.");
   const parsed = response.parsed_output;
@@ -233,6 +244,8 @@ interface Job {
   pending: number;
   error: { code: string; message: string } | null;
   done: boolean;
+  cancelled: boolean;
+  abort: AbortController;
 }
 
 const jobs = new Map<string, Job>();
@@ -240,15 +253,23 @@ const jobs = new Map<string, Job>();
 export function startClarify(fresh: boolean): Job {
   const state = loadState();
   const inbox = state.stuff.filter((s) => s.status === "inbox").sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const job: Job = { id: randomUUID(), order: inbox.map((s) => s.id), proposals: {}, pending: 0, error: null, done: false };
+  const job: Job = {
+    id: randomUUID(),
+    order: inbox.map((s) => s.id),
+    proposals: {},
+    pending: 0,
+    error: null,
+    done: false,
+    cancelled: false,
+    abort: new AbortController(),
+  };
   jobs.set(job.id, job);
 
-  const cached = new Map(
-    (db.prepare("SELECT stuff_id, data FROM proposals").all() as { stuff_id: string; data: string }[]).map((r) => [
-      r.stuff_id,
-      JSON.parse(r.data) as Proposal,
-    ]),
-  );
+  const cached = new Map<string, Proposal>();
+  for (const r of db.prepare("SELECT stuff_id, data FROM proposals").all() as { stuff_id: string; data: string }[]) {
+    const p = JSON.parse(r.data) as Proposal & { v?: number };
+    if (p.v === PROMPT_VERSION) cached.set(r.stuff_id, p);
+  }
   const todo: Stuff[] = [];
   for (const s of inbox) {
     const c = !fresh && cached.get(s.id);
@@ -266,20 +287,21 @@ export function startClarify(fresh: boolean): Job {
   const save = db.prepare("INSERT OR REPLACE INTO proposals (stuff_id, data, created_at) VALUES (?, ?, ?)");
   let cursor = 0;
   const worker = async () => {
-    while (cursor < chunks.length && !job.error) {
+    while (cursor < chunks.length && !job.error && !job.cancelled) {
       const chunk = chunks[cursor++];
       try {
-        const proposals = await clarifyChunk(state, chunk);
+        const proposals = await clarifyChunk(state, chunk, job.abort.signal);
         for (const p of proposals) {
           if (!chunk.some((c) => c.id === p.stuff_id)) continue;
           job.proposals[p.stuff_id] = p;
-          save.run(p.stuff_id, JSON.stringify(p), now());
+          save.run(p.stuff_id, JSON.stringify({ ...p, v: PROMPT_VERSION }), now());
         }
         // Anything Claude skipped still gets an empty proposal the owner can fill in.
         for (const c of chunk) {
           if (!job.proposals[c.id]) job.proposals[c.id] = emptyProposal(c.id);
         }
       } catch (e) {
+        if (job.cancelled || e instanceof Anthropic.APIUserAbortError) break;
         console.error("clarify failed", e);
         job.error = describeError(e);
       } finally {
@@ -306,7 +328,17 @@ export function emptyProposal(stuff_id: string): Proposal {
 export function jobStatus(id: string) {
   const job = jobs.get(id);
   if (!job) return null;
-  return { id: job.id, order: job.order, proposals: job.proposals, done: job.done, error: job.error };
+  return { id: job.id, order: job.order, proposals: job.proposals, done: job.done, error: job.error, cancelled: job.cancelled };
+}
+
+/** Stop Claude: abort requests in flight and skip the rest. Finished proposals stay cached for next time. */
+export function cancelClarify(id: string) {
+  const job = jobs.get(id);
+  if (!job || job.done) return jobStatus(id);
+  job.cancelled = true;
+  job.done = true;
+  job.abort.abort();
+  return jobStatus(id);
 }
 
 export function forgetProposal(stuffId: string) {
@@ -335,7 +367,7 @@ export async function suggestRules(): Promise<string[]> {
     thinking: { type: "adaptive" },
     output_config: { effort: "low", format: zodOutputFormat(RulesOutput) },
     system:
-      "You help a GTD app learn from its owner's corrections. Look for corrections that repeat the same pattern at least twice and turn each pattern into one short, specific standing rule (for example: \"Anything mentioning Per goes to @office in project 'Shredder test'\"). Ignore one-off corrections. Do not repeat existing rules. Return an empty list if nothing repeats.",
+      "You help a GTD app learn from its owner's corrections. Look for corrections that repeat the same pattern at least twice and turn each pattern into one short, specific standing rule (for example: \"Anything mentioning Per goes to @office in project 'Shredder test'\"). Ignore one-off corrections. Do not repeat existing rules. Write rules in English. Return an empty list if nothing repeats.",
     messages: [{ role: "user", content: `Existing rules:\n${existing}\n\nCorrections:\n${list}` }],
   });
   const rules = response.parsed_output?.rules ?? [];
@@ -357,7 +389,7 @@ const ReviewOutput = z.object({
       id: z.string(),
       issue: z.enum(["stalled", "stale", "vague", "overdue", "other"]),
       message: z.string().describe("One short sentence the owner reads in the list"),
-      suggested_title: z.string().nullable().describe("A clearer verb-first rewrite for vague actions"),
+      suggested_title: z.string().nullable().describe("A clearer verb-first rewrite for a vague action or a project not named verb-first"),
       suggested_next_action: z.string().nullable().describe("For stalled projects: a concrete next action"),
     }),
   ),
@@ -376,7 +408,7 @@ export async function analyzeReview(): Promise<ReviewFlag[]> {
         .map((a) => a.completed_at!.slice(0, 10))
         .sort()
         .pop();
-      return `- project id=${p.id} "${p.title}" outcome="${p.outcome}" open actions: ${
+      return `- project id=${p.id} "${p.title}" open actions: ${
         acts.map((a) => `[${a.status}] ${a.title}`).join("; ") || "NONE"
       }; last completed action: ${lastDone ?? "never"}`;
     })
@@ -402,9 +434,10 @@ export async function analyzeReview(): Promise<ReviewFlag[]> {
     system: `You assist the owner's GTD Weekly Review. Today is ${t}. Flag only what deserves attention:
 - stalled: an active project with no open next or waiting action (always suggest a concrete next action).
 - stale: waiting-for items older than about 10 days or past their follow-up date; next actions untouched for over a month.
-- vague: action titles that are not concrete, verb-first physical actions (suggest a rewrite).
+- vague (projects): project titles not written verb-first like a next action (e.g. "Updated user guide…" or "Passports renewed…"). Suggest a verb-first title ("Update the user guide…", "Renew passports…").
+- vague (actions): action titles that are not concrete, verb-first physical actions, or that bundle several steps into one ("and", lists, parenthesised sub-tasks). Suggest a rewrite that is only the first single step; for a bundle, say in the message that the rest belongs in the project as separate actions.
 - overdue: past due dates.
-Keep messages short and specific. Use the exact ids given. Don't flag healthy items.`,
+Keep messages short and specific, and write them and every suggestion in English. Use the exact ids given. Don't flag healthy items.`,
     messages: [
       {
         role: "user",

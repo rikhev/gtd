@@ -1,12 +1,11 @@
 /* In-Tray — the GTD desk kit as a keyboard grid.
-   Tokens: office paper + ink, steel rail, manila folder tabs, label-maker tape,
-   one label-yellow accent reserved for focus and the active control. */
+   Tokens: office paper + ink, steel rail, blue-grey folder tabs, navy label tape,
+   one corporate blue for focus and selection, traffic-light lamps for project health. */
 
 :root {
   color-scheme: light;
   --paper: #f3f5f6;
   --sheet: #fbfcfd;
-  --tray-sheet: #fbfcfd;
   --ink: #17181a;
   --ink-2: #474c52;
   --ink-3: #686d74;
@@ -15,13 +14,17 @@
   --steel: #dde0df;
   --steel-2: #cdd1d0;
   --steel-ink: #2b2e32;
-  --manila: #d9b86b;
-  --manila-2: #f1e3bd;
-  --manila-ink: #4a3a12;
-  --tape: #151515;
-  --tape-ink: #f3f3ee;
-  --accent: #f6d21b;
-  --accent-ink: #141414;
+  --folder: #a9bedb;
+  --folder-2: #e6edf7;
+  --folder-ink: #1d3456;
+  --tape: #1b2a41;
+  --tape-ink: #f2f5fa;
+  --accent: #1f5fcc;
+  --accent-contrast: #ffffff;
+  --select: #d9e6fa;
+  --select-ink: #0f1b30;
+  --go: #1f8a4c;
+  --wait: #c7890a;
   --tick: #e2e7eb;
   --stamp: #b3301c;
   --pen: #1b2340;
@@ -37,7 +40,6 @@
     color-scheme: dark;
     --paper: #16171a;
     --sheet: #1c1d21;
-    --tray-sheet: color-mix(in srgb, var(--steel-ink) 62%, transparent);
     --ink: #eae8e1;
     --ink-2: #b9bbbd;
     --ink-3: #93979c;
@@ -46,13 +48,17 @@
     --steel: #202226;
     --steel-2: #2c2f35;
     --steel-ink: #d6d7d6;
-    --manila: #9a7f45;
-    --manila-2: #2e2a20;
-    --manila-ink: #efe0b8;
-    --tape: #0a0a0b;
-    --tape-ink: #efeee9;
-    --accent: #f2cf2a;
-    --accent-ink: #141414;
+    --folder: #3e5a83;
+    --folder-2: #1b2433;
+    --folder-ink: #c9d8ef;
+    --tape: #2a3d5c;
+    --tape-ink: #e8eef8;
+    --accent: #5b95f5;
+    --accent-contrast: #0b1426;
+    --select: #1f3a63;
+    --select-ink: #eef3fb;
+    --go: #3dba72;
+    --wait: #e2a634;
     --tick: #262e37;
     --stamp: #ec6d57;
     --pen: #e3dccb;
@@ -142,7 +148,7 @@ a:hover {
 .app {
   display: grid;
   grid-template-columns: 212px minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) 26px;
+  grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
 }
 
@@ -190,7 +196,7 @@ a:hover {
   flex: 1;
   min-width: 0;
   overflow: auto;
-  padding: 0 20px 40px;
+  padding: 0 20px 72px; /* room below the last row so a toast never sits on it */
 }
 
 .loading {
@@ -237,10 +243,6 @@ a:hover {
   font-size: 14px;
   padding: 4px 9px;
 }
-.tape-yellow {
-  background-color: var(--accent);
-  color: var(--accent-ink);
-}
 
 /* ------------------------------------------------------------------ */
 /* Rail: the steel drawer                                               */
@@ -263,8 +265,11 @@ a:hover {
   gap: 6px;
   padding: 8px 8px 10px;
   border-radius: 4px;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   outline-offset: 0;
+}
+.tray:hover {
+  background: var(--steel-2);
 }
 .tray-label {
   display: flex;
@@ -278,28 +283,70 @@ a:hover {
   line-height: 1;
   color: var(--ink);
 }
+/* The in-tray: a solid desk letter tray in three-quarter view, in the folder blues of the project tabs,
+   outlined in folder ink. It is opaque: the paper shows only above its walls. Paper only. */
 .tray-svg {
   width: 100%;
   height: auto;
-  max-width: 180px;
+  max-width: 176px;
+  overflow: visible;
 }
-.tray-svg .wire {
+.tray-svg .t-back {
+  fill: var(--folder-2);
+}
+.tray-svg .t-floor,
+.tray-svg .t-side {
+  fill: color-mix(in srgb, var(--folder) 45%, var(--folder-2));
+}
+.tray-svg .t-line {
   fill: none;
-  stroke: var(--ink-2);
-  stroke-width: 1.5;
+  stroke: var(--folder-ink);
+  stroke-width: 2; /* whole pixels: crisp on 1x screens, where 1.5px landed on half pixels */
+  stroke-linejoin: round;
   stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
-.tray-svg .wire.thin {
-  stroke-width: 0.8;
-  opacity: 0.55;
+.tray-svg .t-edge {
+  fill: none;
+  stroke: var(--folder-ink);
+  stroke-width: 1;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.tray-svg .t-front {
+  fill: var(--folder);
+}
+/* Page edges in the lighter rule grey, so a full pile reads as paper rather than a dark block. */
+.tray-svg .paper-edge {
+  fill: var(--sheet);
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+/* The top sheet carries writing: a heading in pen navy, then lines of text in ink-3. */
+.tray-svg .paper-heading,
+.tray-svg .paper-text {
+  fill: none;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.tray-svg .paper-heading {
+  stroke: var(--pen);
+  stroke-width: 1.75;
+}
+.tray-svg .paper-text {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+}
+.tray-svg .paper {
+  fill: var(--sheet);
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 .tray-svg .sheet {
-  fill: none;
-  stroke: var(--tray-sheet);
-  stroke-width: 2.2;
-  stroke-linecap: square;
-  filter: drop-shadow(0 0.6px 0 rgb(0 0 0 / 0.28));
-  animation: drop 260ms var(--ease) both;
+  animation: drop 280ms var(--ease) both;
 }
 @keyframes drop {
   from {
@@ -308,18 +355,30 @@ a:hover {
   }
 }
 
+.rail-section + .rail-section {
+  margin-top: 16px;
+}
+.rail-section:last-child {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.rail-heading {
+  margin: 0 0 4px;
+  padding: 0 10px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
 .rail-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-}
-.rail-sep {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid var(--steel-2);
+  gap: 2px;
 }
 .rail-item {
   width: 100%;
@@ -328,11 +387,13 @@ a:hover {
   justify-content: space-between;
   gap: 8px;
   height: 30px;
-  padding: 0 8px;
+  padding: 0 10px;
   border-radius: 3px;
+  color: var(--ink-2);
 }
 .rail-item:hover {
   background: var(--steel-2);
+  color: var(--ink);
 }
 .rail-name {
   font-weight: 500;
@@ -348,10 +409,27 @@ a:hover {
   color: var(--stamp);
   font-weight: 600;
 }
+/* The open list is the sheet pulled forward out of the drawer: same type, lifted onto paper. */
+.rail-item.is-current,
+.tray.is-current {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.16);
+}
+.rail-item.is-current .rail-name {
+  font-weight: 650;
+}
+.rail-item.is-current .rail-meta {
+  color: var(--ink-2);
+}
 .rail-item.is-cursor,
 .tray.is-cursor {
   box-shadow: inset 0 0 0 2px var(--ink);
   background: var(--steel-2);
+}
+.rail-item.is-current.is-cursor,
+.tray.is-current.is-cursor {
+  background: var(--paper);
 }
 
 /* ------------------------------------------------------------------ */
@@ -435,8 +513,9 @@ a:hover {
 /* The grid                                                             */
 /* ------------------------------------------------------------------ */
 
+/* Narrow lists shed low-value columns (Column.drop) rather than scrolling sideways. */
 .grid {
-  min-width: 560px;
+  min-width: 320px;
 }
 .grid-head,
 .row {
@@ -497,17 +576,15 @@ a:hover {
   background: var(--tick);
 }
 .grid.is-active .row.is-focus {
-  background: var(--accent);
-  color: var(--accent-ink);
-  --ink-2: #2d2d2b;
-  --ink-3: #4a4a45;
-  --rule-strong: #3a3a36;
+  background: var(--select);
+  color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .grid:not(.is-active) .row.is-focus {
   background: var(--steel-2);
 }
 .grid.is-active .row.is-focus.is-ticked {
-  box-shadow: inset 0 0 0 2px var(--accent-ink);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .subject {
@@ -589,10 +666,10 @@ a:hover {
   background: var(--sheet);
   color: var(--ink);
   outline: none;
-  box-shadow: 0 0 0 2px var(--accent-ink);
+  box-shadow: 0 0 0 2px var(--select-ink);
 }
 
-/* Group headers: plain rules, or a manila folder with its tab and tape. */
+/* Group headers: plain rules, or a blue-grey folder with its tab and tape. */
 .group-head {
   display: flex;
   align-items: center;
@@ -600,8 +677,14 @@ a:hover {
   height: 32px;
   padding: 0 8px;
   margin-top: 10px;
+  /* Plain heads (contexts, waiting on, dates…) are Label Caps over a rule; the folder surface is for projects only. */
   border-bottom: 1px solid var(--rule-strong);
   cursor: default;
+}
+/* One empty row's height between a group's last row and the next group header. */
+.grid-group + .grid-group .group-head,
+.grid-group + .grid-group .group-head.is-folder {
+  margin-top: var(--row);
 }
 .group-label {
   font-family: var(--font-label);
@@ -611,35 +694,59 @@ a:hover {
   text-transform: uppercase;
   color: var(--ink-2);
 }
+.group-label.is-ctx {
+  color: var(--ink);
+}
 .group-count {
   color: var(--ink-3);
   font-size: 12px;
 }
 .group-meta {
   margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-3);
 }
 .group-head.is-folder {
   height: 34px;
   margin-top: 18px;
-  background: var(--manila-2);
-  border-top: 1px solid var(--manila);
-  border-bottom: 1px solid color-mix(in srgb, var(--manila) 60%, var(--rule-strong));
+  background: var(--folder-2);
+  border-top: 1px solid var(--folder);
+  border-bottom: 1px solid color-mix(in srgb, var(--folder) 60%, var(--rule-strong));
   position: relative;
 }
 .group-head.is-folder .tape {
   position: relative;
-  top: -9px;
-  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.28), 0 0 0 5px var(--manila);
+  top: -6px;
+  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.28), 0 0 0 3px var(--folder);
   border-radius: 1px;
 }
+.group-head.is-folder .group-label.is-ctx {
+  color: var(--ink);
+}
+.group-count {
+  color: var(--ink-3);
+}
 .group-head.is-folder .group-count {
-  color: var(--manila-ink);
+  color: var(--folder-ink);
+}
+/* The chevron and count sit on the tape's centre line: the tape is lifted as a tab, a little above the band's middle. */
+.group-head.is-folder > .chev,
+.group-head.is-folder > .group-count,
+.group-head.is-folder > .group-meta {
+  position: relative;
+  top: -6px;
 }
 .group-head.is-focus {
-  box-shadow: inset 0 0 0 2px var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink-3);
 }
 .grid.is-active .group-head.is-focus {
-  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--accent);
+  background: var(--select);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* A folder band is already pale blue, close to selection: when focused it deepens so the cursor still shows.
+   The ring stays 1px (the owner asked for thin group focus). */
+.grid.is-active .group-head.is-folder.is-focus {
+  background: color-mix(in srgb, var(--accent) 22%, var(--folder-2));
 }
 .chev {
   width: 8px;
@@ -685,8 +792,10 @@ a:hover {
   stroke-dashoffset: 0;
   opacity: 1;
 }
+/* Flagged: the ring is inked in, inside the pen loop. */
 .marker.is-flagged .ring {
-  opacity: 0;
+  fill: var(--pen);
+  stroke: var(--pen);
 }
 .marker.is-done .tick {
   stroke-dashoffset: 0;
@@ -702,7 +811,7 @@ a:hover {
 }
 .is-focus .marker .pen,
 .is-focus .marker .tick {
-  stroke: var(--accent-ink);
+  stroke: var(--select-ink);
 }
 
 /* Done: a pen line strikes through the subject, then the row folds away. */
@@ -716,7 +825,7 @@ a:hover {
   animation: fold 180ms 190ms ease-in forwards;
 }
 .is-focus.is-striking .subject-text {
-  background-image: linear-gradient(var(--accent-ink), var(--accent-ink));
+  background-image: linear-gradient(var(--select-ink), var(--select-ink));
 }
 @keyframes strike {
   from {
@@ -760,7 +869,7 @@ a:hover {
   font-weight: 650;
 }
 .is-focus .date.is-overdue {
-  color: var(--accent-ink);
+  color: var(--select-ink);
   text-decoration: underline 2px;
 }
 
@@ -789,7 +898,7 @@ a:hover {
   background: rgb(0 0 0 / 0.12);
 }
 .is-focus .energy i.on {
-  background: var(--accent-ink);
+  background: var(--select-ink);
 }
 
 /* Rubber stamp: stalled, overdue projects. */
@@ -816,28 +925,38 @@ a:hover {
   padding: 1px 3px 0;
 }
 .is-focus .stamp {
-  color: var(--accent-ink);
+  color: var(--select-ink);
 }
 
-.proj-dot {
+/* Project health lamps: green has a next action, amber is only waiting on others, red is stalled. */
+.lamp {
   display: inline-block;
+  flex: none;
   width: 10px;
   height: 10px;
   margin-left: 6px;
-  border-radius: 1px;
-  background: var(--manila);
+  border-radius: 50%;
+  background: var(--lamp, var(--ink-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lamp, var(--ink-3)) 70%, #000);
 }
-.proj-dot.someday {
-  background: none;
-  border: 1.5px dashed var(--manila);
+.lamp.ok {
+  --lamp: var(--go);
 }
-.proj-dot.done {
-  background: var(--ink-3);
+.lamp.waiting {
+  --lamp: var(--wait);
 }
-.proj-dot.stalled {
-  background: var(--stamp);
+.lamp.stalled {
+  --lamp: var(--stamp);
 }
-
+/* Someday: a half-lit lamp (parked, not off), so it can't be mistaken for an action's empty ring. */
+.lamp.someday {
+  background: linear-gradient(90deg, var(--ink-3) 50%, transparent 50%);
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+.lamp.done {
+  --lamp: var(--ink-3);
+  opacity: 0.6;
+}
 .grid-empty {
   padding: 8px 0;
 }
@@ -898,6 +1017,7 @@ a:hover {
   border-bottom: 1px solid var(--rule);
 }
 .detail-title {
+  margin: 0;
   font-family: var(--font-label);
   font-weight: 600;
   font-size: 12px;
@@ -1087,8 +1207,8 @@ a:hover {
 }
 .mini-row:focus-visible {
   outline: none;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--select);
+  color: var(--select-ink);
 }
 .mini-title {
   overflow: hidden;
@@ -1187,8 +1307,15 @@ a:hover {
 }
 .picker-list li.is-hi,
 .palette-list li.is-hi {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--select);
+  color: var(--select-ink);
+}
+.picker-list li.picker-sep {
+  height: 0;
+  margin: 4px 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
 }
 .picker-list li.is-current .po-label {
   font-weight: 650;
@@ -1280,7 +1407,7 @@ a:hover {
 .is-hi .kbd {
   background: rgb(255 255 255 / 0.55);
   border-color: rgb(0 0 0 / 0.35);
-  color: var(--accent-ink);
+  color: var(--select-ink);
 }
 
 .help {
@@ -1326,8 +1453,9 @@ a:hover {
   display: grid;
   grid-template-columns: 104px 1fr;
   gap: 6px;
-  align-items: center;
+  align-items: baseline;
   min-height: 22px;
+  padding: 2px 0;
 }
 .help dt {
   display: flex;
@@ -1338,65 +1466,60 @@ a:hover {
 .help dd {
   margin: 0;
   color: var(--ink-2);
+  line-height: 1.35;
 }
 
 /* ------------------------------------------------------------------ */
-/* Status line                                                          */
+/* Toast: action feedback, only while there is something to say         */
 /* ------------------------------------------------------------------ */
 
-.status {
-  grid-column: 1 / -1;
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 70;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 14px;
-  background: var(--steel);
-  border-top: 1px solid var(--steel-2);
-  font-size: 12px;
-  color: var(--steel-ink);
-  min-width: 0;
-}
-.status-msg {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 12px;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 8px 14px;
+  background: var(--tape);
+  color: var(--tape-ink);
+  border-radius: 5px;
+  box-shadow: var(--shadow);
+  font-size: 12.5px;
   opacity: 0;
-  transform: translateY(3px);
+  transform: translate(-50%, 8px);
   transition: opacity 180ms var(--ease), transform 180ms var(--ease);
+  pointer-events: none;
+}
+.toast.is-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.toast.is-error {
+  background: var(--stamp);
+  color: #fff;
+  font-weight: 600;
+}
+.toast-text {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   min-width: 0;
 }
-.status-msg.is-on {
-  opacity: 1;
-  transform: none;
-}
-.status-msg.is-error {
-  color: var(--stamp);
-  font-weight: 600;
-}
-.status-undo {
+.toast-undo {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--ink-2);
+  flex: none;
+  opacity: 0.8;
 }
-.status-undo .kbd {
+.toast-undo .kbd {
   font-size: 11px;
   line-height: 14px;
   padding: 0 4px;
-}
-.status-facts {
-  display: flex;
-  gap: 14px;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.status-facts .is-warn {
-  color: var(--stamp);
-  font-weight: 600;
+  color: var(--ink);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1435,9 +1558,25 @@ a:hover {
 }
 .clarify-track i.is-current {
   background: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-ink);
+  box-shadow: 0 0 0 1px var(--select-ink);
 }
 
+.clarify-reading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.text-btn {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 3px;
+  font-size: 12px;
+}
+.text-btn:hover {
+  color: var(--ink);
+  text-decoration-color: var(--ink);
+}
 .clarify-card {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
@@ -1507,13 +1646,13 @@ a:hover {
   align-items: center;
   padding: 10px 12px 12px;
   margin-bottom: 12px;
-  background: var(--manila-2);
-  border-top: 2px solid var(--manila);
+  background: var(--folder-2);
+  border-top: 2px solid var(--folder);
   border-radius: 0 3px 3px 3px;
 }
 .p-project .field-label {
   grid-column: 1 / -1;
-  color: var(--manila-ink);
+  color: var(--folder-ink);
 }
 .p-project-title {
   font-weight: 650;
@@ -1599,8 +1738,8 @@ a:hover {
 .p-field:focus-visible {
   outline: none;
   border-color: var(--ink);
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--select);
+  color: var(--select-ink);
 }
 .p-field:focus-visible .p-lbl {
   color: inherit;
@@ -1661,6 +1800,57 @@ a:hover {
   padding: 40px 8px;
   max-width: 560px;
 }
+.key-choices {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.key-choices button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 8px 0 0;
+  color: var(--ink);
+  font-size: 13px;
+}
+.key-choices button:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.key-choices .kbd {
+  min-width: 34px;
+}
+.key-hints {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 0;
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.key-hints .kbd {
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  margin-right: 3px;
+  color: var(--ink-2);
+}
+.key-hints-sep {
+  margin: 0 10px;
+  color: var(--rule-strong);
+}
 .clarify-msg {
   font-size: 15px;
   margin: 0;
@@ -1699,15 +1889,31 @@ a:hover {
   color: var(--ink-3);
   border-radius: 2px;
 }
-.review-steps .is-past button {
+.review-steps .is-done:not(.is-current) button {
   color: var(--ink-2);
   text-decoration: line-through;
   text-decoration-color: var(--ink-3);
+}
+.step-count {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  color: var(--stamp);
+  font-variant-numeric: tabular-nums;
+}
+.review-steps .is-current .step-count {
+  color: inherit;
 }
 .review-steps .is-current button {
   background: var(--tape);
   color: var(--tape-ink);
   box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.28);
+}
+.review-tally {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink);
 }
 .review-head {
   padding: 8px 0 4px;
@@ -1719,7 +1925,18 @@ a:hover {
 .review-head p {
   margin: 2px 0;
 }
+.help:focus {
+  outline: none;
+}
+.review-title:focus {
+  outline: none;
+}
+/* The heading takes focus only so screen readers start at the step; it isn't a control, so no ring. */
+.review-title:focus-visible {
+  outline: none;
+}
 .review-claude {
+  max-width: 80ch;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1769,6 +1986,7 @@ a:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
+  margin-top: var(--row);
   padding-bottom: 6px;
 }
 .key-state {
@@ -1794,7 +2012,7 @@ a:hover {
 @media (max-width: 820px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr) 26px;
+    grid-template-rows: auto minmax(0, 1fr);
   }
   .rail {
     flex-direction: row;
@@ -1823,10 +2041,13 @@ a:hover {
     flex-direction: row;
     gap: 4px;
   }
-  .rail-sep {
+  .rail-heading {
+    display: none;
+  }
+  .rail-section + .rail-section,
+  .rail-section:last-child {
     margin: 0;
     padding: 0 0 0 8px;
-    border-top: 0;
     border-left: 1px solid var(--steel-2);
   }
   .rail-item {
@@ -1881,7 +2102,7 @@ a:hover {
   }
   .detail {
     position: fixed;
-    inset: auto 0 26px 0;
+    inset: auto 0 0 0;
     width: auto;
     height: 72dvh;
     z-index: 40;
@@ -1895,9 +2116,6 @@ a:hover {
   .p-fields,
   .p-done-note {
     margin-left: 0;
-  }
-  .status-facts {
-    display: none;
   }
 }
 
@@ -1979,4 +2197,69 @@ a:hover {
     animation-delay: 0ms !important;
     transition-duration: 1ms !important;
   }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The grid holds focus for screen readers; the cursor row is the visible focus. */
+.grid:focus {
+  outline: none;
+}
+.grid:focus-visible:not(:has(.is-focus)) {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The rail cursor already draws its own ring; don't stack the browser focus outline on it. */
+.rail .is-cursor:focus-visible {
+  outline: none;
+}
+
+/* Flagged for today reads twice: the inked, circled marker and a bolder subject. */
+.row.is-flagged .subject-text {
+  font-weight: 600;
+}
+
+/* The detail pane takes focus as a whole when opened; the ink ring below marks it. */
+.detail:focus {
+  outline: none;
+}
+/* Focus on the pane itself is the focused row's 1px accent hairline, never a painted pane (the One Blue Rule). */
+.detail:focus {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Palette section headings: Label Caps over a rule, like the group heads. */
+.palette-list li.pal-section {
+  height: auto;
+  padding: 10px 8px 4px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  margin-bottom: 2px;
+}
+.palette-list li.pal-section:first-child {
+  padding-top: 2px;
+}
+
+/* Long values in a picker field end in an ellipsis instead of being cut mid-word. */
+.field-pick-value {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

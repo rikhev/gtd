@@ -1,23 +1,30 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Paperclip, Repeat, AlignLeft, Clock, CalendarClock } from "lucide-react";
-import { useStore, isChase, isDeferred, notify, plural } from "../store.ts";
+import { useStore, isChase, isDeferred } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
 import { ContextCode, DateCell, Energy, Marker, TimeCell, titleOr } from "../components/bits.tsx";
 import { useActionCommands } from "../actionCommands.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
-import { today, daysBetween, formatDate } from "../../shared/dates.ts";
+import { today, daysBetween, formatDate, formatLong } from "../../shared/dates.ts";
 import type { Action, ActionStatus, State } from "../../shared/types.ts";
 
 type Mode = "next" | "waiting" | "someday" | "done";
-type GroupBy = "project" | "context" | "due" | "none";
+type GroupBy = "project" | "who" | "context" | "due" | "none";
 type SortBy = "manual" | "due" | "subject" | "context" | "time" | "energy";
 
-const GROUPS: Record<GroupBy, string> = { project: "Project", context: "Context", due: "Due date", none: "No grouping" };
+const SUBJECT_HINT: Record<Mode, string> = {
+  next: "Describe the next action",
+  waiting: "Describe what you’re waiting for",
+  someday: "Describe something you might do",
+  done: "Describe the action",
+};
+
+const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", due: "Due date", none: "No grouping" };
 const SORTS: Record<SortBy, string> = { manual: "Manual order", due: "Due date", subject: "Subject", context: "Context", time: "Time estimate", energy: "Energy" };
 
-export function InlineEdit({ value, onDone }: { value: string; onDone: (v: string) => void }) {
+export function InlineEdit({ value, onDone, placeholder }: { value: string; onDone: (v: string) => void; placeholder: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const done = useRef(false);
   useEffect(() => {
@@ -28,13 +35,17 @@ export function InlineEdit({ value, onDone }: { value: string; onDone: (v: strin
     if (done.current) return;
     done.current = true;
     onDone(v);
+    // Hand focus back to the list, so the keyboard (and a screen reader) is on the row again, not the page.
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true });
+    });
   };
   return (
     <input
       ref={ref}
       className="inline-edit"
       defaultValue={value}
-      placeholder="Describe the next action"
+      placeholder={placeholder}
       aria-label="Subject"
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === "Tab") {
@@ -49,6 +60,14 @@ export function InlineEdit({ value, onDone }: { value: string; onDone: (v: strin
       onBlur={(e) => finish(e.currentTarget.value)}
     />
   );
+}
+
+/** Grouping choices per list: no project grouping where the Projects list already does that job. */
+function groupOptions(mode: Mode): GroupBy[] {
+  if (mode === "next") return ["context", "due", "none"];
+  if (mode === "waiting") return ["who", "context", "due", "none"];
+  if (mode === "someday") return ["project", "context", "due", "none"];
+  return ["none"];
 }
 
 function rowsFor(s: State, mode: Mode, showDeferred: boolean): Action[] {
@@ -74,7 +93,12 @@ function dueBucket(a: Action): [number, string] {
 export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
-  const [groupBy, setGroupBy] = usePersisted<GroupBy>(`group:${mode}`, mode === "done" ? "none" : "project");
+  // Next Actions are organised by context (where you are), Waiting For by who you wait on;
+  // the Projects list is the view by project.
+  const groupKey = mode === "next" ? "group:next:v2" : mode === "waiting" ? "group:waiting:v2" : `group:${mode}`;
+  const groupDefault: GroupBy = mode === "done" ? "none" : mode === "next" ? "context" : mode === "waiting" ? "who" : "project";
+  const [storedGroup, setGroupBy] = usePersisted<GroupBy>(groupKey, groupDefault);
+  const groupBy: GroupBy = groupOptions(mode).includes(storedGroup) || (mode === "done" && storedGroup === "project") ? storedGroup : groupDefault;
   const [sortBy, setSortBy] = usePersisted<SortBy>(`sort:${mode}`, "manual");
   const [showDeferred, setShowDeferred] = usePersisted(`deferred:${mode}`, false);
   const t = today();
@@ -114,36 +138,44 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         const d = (a.completed_at ?? "").slice(0, 10);
         byDay.set(d, [...(byDay.get(d) ?? []), a]);
       }
-      return [...byDay.entries()].map(([d, r]) => ({ key: d, label: d ? `${formatDate(d)} · ${d}` : "Undated", rows: r }));
+      // One date style for every day: the full date, with "Today" or "Yesterday" in front when it applies.
+      return [...byDay.entries()].map(([d, r]) => ({ key: d, label: d ? (Math.abs(daysBetween(t, d)) <= 1 ? `${formatDate(d)} · ${formatLong(d)}` : formatLong(d)) : "Undated", rows: r }));
     }
     if (groupBy === "none") return [{ key: "all", label: "", rows: sorted }];
-    const map = new Map<string, { label: string; order: string; folder?: boolean; rows: Action[] }>();
+    const map = new Map<string, { label: string; order: string; folder?: boolean; color?: string; rows: Action[] }>();
     for (const a of sorted) {
       let key: string, label: string, order: string, folder = false;
+      let color: string | undefined;
       if (groupBy === "project") {
         const p = a.project_id ? projById.get(a.project_id) : undefined;
         key = p?.id ?? "none";
         label = p ? p.title || "Untitled project" : "No project";
         order = p ? `0${String(p.sort).padStart(8, "0")}` : "9";
         folder = Boolean(p);
+      } else if (groupBy === "who") {
+        const who = a.waiting_who?.trim() ?? "";
+        key = who ? `who:${who.toLowerCase()}` : "none";
+        label = who || "Nobody named";
+        order = who ? `0${who.toLowerCase()}` : "9";
       } else if (groupBy === "context") {
         const c = a.context_id ? ctxById.get(a.context_id) : undefined;
         key = c?.id ?? "none";
         label = c?.name ?? "No context";
         order = c ? `0${String(c.sort).padStart(4, "0")}` : "9";
+        color = c?.color;
       } else {
         const [o, l] = dueBucket(a);
         key = l;
         label = l;
         order = String(o);
       }
-      const g = map.get(key) ?? { label, order, folder, rows: [] };
+      const g = map.get(key) ?? { label, order, folder, color, rows: [] };
       g.rows.push(a);
       map.set(key, g);
     }
     return [...map.entries()]
       .sort((a, b) => a[1].order.localeCompare(b[1].order))
-      .map(([key, g]) => ({ key, label: g.label, folder: g.folder, rows: g.rows }));
+      .map(([key, g]) => ({ key, label: g.label, folder: g.folder, color: g.color, rows: g.rows }));
   }, [rows, groupBy, sortBy, mode, ctxById, projById]);
 
   const multi = groups.length > 1 || (groupBy !== "none" && groups.length === 1 && groups[0].key !== "all");
@@ -166,6 +198,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       if (!g || g === "none") return {};
       if (groupBy === "project" && projById.has(g)) return { project_id: g };
       if (groupBy === "context" && ctxById.has(g)) return { context_id: g };
+      if (groupBy === "who" && g.startsWith("who:")) return { waiting_who: groups.find((x) => x.key === g)?.label };
       return {};
     },
     neighbors: (id) => {
@@ -195,10 +228,10 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
 
   const openViewMenu = () => {
     const items = [
-      ...(mode === "done" ? [] : (Object.keys(GROUPS) as GroupBy[]).map((g) => ({ id: `g:${g}`, label: `Group by ${GROUPS[g].toLowerCase()}`, hint: groupBy === g ? "Current" : "" }))),
-      ...(mode === "done" ? [] : (Object.keys(SORTS) as SortBy[]).map((k) => ({ id: `s:${k}`, label: `Sort by ${SORTS[k].toLowerCase()}`, hint: sortBy === k ? "Current" : "" }))),
-      ...(mode === "next" ? [{ id: "deferred", label: showDeferred ? "Hide deferred actions" : `Show deferred actions (${deferredCount})` }] : []),
-      ...(mode === "done" ? [{ id: "g:none", label: "Group by day", hint: groupBy === "none" ? "Current" : "" }, { id: "g:project", label: "Group by project", hint: groupBy === "project" ? "Current" : "" }] : []),
+      ...(mode === "done" ? [] : groupOptions(mode).map((g) => ({ id: `g:${g}`, label: g === "none" ? "No grouping" : `Group by ${GROUPS[g].toLowerCase()}`, hint: groupBy === g ? "Current" : "", section: "group" }))),
+      ...(mode === "done" ? [] : (Object.keys(SORTS) as SortBy[]).map((k) => ({ id: `s:${k}`, label: `Sort by ${SORTS[k].toLowerCase()}`, hint: sortBy === k ? "Current" : "", section: "sort" }))),
+      ...(mode === "next" ? [{ id: "deferred", label: showDeferred ? "Hide deferred actions" : `Show deferred actions (${deferredCount})`, section: "show" }] : []),
+      ...(mode === "done" ? [{ id: "g:none", label: "Group by day", hint: groupBy === "none" ? "Current" : "", section: "group" }, { id: "g:project", label: "Group by project", hint: groupBy === "project" ? "Current" : "", section: "group" }] : []),
     ];
     ui.openPicker({
       type: "list",
@@ -230,7 +263,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     width: "minmax(220px, 1fr)",
     render: (a) =>
       act.editing === a.id ? (
-        <InlineEdit value={a.title} onDone={(v) => act.commitTitle(a.id, v)} />
+        <InlineEdit value={a.title} placeholder={SUBJECT_HINT[mode]} onDone={(v) => act.commitTitle(a.id, v)} />
       ) : (
         <span className="subject">
           {isChase(a) && mode === "next" && <span className="chase-label">Chase {a.waiting_who ?? ""}</span>}
@@ -254,9 +287,10 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     key: "proj",
     label: "Project",
     width: "minmax(120px, 200px)",
+    drop: 4,
     render: (a) => {
       const p = a.project_id ? projById.get(a.project_id) : undefined;
-      return p ? <span className="proj-cell">{p.title}</span> : <span className="dash">–</span>;
+      return p ? <span className="proj-cell">{p.title}</span> : <span className="dash" aria-hidden="true">–</span>;
     },
   };
 
@@ -265,10 +299,10 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     columns = [
       marker,
       subject,
-      { key: "who", label: "Waiting on", width: "132px", render: (a) => a.waiting_who || <span className="dash">–</span> },
-      { key: "since", label: "Since", width: "84px", render: (a) => <DateCell date={a.waiting_since} kind="plain" /> },
+      ...(groupBy === "who" ? [] : [{ key: "who", label: "Waiting on", width: "132px", render: (a: Action) => a.waiting_who || <span className="dash" aria-hidden="true">–</span> }]),
+      { key: "since", label: "Since", width: "84px", drop: 1, render: (a) => <DateCell date={a.waiting_since} kind="plain" /> },
       { key: "follow", label: "Follow up", width: "88px", render: (a) => <DateCell date={a.followup} /> },
-      ...(groupBy === "project" ? [] : [projCol]),
+      projCol,
     ];
   } else if (mode === "someday") {
     columns = [marker, subject, ...(groupBy === "project" ? [] : [projCol]), ctxCol, { key: "back", label: "Bring back", width: "96px", render: (a) => <DateCell date={a.bring_back} kind="plain" /> }];
@@ -278,7 +312,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       subject,
       projCol,
       ctxCol,
-      { key: "when", label: "Done", width: "96px", render: (a) => <DateCell date={a.completed_at?.slice(0, 10) ?? null} kind="plain" /> },
+      // Grouped by day, the group heading already carries the date.
+      ...(groupBy === "none" ? [] : [{ key: "when", label: "Done", width: "96px", render: (a: Action) => <DateCell date={a.completed_at?.slice(0, 10) ?? null} kind="plain" /> }]),
     ];
   } else {
     columns = [
@@ -287,9 +322,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       ...(groupBy === "context" ? [] : [ctxCol]),
       ...(groupBy === "project" ? [] : [projCol]),
       { key: "due", label: "Due", width: "84px", render: (a) => <DateCell date={a.due} /> },
-      { key: "defer", label: "Start", width: "80px", render: (a) => <DateCell date={a.defer} kind="defer" /> },
-      { key: "time", label: "Time", width: "52px", align: "end", render: (a) => <TimeCell min={a.time_min} /> },
-      { key: "energy", label: "Energy", width: "62px", render: (a) => <Energy level={a.energy} /> },
+      { key: "defer", label: "Start", width: "80px", drop: 1, render: (a) => <DateCell date={a.defer} kind="defer" /> },
+      { key: "time", label: "Time", width: "52px", align: "end", drop: 3, render: (a) => <TimeCell min={a.time_min} /> },
+      { key: "energy", label: "Energy", width: "62px", drop: 2, render: (a) => <Energy level={a.energy} /> },
     ];
   }
 
@@ -303,11 +338,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     ) : (
       <EmptyState title="Nothing done yet" lines={["Completed actions are logged here by day."]} />
     );
-
-  useEffect(() => {
-    if (mode === "next" && deferredCount && !showDeferred) notify(`${plural(deferredCount, "deferred action")} hidden until the start date in this view`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
 
   return (
     <Grid

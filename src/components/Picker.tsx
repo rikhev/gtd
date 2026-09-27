@@ -8,7 +8,7 @@ interface Props {
   close: () => void;
 }
 
-type Option = { id: string | null; label: string; hint?: string; color?: string; create?: string };
+type Option = { id: string | null; label: string; hint?: string; color?: string; create?: string; section?: string };
 
 export function Picker({ spec, close }: Props) {
   const [q, setQ] = useState("");
@@ -58,7 +58,7 @@ export function Picker({ spec, close }: Props) {
         .sort((a, b) => b.score - a.score);
       const out: Option[] = [];
       if (spec.noneLabel && !needle) out.push({ id: null, label: spec.noneLabel });
-      out.push(...scored.map(({ it }) => ({ id: it.id, label: it.label, hint: it.hint, color: it.color })));
+      out.push(...scored.map(({ it }) => ({ id: it.id, label: it.label, hint: it.hint, color: it.color, section: it.section })));
       const exact = spec.items.some((it) => it.label.toLowerCase() === needle || it.label.toLowerCase() === `@${needle}`);
       if (spec.onCreate && needle && !exact) {
         out.push({ id: "__create__", label: spec.createLabel ? spec.createLabel(q.trim()) : `Create “${q.trim()}”`, create: q.trim() });
@@ -114,7 +114,8 @@ export function Picker({ spec, close }: Props) {
     if (spec.type === "list" && spec.current) {
       const i = options.findIndex((o) => o.id === spec.current);
       setHi(i >= 0 ? i : 0);
-    } else setHi(0);
+    } else if (spec.type === "list" && spec.mustChoose && !q.trim()) setHi(-1);
+    else setHi(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
@@ -171,7 +172,7 @@ export function Picker({ spec, close }: Props) {
     spec.type === "time" ? "Time estimate" : spec.type === "energy" ? "Energy" : spec.title;
   const placeholder =
     spec.type === "list"
-      ? "Type to filter"
+      ? (spec.placeholder ?? "Type to filter")
       : spec.type === "date"
         ? "fri, +3d, next week, 3 oct"
         : spec.type === "time"
@@ -191,13 +192,18 @@ export function Picker({ spec, close }: Props) {
         placeholder={placeholder}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={onKey}
+        role={spec.type === "text" ? undefined : "combobox"}
+        aria-label={title}
+        aria-expanded={spec.type === "text" ? undefined : true}
+        aria-autocomplete={spec.type === "text" ? undefined : "list"}
         aria-controls="picker-list"
         aria-activedescendant={options[hi] ? `po-${hi}` : undefined}
         spellCheck={false}
         autoComplete="off"
       />
       <ul className="picker-list" id="picker-list" role="listbox">
-        {options.map((o, i) => (
+        {options.map((o, i) => [
+          i > 0 && o.section !== options[i - 1].section && <li key={`sep-${i}`} className="picker-sep" role="separator" aria-hidden="true" />,
           <li
             key={`${o.id}-${i}`}
             id={`po-${i}`}
@@ -216,8 +222,8 @@ export function Picker({ spec, close }: Props) {
             {o.color && <span className="swatch" style={{ background: o.color }} />}
             <span className="po-label">{o.label}</span>
             {o.hint && <span className="po-hint">{o.hint}</span>}
-          </li>
-        ))}
+          </li>,
+        ])}
       </ul>
     </div>
   );

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, StickyNote, Timer } from "lucide-react";
-import { getState, load, mutate, newAction, newProject, notify, plural, stamp, uid, useStore } from "../store.ts";
+import { getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
-import { useCommands, type Command } from "../keys.ts";
-import { ContextCode, Energy, Tape } from "../components/bits.tsx";
-import { areaItems, contextItems, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
+import { runWhenReady, useCommands, type Command } from "../keys.ts";
+import { promptApiKey } from "../apiKey.ts";
+import { suggestRules } from "../rules.ts";
+import { ContextCode, Energy, KeyChoices, KeyHints, Tape } from "../components/bits.tsx";
+import { areaItems, askWaitingOn, contextItems, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
 import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
 
@@ -16,9 +18,18 @@ interface JobState {
   proposals: Record<string, Proposal>;
   done: boolean;
   error: { code: string; message: string } | null;
+  cancelled?: boolean;
 }
 
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
+
+const normTitle = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "");
+
+/** An open project with the same title as Claude's proposed new one (e.g. created by an earlier item this session). */
+function matchingProject(title: string | undefined) {
+  if (!title?.trim()) return undefined;
+  return getState().projects.find((p) => (p.status === "active" || p.status === "someday") && normTitle(p.title) === normTitle(title));
+}
 
 const DISPOSITIONS: Record<Draft["disposition"], string> = {
   actionable: "Actionable",
@@ -29,6 +40,7 @@ const DISPOSITIONS: Record<Draft["disposition"], string> = {
 
 export function ClarifyView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
+  const meta = useMeta();
   const s = useStore((x) => x);
   const [job, setJob] = useState<JobState | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -40,21 +52,67 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
   const corrections = useRef(0);
   const card = useRef<HTMLDivElement>(null);
 
-  const start = useCallback(async (fresh = false) => {
+  const start = useCallback(async (fresh = false, isLive: () => boolean = () => true) => {
     setStartError(null);
     setJob(null);
     try {
       const res = await fetch("/api/clarify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fresh }) });
       const j = (await res.json()) as JobState;
+      // The screen closed while the job was starting: stop it rather than paying for it.
+      if (!isLive()) {
+        if (!j.done) void fetch(`/api/clarify/${j.id}`, { method: "DELETE" });
+        return;
+      }
       setJob(j);
     } catch (e) {
-      setStartError((e as Error).message);
+      if (isLive()) setStartError((e as Error).message);
     }
   }, []);
 
   useEffect(() => {
-    void start();
+    let live = true;
+    void start(false, () => live);
+    return () => {
+      live = false;
+    };
   }, [start]);
+
+  // Leaving Clarify (Esc, another list, closing the tab) stops Claude; finished proposals stay cached.
+  const jobRef = useRef<JobState | null>(null);
+  const handledRef = useRef(handled);
+  jobRef.current = job;
+  handledRef.current = handled;
+  useEffect(
+    () => () => {
+      const j = jobRef.current;
+      if (!j || j.done) return;
+      void fetch(`/api/clarify/${j.id}`, { method: "DELETE", keepalive: true });
+      // A job that failed never ran; there is nothing to report stopping.
+      if (j.error) return;
+      const ready = Object.keys(j.proposals).filter((id) => !handledRef.current.has(id)).length;
+      notify(
+        ready
+          ? `Stopped Claude. ${plural(ready, "proposal")} ready for next time; the rest stay in the Inbox.`
+          : "Stopped Claude. Your Inbox is unchanged.",
+      );
+    },
+    [],
+  );
+
+  /** Stop Claude but keep reviewing what is already proposed. */
+  const stop = async () => {
+    if (!job || job.done) return;
+    const res = await fetch(`/api/clarify/${job.id}`, { method: "DELETE" });
+    const j = (await res.json()) as JobState;
+    setJob(j);
+    const ready = Object.keys(j.proposals).filter((id) => !handled.has(id)).length;
+    if (!ready) {
+      notify("Stopped Claude before any proposals were ready. Your Inbox is unchanged.");
+      ui.leaveClarify();
+    } else {
+      notify(`Stopped Claude. Review the ${plural(ready, "proposal")} already made; the rest stay in the Inbox.`);
+    }
+  };
 
   // Poll while Claude works through the rest of the inbox.
   useEffect(() => {
@@ -80,8 +138,18 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     });
   }, [job]);
 
-  const queue = useMemo(() => (job ? job.order.filter((id) => s.stuff.some((x) => x.id === id && x.status === "inbox") || handled.has(id)) : []), [job, s.stuff, handled]);
-  const pending = queue.filter((id) => !handled.has(id));
+  const queue = useMemo(
+    () =>
+      job
+        ? job.order.filter(
+            (id) =>
+              (s.stuff.some((x) => x.id === id && x.status === "inbox") || handled.has(id)) &&
+              // After a stop, items Claude never reached drop out of this session.
+              (!job.cancelled || Boolean(job.proposals[id]) || handled.has(id)),
+          )
+        : [],
+    [job, s.stuff, handled],
+  );
   const currentId = queue[index];
   const current = s.stuff.find((x) => x.id === currentId);
   const draft = currentId ? drafts[currentId] : undefined;
@@ -147,6 +215,13 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
 
   const accept = () => {
     if (!current || !draft) return;
+    // Every Waiting For action needs someone or something to wait on before it's filed.
+    const missing = draft.disposition !== "trash" && draft.disposition !== "reference" ? draft.actions.findIndex((a) => a.kind === "waiting" && !a.done && !a.waiting_who?.trim()) : -1;
+    if (missing >= 0) {
+      notify("Who or what is this waiting on? Name it, then accept again.");
+      askWaitingOn(ui, null, (who) => updateRow(missing, { waiting_who: who }));
+      return;
+    }
     const st = getState();
     const ops: Op[] = [];
     const d = draft;
@@ -179,7 +254,10 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
       };
       let newProjectId: ID | null = null;
       const usesNew = d.actions.some((a) => a.project === "new");
-      if (d.new_project && (usesNew || d.actions.length === 0)) {
+      const existing = matchingProject(d.new_project?.title);
+      if (d.new_project && existing && (usesNew || d.actions.length === 0)) {
+        newProjectId = existing.id;
+      } else if (d.new_project && (usesNew || d.actions.length === 0)) {
         let areaId: ID | null = null;
         if (d.new_project.area) {
           const area = st.areas.find((a) => a.name.toLowerCase() === d.new_project!.area!.toLowerCase());
@@ -224,7 +302,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
       }
       const doneCount = d.actions.filter((a) => a.done).length;
       label = [
-        newProjectId ? `project “${d.new_project?.title}”` : "",
+        newProjectId && !existing ? `project “${d.new_project?.title}”` : existing ? `added to “${existing.title}”` : "",
         d.actions.length - doneCount ? plural(d.actions.length - doneCount, "action") : "",
         doneCount ? `${doneCount} done now` : "",
       ]
@@ -242,21 +320,12 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     finishItem(current.id, "Trashed", [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]);
   };
 
-  // When the queue is empty, look for repeated corrections worth turning into rules.
-  const allDone = job && pending.length === 0 && (job.done || queue.length > 0);
-  useEffect(() => {
-    if (!allDone || corrections.current < 3) return;
+  // Repeated corrections can become rules, but only when the owner asks Claude (R at the end, or Settings).
+  const offerRules = corrections.current >= 3;
+  const askRules = () => {
     corrections.current = 0;
-    void fetch("/api/rules/suggest", { method: "POST" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j.rules?.length) {
-          notify(`Claude suggests ${plural(j.rules.length, "rule")} from your corrections · ⌘K › Rules to review`);
-          void load();
-        }
-      })
-      .catch(() => undefined);
-  }, [allDone]);
+    void suggestRules();
+  };
 
   const pickFor = (i: number, field: "context" | "project" | "due" | "defer" | "time" | "energy" | "kind" | "who") => {
     if (!draft || !draft.actions[i]) return;
@@ -291,14 +360,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
       ui.openPicker({ type: "date", title: field === "due" ? "Due date" : "Start date", current: a[field], onPick: (d) => updateRow(i, { [field]: d }) });
     if (field === "time") ui.openPicker({ type: "time", current: a.time_min, onPick: (m) => updateRow(i, { time_min: m }) });
     if (field === "energy") ui.openPicker({ type: "energy", current: a.energy, onPick: (e) => updateRow(i, { energy: e }) });
-    if (field === "who")
-      ui.openPicker({
-        type: "text",
-        title: "Delegate to",
-        current: a.waiting_who ?? "",
-        placeholder: "Who is it waiting on?",
-        onPick: (who) => updateRow(i, { kind: "waiting", waiting_who: who.trim() || null }),
-      });
+    if (field === "who") askWaitingOn(ui, a.waiting_who, (who) => updateRow(i, { kind: "waiting", waiting_who: who }));
     if (field === "kind")
       ui.openPicker({
         type: "list",
@@ -314,6 +376,11 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
         onPick: (k) => {
           if (!k) return;
           if (k.startsWith("item:")) update((d) => (d.disposition = k.slice(5) as Draft["disposition"]));
+          else if (k === "waiting") askWaitingOn(ui, a.waiting_who, (who) => update((d) => {
+            d.actions[i].kind = "waiting";
+            d.actions[i].waiting_who = who;
+            d.disposition = "actionable";
+          }));
           else
             update((d) => {
               d.actions[i].kind = k as ProposedAction["kind"];
@@ -336,6 +403,16 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
   };
 
   const ready = Boolean(current && draft);
+  const err = startError ?? job?.error?.message;
+  const stopped = Boolean(err && !draft);
+  const backLabel = ui.clarifyReturn() === "review" ? "Back to the Weekly Review" : "Back to the Inbox";
+  const keyProblem = !meta.hasKey || /api key/i.test(err ?? "");
+  // Ways forward when Claude can't run: add a key right here, or file the Inbox by hand.
+  const addKey = () => promptApiKey(ui, () => void start(true));
+  const fileByHand = () => {
+    ui.go("inbox");
+    runWhenReady("inbox.file");
+  };
   const commands: Command[] = [
     { id: "cl.accept", label: "Accept proposal and continue", group: "Clarify", keys: ["mod+enter"], inInput: true, enabled: ready, run: () => {
       (document.activeElement as HTMLElement | null)?.blur?.();
@@ -361,7 +438,16 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     { id: "cl.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
     { id: "cl.kind", label: "File as (list or whole item)", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
     { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready, run: () => pickFor(rowOfFocus(), "who") },
-    { id: "cl.retry", label: "Ask Claude again (fresh)", group: "Clarify", keys: ["k"], run: () => void start(true) },
+    {
+      id: "cl.retry",
+      label: "Ask Claude again (fresh)",
+      group: "Clarify",
+      keys: ["k"],
+      run: () => {
+        if (job && !job.done) void fetch(`/api/clarify/${job.id}`, { method: "DELETE" });
+        void start(true);
+      },
+    },
     {
       id: "cl.leave",
       label: "Leave the field, then Clarify",
@@ -373,9 +459,10 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
         const rowEl = el?.closest<HTMLElement>("[data-row]");
         if (el && rowEl && el !== rowEl) rowEl.focus();
         else if (el && card.current?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) el.blur();
-        else ui.go("inbox");
+        else ui.leaveClarify();
       },
     },
+    { id: "cl.stop", label: "Stop Claude (keep reviewing what's ready)", group: "Clarify", keys: ["shift+escape"], inInput: true, enabled: Boolean(job && !job.done), run: () => void stop() },
     { id: "cl.edit", label: "Edit the action text", group: "Clarify", keys: ["f2"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus()}'] .p-title`)?.focus() },
     {
       id: "cl.enter",
@@ -392,18 +479,28 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     { id: "cl.rowdown", label: "Next proposed action", group: "Clarify", keys: ["arrowdown"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus() + 1}']`)?.focus() },
     { id: "cl.rowup", label: "Previous proposed action", group: "Clarify", keys: ["arrowup"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${Math.max(0, rowOfFocus() - 1)}']`)?.focus() },
   ];
+  const finished = Boolean(job && queue.length > 0 && index >= queue.length);
+  commands.push(
+    { id: "cl.rules", label: "Ask Claude to turn your corrections into rules", group: "Clarify", keys: ["r"], enabled: finished && offerRules, run: askRules },
+    { id: "cl.addkey", label: meta.hasKey ? "Change the API key" : "Add an API key", group: "Clarify", keys: ["enter"], enabled: stopped && keyProblem, run: addKey },
+    { id: "cl.byhand", label: "File the Inbox by hand", group: "Clarify", keys: ["v"], enabled: stopped, run: fileByHand },
+  );
   useCommands("clarify", commands, { priority: 15, active: regionActive });
 
-  const err = startError ?? job?.error?.message;
-
-  if (err && !draft) {
+  if (stopped) {
     return (
-      <div className="clarify-state">
+      <div className="clarify-state" role="alert">
         <Tape size="md">Clarify stopped</Tape>
         <p className="clarify-msg">{err}</p>
-        <p className="muted-text">
-          Fix that, then ask Claude again, or go back to the Inbox.
-        </p>
+        <KeyChoices
+          choices={[
+            ...(keyProblem
+              ? [{ k: "enter", label: meta.hasKey ? "Enter a working API key and start" : "Add your Claude API key and start", run: addKey }]
+              : [{ k: "k", label: "Ask Claude again", run: () => void start(true) }]),
+            { k: "v", label: "File the Inbox by hand", run: fileByHand },
+            { k: "escape", label: backLabel, run: ui.leaveClarify },
+          ]}
+        />
       </div>
     );
   }
@@ -412,10 +509,8 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     return (
       <div className="clarify-state">
         <Tape size="md">Inbox zero</Tape>
-        <p className="clarify-msg">Nothing left to clarify.</p>
-        <p className="muted-text">
-          Your lists are up to date.
-        </p>
+        <p className="clarify-msg">Nothing left to clarify. Your lists are up to date.</p>
+        <KeyChoices choices={[{ k: "escape", label: backLabel, run: ui.leaveClarify }]} />
       </div>
     );
   }
@@ -425,9 +520,13 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
       <div className="clarify-state">
         <Tape size="md">Inbox clear</Tape>
         <p className="clarify-msg">{plural(handled.size, "item")} clarified. Everything has a place.</p>
-        <p className="muted-text">
-          Work from Next Actions, or check your Projects.
-        </p>
+        <KeyChoices
+          choices={[
+            ...(offerRules ? [{ k: "r", label: "Ask Claude to turn your corrections into rules", run: askRules }] : []),
+            { k: "escape", label: backLabel, run: ui.leaveClarify },
+            ...(ui.clarifyReturn() === "review" ? [] : [{ k: "ctrl+shift+2", label: "Work from Next Actions", run: () => ui.go("next") }]),
+          ]}
+        />
       </div>
     );
   }
@@ -446,7 +545,15 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
             <i key={id} className={`${handled.has(id) ? "is-done" : ""} ${i === index ? "is-current" : ""} ${drafts[id] ? "is-ready" : ""}`} />
           ))}
         </span>
-        {job && !job.done && <span className="muted-text small">Claude is reading {plural(total - Object.keys(job.proposals).length, "more item")}…</span>}
+        {job && !job.done && (
+          <span className="muted-text small clarify-reading">
+            Claude is reading {plural(total - Object.keys(job.proposals).length, "more item")}…
+            <button type="button" className="text-btn" onClick={() => void stop()}>
+              Stop
+            </button>
+          </span>
+        )}
+        {job?.cancelled && <span className="muted-text small">Stopped. Items Claude didn't reach stay in the Inbox.</span>}
         {err && <span className="error-text small">{err}</span>}
       </div>
 
@@ -505,7 +612,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
                 <>
                   {draft.new_project && (
                     <div className="p-project">
-                      <span className="field-label">New project</span>
+                      <span className="field-label">{matchingProject(draft.new_project.title) ? "Existing project (same title)" : "New project"}</span>
                       <input
                         className="field-text p-project-title"
                         value={draft.new_project.title}
@@ -537,7 +644,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
                       <li key={i} data-row={i} tabIndex={0} aria-label={`Proposed action ${i + 1}: ${a.title}`} className={`p-row ${a.done ? "is-done" : ""}`} onFocus={() => setRow(i)}>
                         <div className="p-row-top">
                           <span className="p-kind">{a.kind === "next" ? "Next" : a.kind === "waiting" ? "Waiting" : "Someday"}</span>
-                          <input className="p-title" value={a.title} aria-label={`Action ${i + 1}`} placeholder="Verb-first next action" onChange={(e) => updateRow(i, { title: e.target.value })} />
+                          <input className="p-title" value={a.title} aria-label={`Action ${i + 1}`} placeholder="Describe the next action" onChange={(e) => updateRow(i, { title: e.target.value })} />
                           {a.two_minute && (
                             <span className={`two-min ${a.done ? "is-on" : ""}`} title="Under two minutes: E marks it done now">
                               <Timer size={12} strokeWidth={2} aria-hidden /> 2 min
@@ -547,29 +654,29 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
                         <div className="p-fields">
                           <button type="button" className="p-field" onClick={() => pickFor(i, "project")}>
                             <span className="p-lbl">Project</span>
-                            {a.project === "new" ? draft.new_project?.title : a.project ? s.projects.find((p) => p.id === a.project)?.title ?? <span className="dash">–</span> : <span className="dash">–</span>}
+                            {a.project === "new" ? draft.new_project?.title : a.project ? s.projects.find((p) => p.id === a.project)?.title ?? <span className="dash" aria-hidden="true">–</span> : <span className="dash" aria-hidden="true">–</span>}
                           </button>
                           <button type="button" className="p-field" onClick={() => pickFor(i, "context")}>
                             <span className="p-lbl">Context</span>
-                            {a.context ? <ContextCode ctx={s.contexts.find((c) => c.name.toLowerCase() === a.context!.toLowerCase()) ?? { id: "", name: a.context, color: "var(--ink-3)", sort: 0 }} /> : <span className="dash">–</span>}
+                            {a.context ? <ContextCode ctx={s.contexts.find((c) => c.name.toLowerCase() === a.context!.toLowerCase()) ?? { id: "", name: a.context, color: "var(--ink-3)", sort: 0 }} /> : <span className="dash" aria-hidden="true">–</span>}
                           </button>
                           {a.kind === "waiting" && (
                             <button type="button" className="p-field" onClick={() => pickFor(i, "who")}>
                               <span className="p-lbl">Waiting on</span>
-                              {a.waiting_who ?? <span className="dash">–</span>}
+                              {a.waiting_who ?? <span className="dash" aria-hidden="true">–</span>}
                             </button>
                           )}
                           <button type="button" className="p-field" onClick={() => pickFor(i, "due")}>
                             <span className="p-lbl">Due</span>
-                            {a.due ? formatLong(a.due) : <span className="dash">–</span>}
+                            {a.due ? formatLong(a.due) : <span className="dash" aria-hidden="true">–</span>}
                           </button>
                           <button type="button" className="p-field" onClick={() => pickFor(i, "defer")}>
                             <span className="p-lbl">Start</span>
-                            {a.defer ? formatLong(a.defer) : <span className="dash">–</span>}
+                            {a.defer ? formatLong(a.defer) : <span className="dash" aria-hidden="true">–</span>}
                           </button>
                           <button type="button" className="p-field" onClick={() => pickFor(i, "time")}>
                             <span className="p-lbl">Time</span>
-                            {a.time_min ? formatTime(a.time_min) : <span className="dash">–</span>}
+                            {a.time_min ? formatTime(a.time_min) : <span className="dash" aria-hidden="true">–</span>}
                           </button>
                           <button type="button" className="p-field" onClick={() => pickFor(i, "energy")}>
                             <span className="p-lbl">Energy</span>
@@ -588,6 +695,15 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
           )}
         </section>
       </div>
+      <KeyHints
+        hints={[
+          { k: "mod+enter", label: "Accept" },
+          { k: "v", label: "File as" },
+          { k: "e", label: "Done now" },
+          { k: "backspace", label: "Trash" },
+          { k: "ctrl+.", label: "Skip" },
+        ]}
+      />
     </div>
   );
 }

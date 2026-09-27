@@ -54,6 +54,13 @@ export function activeCommands(): Command[] {
   return out;
 }
 
+/** Run a command as soon as it becomes available, e.g. right after switching to its view. */
+export function runWhenReady(id: string, frames = 30) {
+  const c = activeCommands().find((x) => x.id === id);
+  if (c) c.run();
+  else if (frames > 0) requestAnimationFrame(() => runWhenReady(id, frames - 1));
+}
+
 export function allCommandsForPalette(): Command[] {
   const seen = new Set<string>();
   return activeCommands().filter((c) => {

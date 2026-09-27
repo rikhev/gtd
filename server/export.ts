@@ -52,7 +52,7 @@ export function exportZip(): Uint8Array {
       .map((p) => {
         const area = s.areas.find((a) => a.id === p.area_id)?.name;
         const acts = s.actions.filter((a) => a.project_id === p.id && a.status !== "trashed").map((a) => actionLine(s, a));
-        return `## ${p.title}\n\n${area ? `Area: ${area}  \n` : ""}${p.outcome ? `Outcome: ${p.outcome}\n` : ""}${
+        return `## ${p.title}\n\n${area ? `Area: ${area}\n` : ""}${
           p.notes ? `\n${p.notes}\n` : ""
         }\n${acts.join("\n")}`;
       })

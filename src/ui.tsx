@@ -28,6 +28,8 @@ export interface ListItem {
   label: string;
   hint?: string;
   color?: string;
+  /** Items sharing a section sit together; a hairline divides one section from the next. */
+  section?: string;
 }
 
 export type PickerSpec =
@@ -39,6 +41,9 @@ export type PickerSpec =
       noneLabel?: string;
       createLabel?: (q: string) => string;
       onCreate?: (q: string) => void;
+      /** Nothing is pre-highlighted: Enter does nothing until you type or arrow to a choice. */
+      mustChoose?: boolean;
+      placeholder?: string;
       onPick: (id: string | null) => void;
     }
   | { type: "date"; title: string; current: string | null; onPick: (d: string | null) => void }
@@ -70,10 +75,17 @@ export interface UI {
   openSearch: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  startClarify: () => void;
+  /** Start Clarify; Esc, Stop and the end state return to `returnTo` (the Inbox by default). */
+  startClarify: (returnTo?: ViewId) => void;
+  leaveClarify: () => void;
+  clarifyReturn: () => ViewId;
   startReview: () => void;
   /** Jump to an entity in its home list and focus it. */
   reveal: (t: Target) => void;
+  /** J on an action: go to its project, remembering where you came from. */
+  jumpToProject: (actionId: ID) => void;
+  /** J on a project: back to the action you jumped from, else its first next action. */
+  jumpToAction: (projectId: ID) => void;
   revealTarget: Target | null;
   clearReveal: () => void;
 }
