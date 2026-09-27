@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Rea
 import { X, Paperclip } from "lucide-react";
 import { mutate, newAction, notify, projectHealth, upload, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
-import { useCommands } from "../keys.ts";
+import { runWhenReady, useCommands } from "../keys.ts";
 import { editors } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { ContextCode, Energy, KeyHints, Lamp, Marker, Tape } from "./bits.tsx";
@@ -62,18 +62,11 @@ function TextField({
   );
 }
 
+// Field keys sit on the fields themselves; the line keeps only what isn't a field.
 const DETAIL_HINTS: Record<string, { k: string; label: string }[]> = {
-  action: [
-    { k: "d", label: "Due" },
-    { k: "p", label: "Project" },
-    { k: "c", label: "Context" },
-    { k: "f2", label: "Edit" },
-    { k: "escape", label: "Close" },
-  ],
-  project: [
-    { k: "d", label: "Due" },
-    { k: "a", label: "Area" },
-    { k: "v", label: "Status" },
+  stuff: [
+    { k: "v", label: "File as" },
+    { k: "k", label: "Clarify" },
     { k: "f2", label: "Edit" },
     { k: "escape", label: "Close" },
   ],
@@ -100,8 +93,16 @@ function PickField({ label, children, onOpen, k }: { label: string; children: Re
   };
   return (
     <div className="field">
-      <span className="field-label" id={`${id}-l`}>
-        {label}
+      <span className="field-head">
+        <span className="field-label" id={`${id}-l`}>
+          {label}
+        </span>
+        {/* Each field shows its own key while the pane has focus (the key is also announced via aria-keyshortcuts). */}
+        {k && active && (
+          <kbd className="kbd field-key" aria-hidden="true">
+            {k}
+          </kbd>
+        )}
       </span>
       <button
         type="button"
@@ -437,6 +438,20 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
         },
       },
       { id: "detail.close", label: "Close details", group: "Details", keys: ["mod+backspace"], inInput: true, run: () => ui.openDetail(null) },
+      // An Inbox item's pane offers the Inbox's own two verbs.
+      {
+        id: "detail.file",
+        label: "File as…",
+        group: "Details",
+        keys: ["v"],
+        enabled: target.kind === "stuff",
+        run: () => {
+          ui.openDetail(null);
+          ui.setRegion("list");
+          runWhenReady("inbox.file");
+        },
+      },
+      { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["k"], enabled: target.kind === "stuff", run: () => ui.startClarify() },
     ],
     { priority: 20, active },
   );
@@ -446,6 +461,20 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
   useEffect(() => {
     if (active) root.current?.focus({ preventScroll: true });
   }, [active, target.id]);
+
+  // The pane is announced by what it shows: "Action details: Pay the VAT for Q3".
+  const paneName = (() => {
+    const kind = ({ action: "Action", project: "Project", stuff: "Inbox item", ref: "Reference" } as Record<string, string>)[target.kind] ?? "Item";
+    const title =
+      target.kind === "action"
+        ? s.actions.find((x) => x.id === target.id)?.title
+        : target.kind === "project"
+          ? s.projects.find((x) => x.id === target.id)?.title
+          : target.kind === "stuff"
+            ? s.stuff.find((x) => x.id === target.id)?.text.split("\n")[0]
+            : s.refs.find((x) => x.id === target.id)?.title;
+    return `${kind} details${title ? `: ${title}` : ""}`;
+  })();
 
   let body: ReactNode = null;
   if (target.kind === "action") {
@@ -463,7 +492,7 @@ export function Detail({ target, active }: { target: Target; active: boolean }) 
   }
 
   return (
-    <aside ref={root} className={`detail ${active ? "is-active" : ""}`} aria-labelledby="detail-title" tabIndex={-1}>
+    <aside ref={root} className={`detail ${active ? "is-active" : ""}`} aria-label={paneName} tabIndex={-1}>
       <div className="detail-bar">
         <h2 className="detail-title" id="detail-title">
           Details

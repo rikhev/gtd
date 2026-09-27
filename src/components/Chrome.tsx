@@ -1,10 +1,10 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, Check } from "lucide-react";
-import { capture, daysSinceReview, notify, useNotice, useStore, isStalled, isDeferred, isChase } from "../store.ts";
+import { capture, daysSinceReview, notify, useNotice, useStore, isStalled, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { allCommandsForPalette, activeCommands, useCommands, keyLabel, type Command } from "../keys.ts";
-import { Kbd, Tape, Tray } from "./bits.tsx";
-import { today } from "../../shared/dates.ts";
+import { allCommandsForPalette, activeCommands, layerOf, useCommands, keyLabel, type Command } from "../keys.ts";
+import { InboxStack, Kbd, Tape } from "./bits.tsx";
+import { daysBetween, today } from "../../shared/dates.ts";
 
 export const RAIL: { id: ViewId; key: string }[] = [
   { id: "inbox", key: "ctrl+shift+1" },
@@ -18,121 +18,272 @@ export const RAIL: { id: ViewId; key: string }[] = [
   { id: "areas", key: "ctrl+shift+9" },
 ];
 
-/** GTD's own stages group the drawer: lists you organise into, and what you reflect on. */
-const RAIL_SECTIONS: { title: string; ids: ViewId[] }[] = [
-  { title: "Organize", ids: ["next", "projects", "waiting", "someday", "reference"] },
-  { title: "Reflect", ids: ["review", "done", "areas"] },
-  { title: "Settings", ids: ["settings"] },
+/**
+ * The rail: the Inbox, the lists in the order they're used, and a system check that answers
+ * GTD's weekly question ("is my system current?") with links to where each answer is fixed.
+ */
+const LISTS: ViewId[][] = [
+  ["next", "waiting", "projects"],
+  ["someday", "reference", "areas", "done"],
 ];
+
+type Entry = { key: string; view: ViewId; label: string; name: string; start?: boolean };
 
 export function Rail({ active }: { active: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
   const [cursor, setCursor] = useState(0);
   const t = today();
-  const counts = useMemo(() => {
-    const inbox = s.stuff.filter((x) => x.status === "inbox").length;
-    return {
-      inbox,
-      next: s.actions.filter((a) => (a.status === "next" && !isDeferred(a, t)) || isChase(a, t)).length,
-      projects: s.projects.filter((p) => p.status === "active").length,
-      waiting: s.actions.filter((a) => a.status === "waiting").length,
-      someday: s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length,
-      reference: s.refs.filter((r) => r.status === "active").length,
-      review: 0,
-      done: s.actions.filter((a) => a.status === "done" && a.completed_at && a.completed_at.slice(0, 10) === t).length,
-      areas: s.areas.length,
-    } as Record<ViewId, number>;
+
+  // Signals, not inventory: a number shows only where it asks for something.
+  const sig = useMemo(() => {
+    const inboxItems = s.stuff.filter((x) => x.status === "inbox");
+    const nextActs = s.actions.filter((a) => a.status === "next");
+    const overdue = nextActs.filter((a) => a.due && a.due < t).length;
+    const flagged = nextActs.filter((a) => a.flagged).length;
+    const chase = s.actions.filter((a) => isChase(a, t)).length;
+    const stalled = s.projects.filter((p) => isStalled(s, p)).length;
+    const doneToday = s.actions.filter((a) => a.status === "done" && a.completed_at && a.completed_at.slice(0, 10) === t).length;
+    const oldest = inboxItems.reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
+    const oldestDays = oldest ? daysBetween(oldest.slice(0, 10), t) : null;
+    // The oldest thing in the whole system: a review is only "due" once there is a week's worth to review.
+    const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
+    const systemAge = firstDay ? daysBetween(firstDay.slice(0, 10), t) : 0;
+    return { inbox: inboxItems.length, overdue, flagged, chase, stalled, doneToday, oldestDays, systemAge };
   }, [s, t]);
-  const stalled = useMemo(() => s.projects.filter((p) => isStalled(s, p)).length, [s]);
   const reviewAge = daysSinceReview(s);
-  const items = [...RAIL.map((r) => r.id), "settings" as ViewId];
+  const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
+
+  const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
+    if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : sig.flagged ? { text: `${sig.flagged} today` } : null;
+    if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
+    if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
+    return null;
+  };
+
+  // Every stop the cursor can reach, in screen order.
+  const health: Entry[] = [
+    {
+      key: "h-review",
+      view: "review",
+      name: "Weekly Review",
+      start: true,
+      label: `Weekly Review, ${reviewAge === null ? "not done yet" : reviewAge === 0 ? "done today" : `last done ${reviewAge} days ago`}${reviewDue ? ", due" : ""}`,
+    },
+    ...(sig.stalled ? [{ key: "h-stalled", view: "projects" as ViewId, name: "Stalled projects", label: `${sig.stalled} stalled ${sig.stalled === 1 ? "project" : "projects"}` }] : []),
+    ...(sig.chase ? [{ key: "h-chase", view: "waiting" as ViewId, name: "Follow-ups", label: `${sig.chase} ${sig.chase === 1 ? "follow-up" : "follow-ups"} due` }] : []),
+    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in tray", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} days`}` }] : []),
+  ];
+  const entries: Entry[] = [
+    { key: "inbox", view: "inbox", name: "Inbox", label: `Inbox, ${sig.inbox}` },
+    ...LISTS.flat().map((id) => {
+      const m = listMeta(id);
+      return { key: id, view: id, name: VIEW_TITLES[id], label: `${VIEW_TITLES[id]}${m ? `, ${m.text}` : ""}${id === "projects" && sig.stalled ? `, ${sig.stalled} stalled` : ""}` };
+    }),
+    ...health,
+    { key: "settings", view: "settings", name: "Settings", label: "Settings" },
+  ];
+  const idx = (key: string) => entries.findIndex((e) => e.key === key);
+  const open = (e: Entry) => {
+    if (e.start) ui.startReview();
+    else ui.go(e.view);
+    ui.setRegion("list");
+  };
 
   useEffect(() => {
-    if (active) setCursor(Math.max(0, items.indexOf(ui.view)));
+    if (active) setCursor((c) => (entries[c] && document.activeElement?.closest("nav.rail") ? c : Math.max(0, idx(ui.view))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  // Letter jump: the first letter of a stop's name moves the cursor to the next stop starting with it.
+  // W and K stay the app-wide "start the review" and "clarify" keys, as the check lines show.
+  const letters = [...new Set(entries.map((e) => e.name[0].toLowerCase()))].filter((ch) => ch !== "w" && ch !== "k");
+  const jump = (ch: string) =>
+    setCursor((c) => {
+      for (let n = 1; n <= entries.length; n++) {
+        const i = (c + n) % entries.length;
+        if (entries[i].name.toLowerCase().startsWith(ch)) return i;
+      }
+      return c;
+    });
 
   useCommands(
     "rail",
     [
-      { id: "rail.down", label: "Next list", group: "Move", keys: ["arrowdown"], run: () => setCursor((c) => Math.min(items.length - 1, c + 1)) },
-      { id: "rail.up", label: "Previous list", group: "Move", keys: ["arrowup"], run: () => setCursor((c) => Math.max(0, c - 1)) },
-      {
-        id: "rail.open",
-        label: "Open list",
-        group: "Move",
-        keys: ["enter", "arrowright", "space"],
-        run: () => {
-          ui.go(items[cursor]);
-          ui.setRegion("list");
-        },
-      },
+      { id: "rail.down", label: "Next in the rail", group: "Move", keys: ["arrowdown"], run: () => setCursor((c) => Math.min(entries.length - 1, c + 1)) },
+      { id: "rail.up", label: "Previous in the rail", group: "Move", keys: ["arrowup"], run: () => setCursor((c) => Math.max(0, c - 1)) },
+      { id: "rail.first", label: "First in the rail", group: "Move", keys: ["home", "mod+arrowup"], run: () => setCursor(0) },
+      { id: "rail.last", label: "Last in the rail", group: "Move", keys: ["end", "mod+arrowdown"], run: () => setCursor(entries.length - 1) },
+      { id: "rail.open", label: "Open", group: "Move", keys: ["enter", "arrowright", "space"], run: () => entries[cursor] && open(entries[cursor]) },
       { id: "rail.leave", label: "Back to the list", group: "Move", keys: ["escape"], run: () => ui.setRegion("list") },
+      ...letters.map((ch) => ({ id: `rail.jump.${ch}`, label: `Jump to “${ch.toUpperCase()}…”`, group: "Move", keys: [ch], hidden: true, run: () => jump(ch) })),
     ],
     { priority: 10, active },
   );
-  // Spoken form of a rail entry: "Projects, 7, 1 stalled", "Weekly Review, last done 3 days ago".
-  const railLabel = (id: ViewId) => {
-    const name = VIEW_TITLES[id];
-    if (id === "settings") return name;
-    if (id === "review") return `${name}, ${reviewAge === null ? "not done yet" : reviewAge === 0 ? "done today" : `last done ${reviewAge} days ago`}`;
-    if (id === "done") return counts.done ? `${name}, ${counts.done} today` : name;
-    return `${name}, ${counts[id] ?? 0}${id === "projects" && stalled ? `, ${stalled} stalled` : ""}`;
-  };
+
   // While the rail is the active region its cursor is real keyboard focus, so screen readers follow it.
   const navRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (active) navRef.current?.querySelector<HTMLElement>(`[data-rail="${cursor}"]`)?.focus({ preventScroll: true });
   }, [active, cursor]);
+  // Focus arriving by Tab (or a click) makes the rail the active region, so the keys act on what looks focused.
+  const onFocusStop = (i: number) => () => {
+    setCursor(i);
+    if (!active) ui.setRegion("rail");
+  };
+  const stop = (e: Entry, extra = "") => {
+    const i = idx(e.key);
+    const current = !e.key.startsWith("h-") && ui.view === e.view;
+    return {
+      "data-rail": i,
+      tabIndex: cursor === i ? 0 : -1,
+      "aria-current": current ? ("page" as const) : undefined,
+      "aria-label": e.label,
+      className: `${extra} ${current ? "is-current" : ""} ${active && cursor === i ? "is-cursor" : ""}`,
+      onFocus: onFocusStop(i),
+      onClick: () => open(e),
+    };
+  };
 
   return (
     <nav ref={navRef} className={`rail ${active ? "is-active" : ""}`} aria-label="Lists">
-      <button type="button" data-rail={0} tabIndex={cursor === 0 ? 0 : -1} aria-current={ui.view === "inbox" ? "page" : undefined} className={`tray ${ui.view === "inbox" ? "is-current" : ""} ${active && cursor === 0 ? "is-cursor" : ""}`} onClick={() => ui.go("inbox")}>
-        <span className="tray-label">
+      <button type="button" {...stop(entries[0], "tray")}>
+        {/* The tape is the tray's lip; the stack of sheets sits on it. */}
+        <span className="tray-mark">
+          <InboxStack count={sig.inbox} />
           <Tape size="md">In-tray</Tape>
-          <span className="tray-count num" aria-label={`${counts.inbox} in the Inbox`}>
-            {counts.inbox}
-          </span>
         </span>
-        <Tray count={counts.inbox} />
+        <span className="tray-count num" aria-hidden="true">
+          {sig.inbox}
+        </span>
       </button>
-      {RAIL_SECTIONS.map((section) => (
-        <section key={section.title} className="rail-section" aria-label={section.title}>
-          {section.title !== "Settings" && <h2 className="rail-heading">{section.title}</h2>}
-          <ul className="rail-list">
-            {section.ids.map((id) => {
-              const i = items.indexOf(id);
-              const current = ui.view === id;
-              return (
-                <li key={id}>
-                  <button
-                    type="button"
-                    className={`rail-item ${current ? "is-current" : ""} ${active && cursor === i ? "is-cursor" : ""}`}
-                    data-rail={i}
-                    tabIndex={cursor === i ? 0 : -1}
-                    aria-current={current ? "page" : undefined}
-                    aria-label={railLabel(id)}
-                    onClick={() => ui.go(id)}
-                  >
-                    <span className="rail-name">{VIEW_TITLES[id]}</span>
-                    <span className="rail-meta">
-                      {id === "projects" && stalled > 0 && <span className="stamp tiny">{stalled} stalled</span>}
-                      {id === "review" ? (
-                        // Red only once a review is actually overdue; "never" on day one is a fact, not a scolding.
-                        <span className={`num ${reviewAge !== null && reviewAge > 7 ? "is-due" : ""}`}>{reviewAge === null ? "not yet" : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
-                      ) : id === "settings" ? null : (
-                        // Done counts today's completions, and says so; the other lists count what is in them.
-                        <span className="num">{id === "done" ? (counts.done ? `${counts.done} today` : "") : counts[id] || ""}</span>
-                      )}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
+      {/* A polite live region, so a new capture's count is announced. */}
+      <span className="visually-hidden" aria-live="polite">
+        {sig.inbox === 1 ? "1 item in the Inbox" : `${sig.inbox} items in the Inbox`}
+      </span>
+
+      {LISTS.map((group, gi) => (
+        <ul key={gi} className="rail-list">
+          {group.map((id) => {
+            const m = listMeta(id);
+            return (
+              <li key={id}>
+                <button type="button" {...stop(entries[idx(id)], "rail-item")}>
+                  <span className="rail-name">{VIEW_TITLES[id]}</span>
+                  <span className="rail-meta">
+                    {id === "projects" && sig.stalled > 0 && <span className="stamp tiny">{sig.stalled} stalled</span>}
+                    {m && <span className={`num ${m.tone === "due" ? "is-due" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       ))}
+
+      {/* The system check: is my system current? Each line goes where it is fixed. */}
+      <section className="rail-health" aria-labelledby="rail-health-h">
+        <h2 className="rail-heading" id="rail-health-h">
+          System check
+        </h2>
+        <ul className="rail-list">
+          {health.map((e) => (
+            <li key={e.key}>
+              <button type="button" {...stop(e, "rail-item rail-check")}>
+                {e.key === "h-review" && (
+                  <>
+                    <span className="rail-name">Weekly Review</span>
+                    <span className="rail-meta">
+                      <span className={`num ${reviewDue ? "is-due" : ""}`}>{reviewAge === null ? (reviewDue ? "due" : "not yet") : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
+                      <Kbd k="w" />
+                    </span>
+                  </>
+                )}
+                {e.key === "h-stalled" && (
+                  <>
+                    <span className="rail-name">Stalled projects</span>
+                    <span className="rail-meta">
+                      <span className="num is-due">{sig.stalled}</span>
+                    </span>
+                  </>
+                )}
+                {e.key === "h-chase" && (
+                  <>
+                    <span className="rail-name">Follow-ups due</span>
+                    <span className="rail-meta">
+                      <span className="num is-due">{sig.chase}</span>
+                    </span>
+                  </>
+                )}
+                {e.key === "h-oldest" && (
+                  <>
+                    <span className="rail-name">Oldest in tray</span>
+                    <span className="rail-meta">
+                      <span className={`num ${sig.oldestDays !== null && sig.oldestDays >= 7 ? "is-due" : ""}`}>{sig.oldestDays === 0 ? "today" : `${sig.oldestDays}d`}</span>
+                      <Kbd k="k" />
+                    </span>
+                  </>
+                )}
+              </button>
+            </li>
+          ))}
+          {health.length === 1 && <li className="rail-clear">Nothing stalled, overdue or waiting.</li>}
+        </ul>
+      </section>
+
+      <ul className="rail-list rail-settings">
+        <li>
+          <button type="button" {...stop(entries[entries.length - 1], "rail-item")}>
+            <span className="rail-name">Settings</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+  );
+}
+
+/** On a phone the rail becomes a bottom tab bar: the Inbox, Next, Waiting, and More for the rest. */
+export function TabBar() {
+  const ui = useUI();
+  const s = useStore((x) => x);
+  const [more, setMore] = useState(false);
+  const inbox = s.stuff.filter((x) => x.status === "inbox").length;
+  const rest: ViewId[] = ["projects", "someday", "reference", "review", "done", "areas", "settings"];
+  const go = (v: ViewId) => {
+    setMore(false);
+    if (v === "review") ui.startReview();
+    else ui.go(v);
+  };
+  const tab = (v: ViewId, label: ReactNode) => (
+    <button type="button" className={`tab ${ui.view === v ? "is-current" : ""}`} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
+      {label}
+    </button>
+  );
+  return (
+    <nav className="tabbar" aria-label="Lists">
+      {more && (
+        <ul className="tabbar-more">
+          {rest.map((v) => (
+            <li key={v}>
+              <button type="button" className={ui.view === v ? "is-current" : ""} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
+                {VIEW_TITLES[v]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {tab(
+        "inbox",
+        <>
+          <span className="tab-name">Inbox</span>
+          <span className="tab-count num">{inbox}</span>
+        </>,
+      )}
+      {tab("next", <span className="tab-name">Next</span>)}
+      {tab("waiting", <span className="tab-name">Waiting</span>)}
+      <button type="button" className={`tab ${more || rest.includes(ui.view) ? "is-current" : ""}`} aria-expanded={more} onClick={() => setMore(!more)}>
+        <span className="tab-name">{rest.includes(ui.view) && !more ? VIEW_TITLES[ui.view] : "More"}</span>
+      </button>
     </nav>
   );
 }
@@ -284,11 +435,14 @@ function rememberCommand(id: string) {
 }
 
 const PALETTE_SECTIONS = ["Recent", "This screen", "Go to and more", "Moving around"] as const;
-/** Which heading a command falls under while browsing the palette. */
+/**
+ * Which heading a command falls under while browsing the palette. "This screen" means registered by
+ * the screen or pane you're on; everything app-wide goes under "Go to and more"; cursor moves go last.
+ */
 function paletteSection(c: Command): 0 | 1 | 2 | 3 {
   if (recentIds().includes(c.id)) return 0;
-  const g = GENERIC_GROUPS[c.group];
-  return g === 3 ? 3 : g === 2 ? 2 : 1;
+  if (GENERIC_GROUPS[c.group] === 3) return 3;
+  return layerOf(c) === "global" ? 2 : 1;
 }
 
 export function Palette({ commands, close }: { commands: Command[]; close: () => void }) {
@@ -303,7 +457,7 @@ export function Palette({ commands, close }: { commands: Command[]; close: () =>
     const recent = recentIds();
     const rank = (c: Command) => {
       const r = recent.indexOf(c.id);
-      return r >= 0 ? r - 10 : (GENERIC_GROUPS[c.group] ?? 1);
+      return r >= 0 ? r - 10 : paletteSection(c);
     };
     if (!needle) return [...commands].sort((a, b) => rank(a) - rank(b));
     const words = needle.split(/\s+/);

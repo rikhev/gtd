@@ -24,6 +24,8 @@ export interface GridGroup<T> {
   color?: string;
   meta?: ReactNode;
   rows: T[];
+  /** No count after the label (for groups whose size says nothing, like a single settings row). */
+  hideCount?: boolean;
 }
 
 export const groupKey = (k: string) => `group:${k}`;
@@ -266,12 +268,14 @@ interface GridProps<T> {
   showHeaders?: boolean;
   /** Column headings; off for lists whose rows explain themselves (Settings). */
   head?: boolean;
+  /** Accessible name, when the view title alone doesn't say what the list is (e.g. a review step). */
+  label?: string;
 }
 
 /** DOM id for a row, so the focused grid can point screen readers at it. */
 const rowDomId = (listId: string, key: string) => `r-${listId}-${key}`.replace(/[^A-Za-z0-9_-]/g, "_");
 
-export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, active, rowClass, onOpen, empty, showHeaders, head = true }: GridProps<T>) {
+export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, active, rowClass, onOpen, empty, showHeaders, head = true, label }: GridProps<T>) {
   const box = useRef<HTMLDivElement>(null);
   // Shed the least useful columns rather than scroll sideways when space runs out.
   const [width, setWidth] = useState(0);
@@ -303,21 +307,23 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   }, [active, listId]);
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   const multi = showHeaders ?? groups.length > 1;
+  const showHead = head && (total > 0 || (multi && groups.some((g) => g.label)));
   return (
     <div
       ref={box}
       className={`grid ${active ? "is-active" : ""}`}
       data-list={listId}
       role="grid"
-      aria-labelledby="view-title"
+      aria-labelledby={label ? undefined : "view-title"}
+      aria-label={label}
       aria-multiselectable="true"
-      aria-rowcount={total}
+      aria-rowcount={total + (multi ? groups.filter((g) => g.label).length : 0) + (showHead ? 1 : 0)}
       aria-activedescendant={nav.focus ? rowDomId(listId, nav.focus) : undefined}
       tabIndex={active ? 0 : -1}
       style={{ ["--cols" as string]: template }}
     >
       {/* No column headings over an empty list: they would label nothing. */}
-      {head && (total > 0 || (multi && groups.some((g) => g.label))) && (
+      {showHead && (
         <div className="grid-head" role="row">
           {columns.map((c) => (
             <div key={c.key} role="columnheader" className={`gh gh-${c.key} ${c.align === "end" ? "end" : ""}`}>
@@ -356,7 +362,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                       {g.label}
                     </span>
                   )}
-                  <span className="group-count">{g.rows.length}</span>
+                  {!g.hideCount && <span className="group-count">{g.rows.length}</span>}
                   {g.meta && <span className="group-meta">{g.meta}</span>}
                 </div>
               )}

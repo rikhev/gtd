@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { completeActions, isChase, isStalled, lastReview, projectHealth, mutate, newAction, patchMany, plural, useMeta, useStore, load, notify } from "../store.ts";
-import { promptApiKey } from "../apiKey.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
-import { useCommands, type Command } from "../keys.ts";
+import { runWhenReady, useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, type Column } from "../components/Grid.tsx";
 import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tape } from "../components/bits.tsx";
 import { editors } from "../actionCommands.tsx";
@@ -86,6 +85,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     notify("New review started.");
   };
 
+  const projectNext = (pid: ID) => {
+    const mine = s.actions.filter((a) => a.project_id === pid).sort((a, b) => a.sort - b.sort);
+    const next = mine.find((a) => a.status === "next");
+    if (next) return next.title;
+    const waiting = mine.find((a) => a.status === "waiting");
+    return waiting ? `Waiting · ${waiting.waiting_who ?? "someone"}` : "";
+  };
   const flagFor = (id: ID) => flags?.find((f) => f.id === id && !dismissed.has(f.id));
   const projectTitle = (id: ID | null) => s.projects.find((p) => p.id === id)?.title ?? "";
 
@@ -100,7 +106,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             kind: "project",
             id: p.id,
             title: p.title,
-            info: isStalled(s, p) ? "Stalled: no next action" : `${plural(s.actions.filter((a) => a.project_id === p.id && ["next", "waiting"].includes(a.status)).length, "open action")}`,
+            // The GTD question for each project: what is its next action? (A waiting-only project names who.)
+            info: isStalled(s, p) ? "" : projectNext(p.id),
             date: p.due,
             flag: flagFor(p.id),
           }));
@@ -179,7 +186,12 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     await fetch("/api/review/complete", { method: "POST" });
     await load();
     clearSession();
-    notify(`Weekly review recorded ${formatLong(t)}. Your system is current.`);
+    // Say what is true: only a review with nothing left open earns "your system is current".
+    notify(
+      openSteps.length
+        ? `Weekly review recorded ${formatLong(t)}. ${plural(openSteps.length, "step")} left open.`
+        : `Weekly review recorded ${formatLong(t)}. Your system is current.`,
+    );
     ui.go("next");
   };
 
@@ -198,7 +210,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       },
     });
 
-  const inboxCount = s.stuff.filter((x) => x.status === "inbox").length;
+  const inboxItems = s.stuff.filter((x) => x.status === "inbox").sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const inboxCount = inboxItems.length;
 
   /** What is still open in each step: the number shown beside it, and what keeps it from being struck through. */
   const openCount = (id: StepId): number => {
@@ -245,7 +258,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "rv.next", label: "Next step", group: "Review", keys: ["ctrl+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
     { id: "rv.prev", label: "Previous step", group: "Review", keys: ["ctrl+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
-    { id: "rv.clarify", label: "Clarify the Inbox", group: "Review", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: () => ui.startClarify("review") },
+    { id: "rv.clarify", label: "Clarify", group: "Review", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: () => ui.startClarify("review") },
+    { id: "rv.clarifyclaude", label: "Clarify with Claude", group: "Review", keys: ["alt+k"], enabled: step.id === "clear" && inboxCount > 0, run: () => ui.startClarify("review", true) },
     {
       id: "rv.addnext",
       label: "Add a next action to this project",
@@ -263,8 +277,18 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       hidden: true,
       run: () => setStepIdx(i),
     })),
+    {
+      id: "rv.file",
+      label: "File the Inbox",
+      group: "Review",
+      keys: ["v"],
+      enabled: step.id === "clear" && inboxCount > 0,
+      run: () => {
+        ui.go("inbox");
+        runWhenReady("inbox.file");
+      },
+    },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
-    { id: "rv.key", label: "Add an API key (turns on Claude's flags)", group: "Review", keys: [], enabled: !meta.hasKey, run: () => promptApiKey(ui) },
     { id: "rv.ask", label: flags ? "Ask Claude to check your lists again" : "Ask Claude to check your lists", group: "Review", keys: ["shift+k"], enabled: meta.hasKey && !checking, run: askClaude },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.accept", label: "Accept Claude's suggestion", group: "Review", keys: ["mod+enter"], enabled: Boolean(focusRow?.flag), run: acceptSuggestion },
@@ -313,11 +337,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health={healthOf(r.id)} /> : <Marker flagged={false} />) },
     {
       key: "subject",
-      label: step.title,
+      // Name what the rows are; the step title is already on the tab and the heading.
+      label: ({ projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", upcoming: "Item" } as Record<string, string>)[step.id] ?? "",
       width: "minmax(220px, 1fr)",
       render: (r) => (
         <span className="subject">
           <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title || "Untitled"}</span>
+          {step.id === "projects" && r.kind === "project" && isStalled(s, s.projects.find((p) => p.id === r.id)!) && <span className="stamp">Stalled</span>}
           {r.flag && (
             <span className="flag-note">
               <Sparkles size={12} strokeWidth={2} aria-hidden />
@@ -329,7 +355,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </span>
       ),
     },
-    { key: "info", label: step.id === "upcoming" ? "What" : "", width: "minmax(120px, 220px)", render: (r) => <span className={`muted-text ${r.info.startsWith("Stalled") ? "stamp" : ""}`}>{r.info}</span> },
+    { key: "info", label: ({ projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
     { key: "date", label: ({ projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" ? "plain" : "due"} /> },
   ];
@@ -372,7 +398,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         <p className="review-claude small" aria-live="polite">
           <Sparkles size={12} strokeWidth={2} aria-hidden />
           {!meta.hasKey
-            ? "Claude's flags are off until you add an API key (⌘K › Add an API key). The review works without them."
+            ? "Claude's flags are off until you add an API key (⌘K › Add a Claude API key). The review works without them."
             : checking
               ? "Claude is checking your lists for stalled, stale and vague items…"
               : flagError
@@ -390,22 +416,21 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           <p className="big-count">
             <span className="num">{inboxCount}</span> {inboxCount === 1 ? "item" : "items"} in the Inbox
           </p>
-          <p className="muted-text">
-            {inboxCount ? (
-              <>
-                Clarify them now, then move to the next step.
-              </>
-            ) : (
-              <>
-                Clear. Move on to the next step.
-              </>
-            )}
-          </p>
+          {/* The actual pile, so its weight can be judged without leaving the review. */}
+          {inboxCount > 0 && (
+            <ul className="review-pile">
+              {inboxItems.slice(0, 8).map((x) => (
+                <li key={x.id}>{x.text.split("\n")[0].trim() || "Untitled"}</li>
+              ))}
+              {inboxCount > 8 && <li className="muted-text">and {inboxCount - 8} more</li>}
+            </ul>
+          )}
+          <p className="muted-text">{inboxCount ? "Clarify or file them now, then move to the next step." : "Clear. Move on to the next step."}</p>
         </div>
       ) : step.id === "finish" ? (
         <div className="review-panel review-finish">
           {/* The end of the week leads with what you cleared, then what is still open. */}
-          <Tape size="md">{openSteps.length ? "Reviewed" : "Everything reviewed"}</Tape>
+          <Tape size="md">{openSteps.length ? "Ready to record" : "Everything reviewed"}</Tape>
           <p className="clarify-msg">
             {clearSteps} of {STEPS.length - 1} steps clear{tally.length ? ` · ${tally.join(" · ")}` : ""}.
           </p>
@@ -424,6 +449,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       ) : (
         <Grid
           listId={`review:${step.id}`}
+          label={`Weekly Review, ${step.title}`}
           columns={columns}
           groups={[{ key: step.id, label: "", rows }]}
           getKey={(r) => r.key}
@@ -440,7 +466,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           ...(meta.hasKey && !flags && step.id !== "finish" ? [{ k: "shift+k", label: "Ask Claude" }] : []),
           { k: "ctrl+,", label: "Previous" },
           ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "n", label: "Add next action" }] : []),
-          ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify the Inbox" }] : []),
+          ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
           ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
           ...(step.id !== "clear" && step.id !== "finish" ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
           ...(focusRow?.flag ? [{ k: "mod+enter", label: "Accept Claude's fix" }] : []),

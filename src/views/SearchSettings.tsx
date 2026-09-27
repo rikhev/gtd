@@ -111,6 +111,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       {
         key: "claude",
         label: "Claude",
+        hideCount: true,
         rows: [{ key: "apikey", kind: "apikey" as const, id: "apikey", text: "API key", status: meta.hasKey ? "set" : "missing" }],
       },
       {
@@ -146,7 +147,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     {
       id: "set.key",
-      label: meta.hasKey ? "Change the API key" : "Add an API key",
+      label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key",
       group: "Settings",
       keys: ["enter", "f2"],
       enabled: cur?.kind === "apikey",
@@ -246,7 +247,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ) : r.kind === "apikey" ? (
           <span className="subject">
             <span className="subject-text strong">API key</span>
-            <span className="subject-more">{meta.hasKey ? `Stored in the server's .env; the browser only sees the last four characters. Clarify and Claude's review flags use Claude Sonnet 5.` : "Needed for Clarify and Claude's review flags. The Weekly Review works without it."}</span>
+            <span className="subject-more">{meta.hasKey ? `Stored in the server's .env; the browser only sees the last four characters. Clarify and Claude's review flags use Claude Sonnet 5.` : "Lets Claude propose projects and actions in Clarify and flag your lists in the Weekly Review. Both work without it."}</span>
           </span>
         ) : r.kind === "context" ? (
           <ContextCode ctx={{ id: r.id, name: r.text, color: r.color!, sort: 0 }} />

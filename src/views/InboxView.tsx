@@ -6,7 +6,7 @@ import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, type Column } from "../components/Grid.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { askWaitingOn, destinationItems } from "../actionCommands.tsx";
+import { askContext, askWaitingOn, destinationItems } from "../actionCommands.tsx";
 import { formatDate } from "../../shared/dates.ts";
 import type { ID, Op, Stuff } from "../../shared/types.ts";
 
@@ -67,7 +67,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
   const trashNow = (ids: ID[]) => mutate(`${n(ids)} trashed`, ids.map((id) => ({ type: "patch", table: "stuff", id, data: { status: "trashed" } })));
 
   /**
-   * File without Claude: the whole clarify decision in one picker. A list, an existing project,
+   * File: the whole clarify decision in one picker. A list, an existing project,
    * a new project (type its name), done now, or trash.
    */
   const quickFile = (ids: ID[]) => {
@@ -75,25 +75,31 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     ui.openPicker({
       type: "list",
       title: "File as",
+      // GTD order: the lists, then "under two minutes? do it now" (or trash it), then the projects.
       items: [
-        ...destinationItems(),
+        ...destinationItems().filter((it) => it.section === "lists"),
         { id: "__done", label: "Done already (two-minute rule)", section: "now" },
         { id: "__trash", label: "Trash", section: "now" },
+        ...destinationItems().filter((it) => it.section === "projects"),
       ],
+      placeholder: "Filter, or name a new project",
       createLabel: (q) => `New project “${q}”, with this as its first action`,
       onCreate: (q) => {
         const p = newProject({ title: q });
-        file(p.id, undefined, [{ type: "create", table: "projects", row: { ...p } }], `project “${q}”`);
+        // A project's first action is a next action, so it needs a context too.
+        askContext(ui, `Context for the first action of “${q}”`, (ctx, extra) => file(p.id, undefined, [{ type: "create", table: "projects", row: { ...p } }, ...extra], `project “${q}”`, ctx));
       },
       onPick: (target) => {
         if (!target) return;
         if (target === "__done") doneNow(ids);
         else if (target === "__trash") trashNow(ids);
         else if (target === "waiting") askWaitingOn(ui, null, (who) => file(target, who));
-        else file(target);
+        else if (target === "someday" || target === "reference") file(target);
+        // A next action (on its own or in a project) always gets a context.
+        else askContext(ui, "Context", (ctx, extra) => file(target, undefined, extra, undefined, ctx));
       },
     });
-    function file(target: string, who?: string, first: Op[] = [], into?: string) {
+    function file(target: string, who?: string, first: Op[] = [], into?: string, contextId?: ID) {
         const ops: Op[] = [...first];
         for (const st of getState().stuff.filter((x) => ids.includes(x.id))) {
           const title = stuffTitle(st);
@@ -113,6 +119,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
               project_id: isList ? null : target,
               waiting_since: target === "waiting" ? new Date().toISOString().slice(0, 10) : null,
               waiting_who: target === "waiting" ? (who ?? null) : null,
+              context_id: contextId ?? null,
             });
             ops.push({ type: "create", table: "actions", row: { ...a } });
             owner = { kind: "action", id: a.id };
@@ -127,10 +134,10 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
   const commands: Command[] = [
     ...nav.commands,
     { id: "inbox.new", label: "Capture", group: "Inbox", keys: ["n"], run: ui.focusCapture },
-    { id: "inbox.clarify", label: "Clarify with Claude", group: "Inbox", keys: ["k"], run: ui.startClarify, enabled: rows.length > 0 },
+    { id: "inbox.clarify", label: "Clarify", group: "Inbox", keys: ["k"], run: () => ui.startClarify(), enabled: rows.length > 0 },
     { id: "inbox.open", label: "Open details", group: "Inbox", keys: ["enter"], run: () => focusId && ui.openDetail({ kind: "stuff", id: focusId }, true), enabled: Boolean(focusId) },
     { id: "inbox.rename", label: "Edit text", group: "Inbox", keys: ["f2"], run: () => focusId && setEditing(focusId), enabled: Boolean(focusId) },
-    { id: "inbox.file", label: "File without Claude", group: "Inbox", keys: ["v"], run: () => quickFile(nav.targets()), enabled: Boolean(focusId) },
+    { id: "inbox.file", label: "File", group: "Inbox", keys: ["v"], run: () => quickFile(nav.targets()), enabled: Boolean(focusId) },
     {
       id: "inbox.done",
       label: "Done already (two-minute rule)",

@@ -61,6 +61,26 @@ export function askWaitingOn(ui: UI, current: string | null, apply: (who: string
   });
 }
 
+/**
+ * A next action always gets a context when it's clarified. Asks for one (existing, or type a new
+ * name); `apply` receives the context id and any op that creates it. Esc applies nothing.
+ */
+export function askContext(ui: UI, title: string, apply: (contextId: ID, extra: Op[]) => void) {
+  ui.openPicker({
+    type: "list",
+    title,
+    items: contextItems(),
+    mustChoose: true,
+    placeholder: "Where can you do it? Pick or type a context",
+    createLabel: (q) => `New context “${q.startsWith("@") ? q : "@" + q}”`,
+    onCreate: (q) => {
+      const { id, op } = createContextOp(q);
+      apply(id, [op]);
+    },
+    onPick: (id) => id && apply(id, []),
+  });
+}
+
 export function contextItems() {
   return getState()
     .contexts.slice()

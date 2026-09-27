@@ -76,7 +76,8 @@ export interface UI {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   /** Start Clarify; Esc, Stop and the end state return to `returnTo` (the Inbox by default). */
-  startClarify: (returnTo?: ViewId) => void;
+  /** Clarify the Inbox, by hand, or with Claude's proposals when `withClaude`. */
+  startClarify: (returnTo?: ViewId, withClaude?: boolean) => void;
   leaveClarify: () => void;
   clarifyReturn: () => ViewId;
   startReview: () => void;

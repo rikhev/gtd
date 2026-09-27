@@ -18,6 +18,10 @@
   --folder-2: #e6edf7;
   --folder-ink: #1d3456;
   --tape: #1b2a41;
+  --rail-current: var(--paper);
+  --stamp-on-steel: #9c2716;
+  --tray-paper: var(--sheet);
+  --tray-paper-edge: var(--ink-3);
   --tape-ink: #f2f5fa;
   --accent: #1f5fcc;
   --accent-contrast: #ffffff;
@@ -52,6 +56,10 @@
     --folder-2: #1b2433;
     --folder-ink: #c9d8ef;
     --tape: #2a3d5c;
+    --rail-current: #33363d;
+    --stamp-on-steel: #f2917f;
+    --tray-paper: #aeb3ba; /* lighter than the drawer, so paper reads as paper */
+    --tray-paper-edge: #5c6168;
     --tape-ink: #e8eef8;
     --accent: #5b95f5;
     --accent-contrast: #0b1426;
@@ -251,30 +259,33 @@ a:hover {
 .rail {
   grid-row: 1;
   background: var(--steel);
-  border-right: 1px solid var(--steel-2);
+  border-right: 1px solid var(--rule-strong);
   display: flex;
   flex-direction: column;
+  gap: 10px;
   padding: 14px 10px;
   overflow: auto;
   color: var(--steel-ink);
 }
 
+/* The Inbox: the IN-TRAY tape as the tray's lip, a stack of sheet edges on it, and the count. */
 .tray {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 8px 10px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
   border-radius: 4px;
-  margin-bottom: 18px;
-  outline-offset: 0;
+  text-align: left;
 }
 .tray:hover {
   background: var(--steel-2);
 }
-.tray-label {
+.tray-mark {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  flex: none; /* the tape keeps its full width at any count */
 }
 .tray-count {
   font-family: var(--font-label);
@@ -283,84 +294,45 @@ a:hover {
   line-height: 1;
   color: var(--ink);
 }
-/* The in-tray: a solid desk letter tray in three-quarter view, in the folder blues of the project tabs,
-   outlined in folder ink. It is opaque: the paper shows only above its walls. Paper only. */
-.tray-svg {
-  width: 100%;
-  height: auto;
-  max-width: 176px;
-  overflow: visible;
+/* Sheets: a 1px paper face over a 1px edge line, 2px apart, each shuffled a little. */
+/* The stack's room is reserved (8 sheets and a heap), so the rail never shifts as the Inbox fills. */
+.stack {
+  position: relative;
+  display: block;
+  height: 20px;
 }
-.tray-svg .t-back {
-  fill: var(--folder-2);
+.stack-sheet {
+  position: absolute;
+  height: 2px;
+  background: var(--tray-paper);
+  border-bottom: 1px solid var(--tray-paper-edge);
 }
-.tray-svg .t-floor,
-.tray-svg .t-side {
-  fill: color-mix(in srgb, var(--folder) 45%, var(--folder-2));
+/* Past 8 items the top sheet heaps: askew and lifted, a cue the count alone doesn't give. */
+.stack-sheet.is-heap {
+  transform: translateY(-3px) rotate(-3deg);
 }
-.tray-svg .t-line {
-  fill: none;
-  stroke: var(--folder-ink);
-  stroke-width: 2; /* whole pixels: crisp on 1x screens, where 1.5px landed on half pixels */
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
+.stack-sheet.is-new {
+  animation: sheet-in 180ms var(--ease) both;
 }
-.tray-svg .t-edge {
-  fill: none;
-  stroke: var(--folder-ink);
-  stroke-width: 1;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-.tray-svg .t-front {
-  fill: var(--folder);
-}
-/* Page edges in the lighter rule grey, so a full pile reads as paper rather than a dark block. */
-.tray-svg .paper-edge {
-  fill: var(--sheet);
-  stroke: var(--rule-strong);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-/* The top sheet carries writing: a heading in pen navy, then lines of text in ink-3. */
-.tray-svg .paper-heading,
-.tray-svg .paper-text {
-  fill: none;
-  stroke-linecap: round;
-  vector-effect: non-scaling-stroke;
-}
-.tray-svg .paper-heading {
-  stroke: var(--pen);
-  stroke-width: 1.75;
-}
-.tray-svg .paper-text {
-  stroke: var(--ink-3);
-  stroke-width: 1;
-}
-.tray-svg .paper {
-  fill: var(--sheet);
-  stroke: var(--ink-3);
-  stroke-width: 1;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-.tray-svg .sheet {
-  animation: drop 280ms var(--ease) both;
-}
-@keyframes drop {
+@keyframes sheet-in {
   from {
-    transform: translateY(-5px);
+    transform: translateY(-4px);
     opacity: 0;
   }
 }
 
-.rail-section + .rail-section {
-  margin-top: 16px;
+/* Lists: two runs split by a hairline, no stage headings. */
+.rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.rail-section:last-child {
-  margin-top: auto;
-  padding-top: 16px;
+.rail-list + .rail-list {
+  padding-top: 10px;
+  border-top: 1px solid var(--rule-strong);
 }
 .rail-heading {
   margin: 0 0 4px;
@@ -371,14 +343,6 @@ a:hover {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
-}
-.rail-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 .rail-item {
   width: 100%;
@@ -397,11 +361,15 @@ a:hover {
 }
 .rail-name {
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rail-meta {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: none;
   color: var(--ink-2);
   font-size: 12px;
 }
@@ -409,18 +377,48 @@ a:hover {
   color: var(--stamp);
   font-weight: 600;
 }
-/* The open list is the sheet pulled forward out of the drawer: same type, lifted onto paper. */
+.rail-meta .is-quiet {
+  color: var(--ink-3);
+}
+.rail-meta .kbd {
+  font-size: 11px;
+  line-height: 14px;
+  padding: 0 4px;
+  min-width: 16px;
+  color: var(--ink-2);
+}
+/* On a hovered row the stamp red darkens (lightens in dark) so small red text keeps AA on steel-2. */
+.rail-item:hover .is-due,
+.rail-item:hover .stamp {
+  color: var(--stamp-on-steel);
+  border-color: var(--stamp-on-steel);
+}
+
+/* The system check follows the lists: is my system current? Settings alone sits at the foot. */
+.rail-health {
+  padding-top: 10px;
+  border-top: 1px solid var(--rule-strong);
+}
+.rail-clear {
+  padding: 4px 10px 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.rail-settings {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule-strong);
+}
+
+/* The open list: the sheet pulled forward (lighter than the drawer in both themes), with a hairline edge. */
 .rail-item.is-current,
 .tray.is-current {
-  background: var(--paper);
+  background: var(--rail-current);
   color: var(--ink);
-  box-shadow: 0 1px 1.5px rgb(0 0 0 / 0.16);
+  box-shadow: inset 0 0 0 1px var(--rule-strong), 0 1px 1.5px rgb(0 0 0 / 0.16);
 }
 .rail-item.is-current .rail-name {
   font-weight: 650;
-}
-.rail-item.is-current .rail-meta {
-  color: var(--ink-2);
 }
 .rail-item.is-cursor,
 .tray.is-cursor {
@@ -429,7 +427,12 @@ a:hover {
 }
 .rail-item.is-current.is-cursor,
 .tray.is-current.is-cursor {
-  background: var(--paper);
+  background: var(--rail-current);
+}
+
+/* The phone tab bar replaces the rail below 820px. */
+.tabbar {
+  display: none;
 }
 
 /* ------------------------------------------------------------------ */
@@ -868,9 +871,11 @@ a:hover {
 .date.is-soon {
   font-weight: 650;
 }
+/* On the selected row the text keeps contrast in both themes; the red stays as the underline. */
 .is-focus .date.is-overdue {
   color: var(--select-ink);
-  text-decoration: underline 2px;
+  text-decoration: underline 2px var(--stamp);
+  text-underline-offset: 3px;
 }
 
 .energy {
@@ -895,7 +900,7 @@ a:hover {
   background: var(--ink);
 }
 .is-focus .energy i {
-  background: rgb(0 0 0 / 0.12);
+  background: color-mix(in srgb, var(--select-ink) 22%, transparent); /* visible on both selection blues */
 }
 .is-focus .energy i.on {
   background: var(--select-ink);
@@ -1828,7 +1833,7 @@ a:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 0;
+  gap: 6px 18px; /* spacing, not "·" separators, so a wrapped line never starts with a stray dot */
   margin: 12px 0 0;
   padding-top: 10px;
   border-top: 1px solid var(--rule);
@@ -1846,10 +1851,6 @@ a:hover {
   text-transform: none;
   margin-right: 3px;
   color: var(--ink-2);
-}
-.key-hints-sep {
-  margin: 0 10px;
-  color: var(--rule-strong);
 }
 .clarify-msg {
   font-size: 15px;
@@ -2012,46 +2013,74 @@ a:hover {
 @media (max-width: 820px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
   .rail {
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border-right: 0;
-    border-bottom: 1px solid var(--steel-2);
-    overflow-x: auto;
-  }
-  .tray {
-    flex-direction: row;
-    align-items: center;
-    margin: 0;
-    padding: 4px 6px;
-    flex: none;
-  }
-  .tray-svg {
     display: none;
   }
-  .tray-count {
+  /* A bottom tab bar: Inbox with its count, Next, Waiting, and More for the rest. */
+  .tabbar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    padding: 0 6px env(safe-area-inset-bottom, 0px);
+    background: var(--steel);
+    border-top: 1px solid var(--rule-strong);
+  }
+  .tab {
+    flex: 1;
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--ink-2);
+    font-weight: 500;
+  }
+  .tab.is-current {
+    color: var(--ink);
+    font-weight: 650;
+    box-shadow: inset 0 2px 0 var(--ink);
+  }
+  .tab-count {
+    font-family: var(--font-label);
+    font-weight: 700;
     font-size: 22px;
-    margin-left: 8px;
+    color: var(--ink);
   }
-  .rail-list {
-    flex-direction: row;
-    gap: 4px;
-  }
-  .rail-heading {
-    display: none;
-  }
-  .rail-section + .rail-section,
-  .rail-section:last-child {
+  .tabbar-more {
+    position: absolute;
+    right: 6px;
+    bottom: calc(100% + 6px);
+    list-style: none;
     margin: 0;
-    padding: 0 0 0 8px;
-    border-left: 1px solid var(--steel-2);
+    padding: 6px;
+    min-width: 200px;
+    background: var(--sheet);
+    border: 1px solid var(--rule-strong);
+    border-radius: 5px;
+    box-shadow: var(--shadow);
   }
-  .rail-item {
-    white-space: nowrap;
+  .tabbar-more button {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    text-align: left;
+    border-radius: 3px;
+  }
+  .tabbar-more button.is-current {
+    font-weight: 650;
+    background: var(--select);
+    color: var(--select-ink);
+  }
+  .list-region {
+    padding-bottom: 88px;
+  }
+  .toast {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
   .topbar {
     padding: 7px 12px;
@@ -2102,7 +2131,7 @@ a:hover {
   }
   .detail {
     position: fixed;
-    inset: auto 0 0 0;
+    inset: auto 0 calc(52px + env(safe-area-inset-bottom, 0px)) 0; /* sits above the tab bar */
     width: auto;
     height: 72dvh;
     z-index: 40;
@@ -2262,4 +2291,60 @@ a:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Get clear lists the pile itself: plain lines, like the stuff in the tray. */
+.review-pile {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: min(560px, 100%);
+  border-top: 1px solid var(--rule);
+}
+.review-pile li {
+  height: var(--row);
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A detail field's label with its key cap on the right. */
+.field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.field-key {
+  font-size: 11px;
+  line-height: 13px;
+  min-width: 16px;
+  padding: 0 4px;
+  color: var(--ink-3);
+}
+
+/* On a 1024-ish screen the detail pane gives up 40px, so the list beside it keeps its project column. */
+@media (max-width: 1100px) and (min-width: 821px) {
+  .detail {
+    width: 340px;
+  }
+}
+
+/* In dark mode the navy tape on the graphite rail gets a hairline edge, so it reads as tape, not a dim blob. */
+@media (prefers-color-scheme: dark) {
+  .rail .tape {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--folder) 70%, transparent);
+  }
+}
+
+/* A next action without a context can't be accepted: its Context chip says so in stamp red. */
+.p-field.is-needed {
+  border-color: var(--stamp);
+}
+.p-needed {
+  color: var(--stamp);
+  font-weight: 600;
 }

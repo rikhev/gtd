@@ -260,7 +260,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   const subject: Column<Action> = {
     key: "subject",
     label: "Subject",
-    width: "minmax(220px, 1fr)",
+    // 180px minimum leaves room for the project beside the detail pane at 1024px ("whose action is this?").
+    width: "minmax(180px, 1fr)",
     render: (a) =>
       act.editing === a.id ? (
         <InlineEdit value={a.title} placeholder={SUBJECT_HINT[mode]} onDone={(v) => act.commitTitle(a.id, v)} />

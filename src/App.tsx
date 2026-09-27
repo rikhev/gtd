@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
-import { Rail, RAIL, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
+import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { ActionsView } from "./views/ActionsView.tsx";
@@ -44,6 +44,7 @@ export default function App() {
   const [revealTarget, setRevealTarget] = useState<Target | null>(null);
   const [clarifyRun, setClarifyRun] = useState(0);
   const clarifyReturn = useRef<ViewId>("inbox");
+  const clarifyWithClaude = useRef(false);
   const prevView = useRef<ViewId>("next");
   const jumpOrigin = useRef<{ actionId: string; projectId: string } | null>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
@@ -97,6 +98,9 @@ export default function App() {
       setRegion: (r) => {
         setRegion(r);
         if (r !== "detail") (document.activeElement as HTMLElement | null)?.blur?.();
+        // Coming back to the list always puts focus on it (after capture, search, the detail pane),
+        // even when the list was already the active region, so the cursor and screen readers never land on the page.
+        if (r === "list") requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
       },
       detail,
       openDetail: (t, focus) => {
@@ -121,8 +125,9 @@ export default function App() {
       },
       searchQuery,
       setSearchQuery,
-      startClarify: (returnTo?: ViewId) => {
+      startClarify: (returnTo?: ViewId, withClaude = false) => {
         clarifyReturn.current = returnTo ?? "inbox";
+        clarifyWithClaude.current = withClaude;
         setClarifyRun((n) => n + 1);
         go("clarify");
       },
@@ -189,25 +194,28 @@ export default function App() {
       run: () => (r.id === "review" ? ui.startReview() : go(r.id)),
       hidden: i > 8,
     })),
-    { id: "go.settings", label: "Go to Settings (rules, contexts, export)", group: "Go to", run: () => go("settings") },
+    { id: "go.settings", label: "Go to Settings (rules, contexts, export)", group: "Go to", keys: ["ctrl+shift+0"], inInput: true, run: () => go("settings") },
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
     { id: "g.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     { id: "g.help", label: "Keys on this screen", group: "Help", keys: ["?"], run: () => setHelp(true) },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
-    { id: "g.clarify", label: `Clarify the Inbox with Claude${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], run: ui.startClarify },
+    // K clarifies (you decide, one item at a time); ⌥K clarifies with Claude's proposals.
+    { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
+    { id: "g.clarifyclaude", label: `Clarify with Claude${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["alt+k"], run: () => ui.startClarify(undefined, true) },
     { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["w"], run: ui.startReview },
     { id: "g.region", label: "Next region (lists → items → details)", group: "Move", keys: ["alt+tab", "ctrl+f6"], inInput: true, run: () => cycleRegion(1) },
     { id: "g.regionback", label: "Previous region", group: "Move", keys: ["alt+shift+tab", "ctrl+shift+f6"], inInput: true, run: () => cycleRegion(-1) },
     { id: "g.detailtoggle", label: detail ? "Close details" : "Open details", group: "Move", run: () => (detail ? ui.openDetail(null) : undefined) },
     { id: "g.paste", label: "Paste into the Inbox", group: "Capture", displayKeys: ["mod+v"], run: () => notify("Press ⌘V with a list focused to paste into the Inbox") },
-    { id: "g.upload", label: "Upload files to the Inbox", group: "Capture", keys: ["mod+o"], run: () => document.querySelector<HTMLInputElement>("#global-upload")?.click() },
+    { id: "g.upload", label: "Upload files to the Inbox", group: "Capture", keys: ["mod+o"], hidden: view === "inbox", run: () => document.querySelector<HTMLInputElement>("#global-upload")?.click() },
     { id: "g.exportzip", label: "Export everything as Markdown (.zip)", group: "Data", run: () => (window.location.href = "/api/export/zip") },
     { id: "g.exportjson", label: "Export everything as JSON", group: "Data", run: () => (window.location.href = "/api/export/json") },
     { id: "g.rules", label: "Rules Claude follows", group: "Settings", run: () => go("settings") },
-    { id: "g.apikey", label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key", group: "Settings", run: () => promptApiKey(ui) },
-    { id: "g.clarifyfresh", label: "Clarify again from scratch (ignore cached proposals)", group: "Clarify", run: () => {
-      void fetch("/api/clarify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fresh: true }) }).then(() => ui.startClarify());
+    // One API-key command at a time: on the Settings screen its own row command takes over.
+    { id: "g.apikey", label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key", group: "Settings", hidden: view === "settings", run: () => promptApiKey(ui) },
+    { id: "g.clarifyfresh", label: "Clarify again from scratch (ignore cached proposals)", group: "Clarify", enabled: meta.hasKey, run: () => {
+      void fetch("/api/clarify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fresh: true }) }).then(() => ui.startClarify(undefined, true));
     } },
     { id: "g.reload", label: "Reload lists from disk", group: "Data", run: () => void load().then(() => notify("Reloaded")) },
     { id: "g.signout", label: "Sign out", group: "Account", enabled: meta.authRequired, run: () => void signOut() },
@@ -291,7 +299,7 @@ export default function App() {
       body = <AreasView regionActive={listActive} />;
       break;
     case "clarify":
-      body = <ClarifyView key={clarifyRun} regionActive={listActive} />;
+      body = <ClarifyView key={clarifyRun} regionActive={listActive} withClaude={clarifyWithClaude.current} />;
       break;
     case "review":
       body = <ReviewView regionActive={listActive} />;
@@ -308,6 +316,7 @@ export default function App() {
     <UIContext.Provider value={ui}>
       <div className={`app ${detail ? "has-detail" : ""}`} data-region={region}>
         <Rail active={region === "rail" && !picker && !palette && !help} />
+        <TabBar />
         <div className="main">
           <header className="topbar">
             <CaptureBar ref={captureRef} onDone={() => ui.setRegion("list")} />

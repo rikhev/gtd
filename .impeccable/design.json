@@ -484,7 +484,7 @@
       {
         "name": "sheet-drop",
         "value": "260ms, 30ms stagger",
-        "purpose": "Sheets drop into the in-tray drawing."
+        "purpose": "A newly captured sheet slides onto the in-tray stack."
       },
       {
         "name": "status-note",
@@ -594,7 +594,7 @@
       "Dense, keyboard-driven grid: 30px rows, 13px system type, tabular numerals everywhere.",
       "Label-maker tape (Barlow Condensed caps on navy) names lists, projects, areas and page sections.",
       "One corporate blue accent plus a pale blue selection fill, used only to show position and focus.",
-      "Physical marks are drawn, not textured: pen circle, pen strike, letter tray, rubber stamp, traffic-light lamp.",
+      "Physical marks are drawn, not textured: pen circle, pen strike, sheet stack on the in-tray tape, rubber stamp, traffic-light lamp.",
       "Light office-white and graphite-dark themes, both designed in their own right."
     ],
     "rules": [

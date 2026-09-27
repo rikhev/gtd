@@ -26,7 +26,7 @@ colors:
   tick: "#e2e7eb"
   stamp: "#b3301c"
   pen: "#1b2340"
-  shade-on-select: "rgb(0 0 0 / 0.12)"
+  shade-on-select: "color-mix(in srgb, #0f1b30 22%, transparent)"
   cap-edge-on-select: "rgb(0 0 0 / 0.35)"
 typography:
   headline:
@@ -221,7 +221,7 @@ components:
 
 **Creative North Star: "The Desk Kit Grid"**
 
-The app is a GTD paper desk kit rebuilt as a keyboard grid. The Inbox is a solid desk letter tray in the folder blues; plain sheets of paper pile up in it as the count grows. Projects and groups are blue-grey folders. Lists, projects and areas carry label-maker tape. Done is a pen stroke. Flagged-for-today is a hand-drawn pen circle. Project health is a small traffic-light lamp. The metaphor lives in colour, condensed caps and a handful of drawn marks, never in paper texture, so density always wins. Rows are 30px, the body type is 13px, and a 1440 viewport holds more than twenty working rows.
+The app is a GTD paper desk kit rebuilt as a keyboard grid. The Inbox is its navy IN-TRAY tape with a flat stack of sheet edges on it, one sheet per item. Projects and groups are blue-grey folders. Lists, projects and areas carry label-maker tape. Done is a pen stroke. Flagged-for-today is a hand-drawn pen circle. Project health is a small traffic-light lamp. The metaphor lives in colour, condensed caps and a handful of drawn marks, never in paper texture, so density always wins. Rows are 30px, the body type is 13px, and a 1440 viewport holds more than twenty working rows.
 
 The ground is cool office white and the ink is near-black. Steel grey carries the rail, rules and secondary text. Blue-grey appears only on folder surfaces, and label tape is navy. One corporate blue accent marks focus: input and `:focus-visible` rings, the hairline around the selected row and the current Clarify cell. A pale blue selection fill marks where the owner is. Rubber-stamp red is kept for states that need attention, and green and amber join it only as project-health lamps. The dark theme is a graphite desk at night. It keeps every role and follows `prefers-color-scheme`.
 
@@ -232,7 +232,7 @@ The build rejects the category default of an airy sidebar and rounded cards. Sur
 - Label-maker tape (Barlow Condensed caps on navy) names lists, projects, areas and page sections.
 - One corporate blue accent plus a pale blue selection fill, used only to show position and focus.
 - Physical marks are drawn, not textured: pen circle, pen strike, rubber stamp, traffic-light lamp.
-- Everything is flat, the in-tray included: it is a line drawing in the same 1px rules and folder blues as the rest of the UI.
+- Everything is flat, the in-tray included: the tape is its lip and the paper is a stack of 1px sheet edges, the same rule language as the rest of the UI.
 - Light office-white and graphite-dark themes, both designed in their own right.
 
 ## Colors
@@ -294,11 +294,11 @@ The palette is office stationery: cool paper, near-black ink, steel furniture, b
 
 The desktop layout is a two-column app grid: a 212px steel rail and a fluid main column, running the full height of the window (there is no status bar). The main column stacks a 44px top bar (capture line flexing to fill, with a 220px search that widens to 320px when open) and a view head (16px 20px 8px). Below that, the work area holds the scrolling list region (20px side padding) and, when opened, a 380px detail pane on the right.
 
-The grid uses CSS grid columns set per view through `--cols`: a 30px marker column, a `minmax(220px, 1fr)` subject, then fixed data columns (context 112px, due 84px, start 80px, time 52px right-aligned, energy). Cells pad 8px horizontally. The grid head is sticky, 28px tall, and underlined in `rule-strong`. Plain group heads are 32px with 10px above. Folder group heads are 34px with 18px above; the tape is lifted 6px as a tab and the chevron and count sit on its centre line. When the list gets narrow (for instance beside the detail pane at 1024px) it sheds its least useful columns in a fixed order (start, energy, time, project on Next Actions; open, area, next action on Projects; since, project on Waiting For) instead of scrolling sideways; the grid never goes below 320px.
+The grid uses CSS grid columns set per view through `--cols`: a 30px marker column, a `minmax(220px, 1fr)` subject, then fixed data columns (context 112px, due 84px, start 80px, time 52px right-aligned, energy). Cells pad 8px horizontally. The grid head is sticky, 28px tall, and underlined in `rule-strong`. Plain group heads are 32px with 10px above. Folder group heads are 34px with 18px above; beside the detail pane on 821–1100px screens the pane narrows to 340px so the list keeps its project column; the tape is lifted 6px as a tab and the chevron and count sit on its centre line. When the list gets narrow (for instance beside the detail pane at 1024px) it sheds its least useful columns in a fixed order (start, energy, time, project on Next Actions; open, area, next action on Projects; since, project on Waiting For) instead of scrolling sideways; the grid never goes below 320px.
 
 The spacing rhythm is small and even: 4, 6, 8, 10, 14, 16, 20px. Gaps inside controls are 6–8px, and pane padding is 14–16px.
 
-Below 820px the rail becomes a horizontal, scrolling strip. The tray drawing is hidden and the count shrinks to 22px. Search collapses to a 36px button. The grid drops to marker, subject and one date column. The detail pane becomes a fixed bottom sheet 72dvh tall at the foot of the screen, and Clarify's two panes stack into one column.
+Below 820px the rail is replaced by the bottom tab bar (see Rail). Search collapses to a 36px button. The grid drops to marker, subject and one date column. The detail pane becomes a fixed bottom sheet 72dvh tall at the foot of the screen, and Clarify's two panes stack into one column.
 
 ## Elevation & Depth
 
@@ -315,7 +315,7 @@ The system is flat. Depth comes from tone: paper, sheet and steel. Shadows are k
 
 ## Shapes
 
-Corners are nearly square and scale with the object: tape at 1.5px (1px on folder tabs), wells, stamps and file previews at 2px, inputs, fields, rail items and proposal rows at 3px, pickers and the tray at 4px, and the palette and help overlays at 5px. The rounded forms are the two-minute badge (10px pill, dashed at rest, solid ink when on) and the 10px circular project lamp. Drawn marks carry the hand: the flag is an open, overshooting pen loop around a 4.2px ring; done is a 1.5px pen tick and strike; the in-tray is drawn flat with the same 1px lines. Stamps are an outlined 1.5px box set straight.
+Corners are nearly square and scale with the object: tape at 1.5px (1px on folder tabs), wells, stamps and file previews at 2px, inputs, fields, rail items and proposal rows at 3px, pickers at 4px, and the palette and help overlays at 5px. The rounded forms are the two-minute badge (10px pill, dashed at rest, solid ink when on) and the 10px circular project lamp. Drawn marks carry the hand: the flag is an open, overshooting pen loop around a 4.2px ring; done is a 1.5px pen tick and strike; the in-tray is drawn flat with the same 1px lines. Stamps are an outlined 1.5px box set straight.
 
 ## Components
 
@@ -323,13 +323,16 @@ Corners are nearly square and scale with the object: tape at 1.5px (1px on folde
 Navy tape with condensed, tracked caps. Two sizes: sm (11.5px, 3px 7px) and md (14px, 4px 9px). There is one tone: navy. Tape names folder tabs, areas, page-level sections (Settings sections, help title, Clarify end states) and the in-tray. The rail uses tape only for the in-tray label; list names are plain text.
 
 ### Rail (Navigation)
-- **Style:** steel drawer, 212px, 14px 10px padding, with a `steel-2` right edge. The in-tray sits at the top with its tape label, 30px count and the tray drawing (up to 176px wide). The tray is a line drawing in the app's own rule language (owner's decision, after a Mojave acrylic icon, a straight-on wire tray and a see-through outline tray were each rejected: too glossy, "a crate", and transparent-looking).
-  - **The object:** a solid desk letter tray in three-quarter view: a straight back wall, straight sides running down to the front, and a low front lip with a rounded finger notch. It is opaque (owner's decision: a tray that looks see-through but hides the paper makes no sense). Fills come from the folder blues of the project tabs: back wall `folder-2`, floor and inner side walls a mix of `folder` into `folder-2`, the front lip `folder`. Lines are `folder-ink`, non-scaling and whole-pixel so they stay crisp on 1x screens, in two weights: the silhouette (back rim, side rims, front lip) is 2px; the inner edges (the back wall's corners and where the walls meet the floor, which the paper lies over) are 1px. No gradients, shadows, label or text.
-  - **What is in it:** plain paper only (owner's decision: no sticky notes, envelopes or photos). Every inbox item adds one sheet lying in the tray: a `sheet` top face with a 1px `ink-3` outline and a thin front edge in `rule-strong`, so the pile's front shows as a stack of page edges. The sheets shuffle slightly, and the newest sits a little askew on top. The top sheet is written on: a heading stroke in 1.75px `pen`, then five rows of 1px `ink-3` text lines whose lengths vary (short lines end paragraphs). The pattern is seeded by the inbox count, so each capture shows a different page on top. The last 20 sheets are drawn.
-  - **Growth:** each sheet raises the pile; a busy inbox heaps up to just under the back wall and never over the walls. Positions come from each sheet's place in the pile, so a new capture never reshuffles the rest.
-  - **Colour:** theme tokens only, so the tray follows light and dark mode like every other surface.
-- **Structure:** the in-tray (navy tape, count, letter tray) sits on top. Below it are two sections under condensed-caps `ink-2` headings, "Organize" (Next Actions, Projects, Waiting For, Someday/Maybe, Reference) and "Reflect" (Weekly Review, Done, Areas). Settings is pinned to the bottom.
-- **States:** every entry uses the same row: 13px, 500-weight `ink-2` text and a right-aligned `ink-2` count (`ink-3` on `steel` fails AA at 12px), 30px tall. The open list is the sheet pulled forward out of the drawer: `paper` background, `ink` text at 650 and a soft 0 1px 1.5px lift, with no tape and no change of face, size or colour. The in-tray gets the same lift when the Inbox is open. Hover fills `steel-2`. The keyboard cursor, when the rail is the active region, is an inset 2px `ink` ring on `steel-2`. Stalled projects show a tiny stamp. Review age turns stamp red after 7 days or "never".
+- **Role:** a status panel, not only a menu (owner's decision after the rail critique). It answers "where am I?" and GTD's weekly "is my system current?".
+- **Style:** steel drawer, 212px, 14px 10px padding, a `rule-strong` right edge.
+- **The Inbox, on top:** the navy IN-TRAY tape is the tray's front lip, with the stuff in it drawn as a flat stack of sheet edges sitting on the tape, and the 30px count on the right. Each item adds one sheet (a 1px `--tray-paper` face over a 1px `--tray-paper-edge` line, 2px apart, each shuffled up to 2px sideways), so every step up to 8 is visible even at 1x. Past 8 the top sheet heaps: lifted 3px and turned -3°, a cue the count alone doesn't give. The stack's 20px of room is reserved, so the rail never shifts as the Inbox fills, and the tape keeps its full width at any count. In dark mode the paper is a light grey (#aeb3ba over #5c6168) so a full tray never looks emptier. A newly captured sheet slides down 4px in 180ms; nothing replays on page load, and reduced motion removes it. Screen readers hear "Inbox, 4", and a polite live region announces the new count. This replaced a drawn tray glyph (owner's decision after the glyph critique: it rose 0.8px per item, stopped changing at 11, squeezed the tape to "IN-T…" at two-digit counts, and its dark paper was darker than the empty floor).
+- **Lists:** no stage headings. Two runs split by a `rule-strong` hairline, in order of use: Next Actions, Waiting For, Projects, then Someday/Maybe, Reference, Areas, Done.
+- **Counts are signals, not inventory:** Next shows "N overdue" (stamp red) or "N today" (flagged); Waiting shows "N to chase" (stamp red); Projects shows only the stalled stamp; Done shows "N today" in `ink-3`; Someday, Reference and Areas show no number (their view titles do).
+- **System check:** a Label Caps heading, then one row per open question, each a stop that opens where it is fixed: Weekly Review (age, "due" in stamp red from day 7, or once a never-reviewed system is a week old; key cap W), stalled projects, follow-ups due, and the oldest Inbox item's age (stamp red from 7 days; key cap K). Rows with nothing to report are left out; "Nothing stalled, overdue or waiting." shows when only the review row remains. These key caps are a rail exception to the no-printed-hints rule.
+- **Settings:** alone at the foot. ⌃⇧0 opens it.
+- **States:** rows are 30px, 13px 500-weight `ink-2`. The open list is the sheet pulled forward: `--rail-current` (paper in light, a lifted #33363d in dark, never darker than the drawer), `ink` text at 650, a 1px `rule-strong` hairline and a soft lift. Hover fills `steel-2`, and small red text on a hovered row switches to `--stamp-on-steel` so it keeps AA. The keyboard cursor is an inset 2px `ink` ring. In dark mode the tape gets a hairline `folder` edge so it reads against the graphite drawer.
+- **Keyboard:** the rail is a region (⌥Tab / ⌃F6). Focus arriving by Tab or a click makes it the active region, so the keys act on what looks focused. ↑/↓, Home/End, the first letter of a stop's name (W and K stay the app-wide review and clarify keys), Enter to open, Esc back to the list.
+- **Phone (below 820px):** the rail is replaced by a bottom tab bar, 52px targets: Inbox with its count, Next, Waiting, and More (a sheet with the other lists and Settings). The current tab has a 2px ink rule on top; when a More list is open, the More tab shows its name.
 - **Mobile:** a horizontal scrolling strip.
 
 ### Grid Rows (Signature)
@@ -368,7 +371,7 @@ There is no status bar; the owner removed it because standing facts (Claude read
 The captured item is shown as a Fresh Sheet with the paper-stack shadow, beside proposal rows: sheet cards with a 1px `rule` border and 3px radius that take the blue focus ring through `:focus-within`. Focused field chips fill selection blue. A proposed project sits in a `folder-2` block with a 2px `folder` top edge. Progress is a track of 14×5px cells: `rule` pending, `rule-strong` ready, `ink-2` done, and corporate blue with a 1px `select-ink` hairline for the current item.
 
 ### Motion
-Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and every transition answers a user action. The values are: strike 200ms, then fold 180ms; pen loop 380ms; tick 220ms; picker pop 140ms, palette and help 160ms; scrim fade 120ms; sheet drop into the tray 280ms, staggered 20ms per sheet; status note 180ms; chevron 160ms. Under `prefers-reduced-motion: reduce`, all animations and transitions collapse to 1ms.
+Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and every transition answers a user action. The values are: strike 200ms, then fold 180ms; pen loop 380ms; tick 220ms; picker pop 140ms, palette and help 160ms; scrim fade 120ms; a new sheet sliding onto the in-tray stack 180ms (only the new one, never on page load); status note 180ms; chevron 160ms. Under `prefers-reduced-motion: reduce`, all animations and transitions collapse to 1ms.
 
 ## Do's and Don'ts
 
@@ -393,5 +396,5 @@ Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and e
 - **Don't** add sheen gradients, text-shadow emboss or bevels to tape or folders. The only lift is `0 1px 1.5px rgb(0 0 0 / 0.28)`.
 - **Don't** use stamp red decoratively, and don't rotate stamps.
 - **Don't** fill rows, cells or chips with context colours.
-- **Don't** print key hints on controls, lists or empty states. Keys are discovered through ⌘K and ⇧?. The pinned exceptions are "⌘Z undo" on toast notes, the single Key Hints line at the foot of Clarify, the Weekly Review and the focused detail pane (Label Caps 12px `ink-3`, small key caps, `rule-strong` dots between entries, a `rule` hairline above), and the Key Choices list on a stopped Clarify (a key cap, then the action in 13px `ink`).
+- **Don't** print key hints on controls, lists or empty states. Keys are discovered through ⌘K and ⇧?. The pinned exceptions are "⌘Z undo" on toast notes, the single Key Hints line at the foot of Clarify, the Weekly Review and the focused detail pane (Label Caps 12px `ink-3`, small key caps, 18px gaps between entries rather than dots, a `rule` hairline above; in the detail pane each field's own key sits as a 10px key cap beside its label, and the line keeps only the pane-wide keys), and the Key Choices list on a stopped Clarify (a key cap, then the action in 13px `ink`).
 - **Don't** add paper texture, airy card layouts or large radii. Density beats decoration.

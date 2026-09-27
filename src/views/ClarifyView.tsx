@@ -31,6 +31,18 @@ function matchingProject(title: string | undefined) {
   return getState().projects.find((p) => (p.status === "active" || p.status === "someday") && normTitle(p.title) === normTitle(title));
 }
 
+/** A decision with nothing proposed: actionable, one next action named after the item's first line. */
+function blankDecision(stuffId: string, text: string): Proposal {
+  const first = text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  return {
+    stuff_id: stuffId,
+    disposition: "actionable",
+    new_project: null,
+    reference: null,
+    actions: [{ title: first.slice(0, 120), kind: "next", project: null, context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false }],
+  };
+}
+
 const DISPOSITIONS: Record<Draft["disposition"], string> = {
   actionable: "Actionable",
   someday: "Someday / Maybe",
@@ -38,9 +50,11 @@ const DISPOSITIONS: Record<Draft["disposition"], string> = {
   trash: "Trash",
 };
 
-export function ClarifyView({ regionActive }: { regionActive: boolean }) {
+export function ClarifyView({ regionActive, withClaude = false }: { regionActive: boolean; withClaude?: boolean }) {
   const ui = useUI();
   const meta = useMeta();
+  // Claude is optional: K clarifies by hand on this screen; ⌥K asks Claude for proposals.
+  const byHand = !withClaude;
   const s = useStore((x) => x);
   const [job, setJob] = useState<JobState | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -55,6 +69,16 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
   const start = useCallback(async (fresh = false, isLive: () => boolean = () => true) => {
     setStartError(null);
     setJob(null);
+    if (byHand) {
+      // A session with no Claude: every Inbox item gets a blank decision, its first line as the first action.
+      const items = getState()
+        .stuff.filter((x) => x.status === "inbox")
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const proposals: Record<string, Proposal> = {};
+      for (const st of items) proposals[st.id] = blankDecision(st.id, st.text);
+      setJob({ id: "by-hand", order: items.map((x) => x.id), proposals, done: true, error: null });
+      return;
+    }
     try {
       const res = await fetch("/api/clarify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fresh }) });
       const j = (await res.json()) as JobState;
@@ -67,7 +91,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     } catch (e) {
       if (isLive()) setStartError((e as Error).message);
     }
-  }, []);
+  }, [byHand]);
 
   useEffect(() => {
     let live = true;
@@ -194,6 +218,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
   };
 
   const recordCorrections = (id: string, d: Draft, ops: Op[]) => {
+    if (byHand) return; // no proposal, so nothing Claude could learn from
     const o = originals.current[id];
     const text = current?.text ?? "";
     if (!o) return;
@@ -220,6 +245,14 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     if (missing >= 0) {
       notify("Who or what is this waiting on? Name it, then accept again.");
       askWaitingOn(ui, null, (who) => updateRow(missing, { waiting_who: who }));
+      return;
+    }
+    // Every next action needs a context before it's filed (owner's rule): go to the first one without.
+    const noCtx = draft.disposition === "actionable" ? draft.actions.findIndex((a) => a.kind === "next" && !a.done && !a.context?.trim()) : -1;
+    if (noCtx >= 0) {
+      card.current?.querySelector<HTMLElement>(`[data-row='${noCtx}']`)?.focus();
+      notify(`“${draft.actions[noCtx].title || "This action"}” needs a context. Pick one, then accept again.`);
+      pickFor(noCtx, "context");
       return;
     }
     const st = getState();
@@ -336,7 +369,9 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
         title: "Context",
         items: contextItems().map((c) => ({ ...c, id: c.label })),
         current: a.context,
-        noneLabel: "No context",
+        // A next action must have a context, so "No context" is only offered for other kinds.
+        noneLabel: a.kind === "next" && !a.done ? undefined : "No context",
+        mustChoose: !a.context,
         createLabel: (q) => `Use new context “${q.startsWith("@") ? q : "@" + q}”`,
         onCreate: (q) => updateRow(i, { context: q.startsWith("@") ? q : `@${q}` }),
         onPick: (name) => updateRow(i, { context: name }),
@@ -440,10 +475,11 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
     { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready, run: () => pickFor(rowOfFocus(), "who") },
     {
       id: "cl.retry",
-      label: "Ask Claude again (fresh)",
+      label: byHand ? "Clarify with Claude instead" : "Ask Claude again (fresh)",
       group: "Clarify",
-      keys: ["k"],
+      keys: ["alt+k"],
       run: () => {
+        if (byHand) return ui.startClarify(ui.clarifyReturn(), true);
         if (job && !job.done) void fetch(`/api/clarify/${job.id}`, { method: "DELETE" });
         void start(true);
       },
@@ -483,7 +519,8 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
   commands.push(
     { id: "cl.rules", label: "Ask Claude to turn your corrections into rules", group: "Clarify", keys: ["r"], enabled: finished && offerRules, run: askRules },
     { id: "cl.addkey", label: meta.hasKey ? "Change the API key" : "Add an API key", group: "Clarify", keys: ["enter"], enabled: stopped && keyProblem, run: addKey },
-    { id: "cl.byhand", label: "File the Inbox by hand", group: "Clarify", keys: ["v"], enabled: stopped, run: fileByHand },
+    { id: "cl.byhand", label: "File the Inbox", group: "Clarify", keys: ["v"], enabled: stopped, run: fileByHand },
+    { id: "cl.hand", label: "Clarify without Claude", group: "Clarify", keys: ["k"], enabled: stopped, run: () => ui.startClarify(ui.clarifyReturn()) },
   );
   useCommands("clarify", commands, { priority: 15, active: regionActive });
 
@@ -496,8 +533,9 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
           choices={[
             ...(keyProblem
               ? [{ k: "enter", label: meta.hasKey ? "Enter a working API key and start" : "Add your Claude API key and start", run: addKey }]
-              : [{ k: "k", label: "Ask Claude again", run: () => void start(true) }]),
-            { k: "v", label: "File the Inbox by hand", run: fileByHand },
+              : [{ k: "alt+k", label: "Ask Claude again", run: () => void start(true) }]),
+            { k: "k", label: "Clarify without Claude", run: () => ui.startClarify(ui.clarifyReturn()) },
+            { k: "v", label: "File the Inbox", run: fileByHand },
             { k: "escape", label: backLabel, run: ui.leaveClarify },
           ]}
         />
@@ -579,7 +617,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
 
         <section className="clarify-proposal" aria-label="Claude's proposal" aria-busy={!draft}>
           <h2 className="pane-h">
-            Proposal
+            {byHand ? "Your decision" : "Proposal"}
             {draft && <Tape>{DISPOSITIONS[draft.disposition]}</Tape>}
           </h2>
           {!draft ? (
@@ -656,9 +694,15 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
                             <span className="p-lbl">Project</span>
                             {a.project === "new" ? draft.new_project?.title : a.project ? s.projects.find((p) => p.id === a.project)?.title ?? <span className="dash" aria-hidden="true">–</span> : <span className="dash" aria-hidden="true">–</span>}
                           </button>
-                          <button type="button" className="p-field" onClick={() => pickFor(i, "context")}>
+                          <button type="button" className={`p-field ${a.kind === "next" && !a.done && !a.context ? "is-needed" : ""}`} onClick={() => pickFor(i, "context")}>
                             <span className="p-lbl">Context</span>
-                            {a.context ? <ContextCode ctx={s.contexts.find((c) => c.name.toLowerCase() === a.context!.toLowerCase()) ?? { id: "", name: a.context, color: "var(--ink-3)", sort: 0 }} /> : <span className="dash" aria-hidden="true">–</span>}
+                            {a.context ? (
+                              <ContextCode ctx={s.contexts.find((c) => c.name.toLowerCase() === a.context!.toLowerCase()) ?? { id: "", name: a.context, color: "var(--ink-3)", sort: 0 }} />
+                            ) : a.kind === "next" && !a.done ? (
+                              <span className="p-needed">needed</span>
+                            ) : (
+                              <span className="dash" aria-hidden="true">–</span>
+                            )}
                           </button>
                           {a.kind === "waiting" && (
                             <button type="button" className="p-field" onClick={() => pickFor(i, "who")}>
@@ -698,6 +742,7 @@ export function ClarifyView({ regionActive }: { regionActive: boolean }) {
       <KeyHints
         hints={[
           { k: "mod+enter", label: "Accept" },
+          ...(byHand ? [{ k: "n", label: "Add action" }] : []),
           { k: "v", label: "File as" },
           { k: "e", label: "Done now" },
           { k: "backspace", label: "Trash" },

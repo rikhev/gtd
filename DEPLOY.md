@@ -46,11 +46,17 @@ dig +short gtd.hevosmaa.net
 
 SSH into the VPS (`ssh you@vps`), then run:
 
+Rocky ships its own, older Node.js. Switch that off first, so the NodeSource version 24 is the one installed:
+
 ```sh
+sudo dnf module reset -y nodejs
+sudo dnf module disable -y nodejs
 curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
 sudo dnf install -y nodejs git
-node -v          # must say v22.13 or newer
+/usr/bin/node -v          # must say v24.x (the service and sudo use this one)
 ```
+
+If it shows an older version (for example v16), run `sudo dnf remove -y nodejs npm` and repeat the lines above. An old Node shows up later as `node: bad option: --import`.
 
 ## 3. Service user and folders
 
