@@ -5,7 +5,8 @@ import { useUI, type Target } from "../ui.tsx";
 import { runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { ContextCode, Energy, KeyHints, Lamp, Marker } from "./bits.tsx";
+import { joinStuff, splitStuff } from "../views/InboxView.tsx";
+import { AreaName, ContextCode, Energy, KeyHints, Lamp, Marker } from "./bits.tsx";
 import { formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
@@ -308,10 +309,13 @@ function ProjectDetail({ p }: { p: Project }) {
       <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
-          {area ? area.name : none}
+          {area ? <AreaName name={area.name} color={area.color} /> : none}
         </PickField>
         <PickField label="Status" k="V" onOpen={() => ed.move([p.id])}>
           {{ active: "Active", someday: "Someday", done: "Done", trashed: "Trash" }[p.status]}
+        </PickField>
+        <PickField label="Start" k="S" onOpen={() => ed.date([p.id], "start")}>
+          {p.start ? formatLong(p.start) : none}
         </PickField>
         <PickField label="Due" k="D" onOpen={() => ed.date([p.id], "due")}>
           {p.due ? <DueLong date={p.due} done={p.status === "done"} /> : none}
@@ -387,9 +391,21 @@ function ProjectDetail({ p }: { p: Project }) {
 }
 
 function StuffDetail({ st }: { st: Stuff }) {
+  const parts = splitStuff(st);
   return (
     <>
-      <TextField label="Stuff" value={st.text} multiline rows={8} autoFocus onCommit={(v) => patch("stuff", st.id, { text: v }, "Edited")} />
+      {/* One heading line, as on every other pane; the rest of what was captured reads as its notes. */}
+      <TextField
+        label="Stuff"
+        value={parts.title}
+        autoFocus
+        className="field-title"
+        onCommit={(v) => {
+          if (!v.trim() && !parts.rest.trim()) return false;
+          patch("stuff", st.id, { text: joinStuff(v, parts.rest, parts.prefix) }, "Edited");
+        }}
+      />
+      <TextField label="Notes" value={parts.rest} multiline rows={12} placeholder="Details, links, phone numbers…" className="notes-page" onCommit={(v) => patch("stuff", st.id, { text: joinStuff(parts.title, v, parts.prefix) }, "Edited")} />
       <Files owner={{ kind: "stuff", id: st.id }} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
     </>

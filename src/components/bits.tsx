@@ -3,7 +3,7 @@ import { formatDate, formatTime, daysBetween, today } from "../../shared/dates.t
 import type { Action, Context } from "../../shared/types.ts";
 import { keyLabel } from "../keys.ts";
 
-/** A place name (an area, a disposition) as a quiet chip; md is a state's title in plain caps. */
+/** A disposition or section name as a quiet chip; md is a state's title in plain caps. */
 export function Tag({ children, size = "sm" }: { children: ReactNode; size?: "sm" | "md" }) {
   return <span className={`tag tag-${size}`}>{children}</span>;
 }
@@ -120,6 +120,17 @@ export function ContextCode({ ctx }: { ctx?: Context }) {
   return (
     <span className="ctx" style={{ ["--ctx" as string]: ctx.color }}>
       {ctx.name}
+    </span>
+  );
+}
+
+/** An area as "#Work": plain text, its colour only in the # (a context's colour is its underline instead). */
+export function AreaName({ name, color }: { name: string; color?: string | null }) {
+  const bare = name.trim().replace(/^#+\s*/, "") || "Untitled";
+  return (
+    <span className="area-name">
+      <span className="area-hash" style={color ? { ["--area" as string]: color } : undefined}>#</span>
+      {bare}
     </span>
   );
 }

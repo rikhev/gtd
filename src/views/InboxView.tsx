@@ -24,6 +24,25 @@ export function stuffTitle(st: Pick<Stuff, "text" | "kind">) {
   return firstLine(st.text);
 }
 
+/**
+ * Captured text as a heading and the rest: the heading is the line the item is known by (an email's subject,
+ * otherwise the first line), the rest is everything else. Joining puts the heading line first.
+ */
+export function splitStuff(st: Pick<Stuff, "text" | "kind">) {
+  const lines = st.text.split("\n");
+  const title = stuffTitle(st);
+  let i = st.kind === "email" ? lines.findIndex((l) => /^(?:subject|ämne):/i.test(l.trim())) : -1;
+  if (i < 0) i = lines.findIndex((l) => l.trim());
+  if (i < 0) return { title: "", rest: "", prefix: "" };
+  const prefix = st.kind === "email" ? (lines[i].match(/^\s*((?:subject|ämne):\s*)/i)?.[1] ?? "") : "";
+  const rest = [...lines.slice(0, i), ...lines.slice(i + 1)].join("\n").replace(/^\s*\n/, "").trimEnd();
+  return { title, rest, prefix };
+}
+export function joinStuff(title: string, rest: string, prefix = "") {
+  const head = title.trim() ? `${prefix}${title.trim()}` : "";
+  return [head, rest.trim() ? (head ? `\n${rest.trimEnd()}` : rest.trimEnd()) : ""].join("");
+}
+
 export function InboxView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);

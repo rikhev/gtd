@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, StickyNote, Timer } from "lucide-react";
-import { getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore } from "../store.ts";
+import { getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore, bareArea } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { runWhenReady, useCommands, type Command } from "../keys.ts";
 import { RAIL } from "../components/Chrome.tsx";
 import { promptApiKey } from "../apiKey.ts";
 import { suggestRules } from "../rules.ts";
-import { ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
-import { areaItems, askWaitingOn, contextItems, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
+import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
+import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
 import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
 
@@ -315,11 +315,11 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       } else if (d.new_project && (usesNew || d.actions.length === 0)) {
         let areaId: ID | null = null;
         if (d.new_project.area) {
-          const area = st.areas.find((a) => a.name.toLowerCase() === d.new_project!.area!.toLowerCase());
+          const area = st.areas.find((a) => a.name.toLowerCase() === bareArea(d.new_project!.area!).toLowerCase());
           if (area) areaId = area.id;
           else {
             areaId = uid();
-            ops.push({ type: "create", table: "areas", row: { id: areaId, name: d.new_project.area, sort: st.areas.length } });
+            ops.push({ type: "create", table: "areas", row: { id: areaId, name: bareArea(d.new_project.area), sort: st.areas.length, color: nextAreaColor() } });
           }
         }
         const p = newProject({ title: d.new_project.title, area_id: areaId, status: d.disposition === "someday" ? "someday" : "active" });
@@ -582,7 +582,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
           choices={[
             ...(offerRules ? [{ k: "r", label: "Ask Claude to turn your corrections into rules", run: askRules }] : []),
             { k: "escape", label: backLabel, run: host.leave },
-            ...(!host.offerNext ? [] : [{ k: RAIL[1].key!, label: "Work from Next Actions", run: () => ui.go("next") }]),
+            ...(!host.offerNext ? [] : [{ k: RAIL.find((r) => r.id === "next")!.key!, label: "Work from Next Actions", run: () => ui.go("next") }]),
           ]}
         />
       </div>
@@ -684,16 +684,16 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                           ui.openPicker({
                             type: "list",
                             title: "Area",
-                            items: areaItems().map((a) => ({ ...a, id: a.label })),
+                            items: areaItems().map((a) => ({ ...a, id: bareArea(a.label) })),
                             current: draft.new_project?.area ?? null,
                             noneLabel: "No area",
                             createLabel: (q) => `New area “${q}”`,
-                            onCreate: (q) => update((d) => (d.new_project = { ...d.new_project!, area: q })),
+                            onCreate: (q) => update((d) => (d.new_project = { ...d.new_project!, area: bareArea(q) })),
                             onPick: (a) => update((d) => (d.new_project = { ...d.new_project!, area: a })),
                           })
                         }
                       >
-                        {draft.new_project.area ? <Tag>{draft.new_project.area}</Tag> : <span className="dash">No area</span>}
+                        {draft.new_project.area ? <AreaName name={draft.new_project.area} color={s.areas.find((x) => x.name.toLowerCase() === bareArea(draft.new_project!.area!).toLowerCase())?.color} /> : <span className="dash">No area</span>}
                       </button>
                     </div>
                   )}

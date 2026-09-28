@@ -23,7 +23,9 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 
 | Keys | What they do |
 |---|---|
-| `⌃1`–`7` | Inbox · Next Actions · Waiting For · Projects · Someday · Reference · Done (rail order). Control on every system, also on the Mac (⌘1–8 are the browser's tabs) |
+| `⌃1`–`8` | Inbox · Calendar · Next Actions · Waiting For · Projects · Someday · Reference · Done (rail order). Control on every system, also on the Mac (⌘1–8 are the browser's tabs) |
+| `⌃9` | Recently deleted: everything deleted in the last week (Settings › Recently deleted sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty Recently deleted clears it |
+| Calendar | `1` `2` `3` Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `T` today · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click a day for a new action |
 | `W` | Start the Weekly Review |
 | `⌘⇧,` | Settings |
 | `⇧N` | Capture to the Inbox. Enter files the item and the line stays open. `⇧↵` adds a new line, Esc closes |

@@ -8,22 +8,25 @@ import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
 
 /**
- * Control+1–7 on every system follow the rail from the top: the Inbox, then the lists in rail order.
+ * Control+1–8 on every system follow the rail from the top: the Inbox, the calendar, then the lists in rail order.
  * On the Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs.
- * Elsewhere the page takes Ctrl+1–7 over the browser's tab switching (Chrome and Firefox allow it).
- * The Weekly Review has no number (W starts it); Settings is ⌘⇧, (Ctrl+Shift+, elsewhere).
+ * Elsewhere the page takes Ctrl+1–9 over the browser's tab switching (Chrome and Firefox allow it).
+ * Recently deleted, at the foot, is Control+9. The Weekly Review has no number (W starts it); Settings is ⌘⇧,
+ * (Ctrl+Shift+, elsewhere).
  */
 // Control on every system: on the Mac that is "ctrl" (⌘ is "mod"), elsewhere Ctrl is "mod".
 const go = (n: number) => (IS_MAC ? `ctrl+${n}` : `mod+${n}`);
 
 export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "inbox", key: go(1) },
-  { id: "next", key: go(2) },
-  { id: "waiting", key: go(3) },
-  { id: "projects", key: go(4) },
-  { id: "someday", key: go(5) },
-  { id: "reference", key: go(6) },
-  { id: "done", key: go(7) },
+  { id: "calendar", key: go(2) },
+  { id: "next", key: go(3) },
+  { id: "waiting", key: go(4) },
+  { id: "projects", key: go(5) },
+  { id: "someday", key: go(6) },
+  { id: "reference", key: go(7) },
+  { id: "done", key: go(8) },
+  { id: "deleted", key: go(9) },
   { id: "review" },
 ];
 
@@ -31,8 +34,9 @@ export const RAIL: { id: ViewId; key?: string }[] = [
  * The rail: the Inbox, the lists in the order they're used, and a system check that answers
  * GTD's weekly question ("is my system current?") with links to where each answer is fixed.
  */
+// The calendar follows the Inbox: in GTD it is the hard landscape, checked before the lists are worked.
 const LISTS: ViewId[][] = [
-  ["inbox", "next", "waiting", "projects"],
+  ["inbox", "calendar", "next", "waiting", "projects"],
   ["someday", "reference", "done"],
 ];
 
@@ -59,7 +63,10 @@ export function Rail({ active }: { active: boolean }) {
     // The oldest thing in the whole system: a review is only "due" once there is a week's worth to review.
     const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
     const systemAge = firstDay ? daysBetween(firstDay.slice(0, 10), t) : 0;
-    return { inbox: inboxItems.length, overdue, flagged, chase, stalled, doneToday, oldestDays, systemAge };
+    const scheduled =
+      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && (a.due === t || a.defer === t)).length +
+      s.projects.filter((p) => p.status === "active" && (p.due === t || p.start === t)).length;
+    return { inbox: inboxItems.length, overdue, flagged, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);
   const reviewAge = daysSinceReview(s);
@@ -70,6 +77,8 @@ export function Rail({ active }: { active: boolean }) {
     if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : sig.flagged ? { text: `${sig.flagged} today` } : null;
     if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
+    // What today's landscape holds: things due or starting today.
+    if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} today`, tone: "quiet" } : null;
     return null;
   };
 
@@ -92,6 +101,7 @@ export function Rail({ active }: { active: boolean }) {
       return { key: id, view: id, name: VIEW_TITLES[id], label: `${VIEW_TITLES[id]}${m ? `, ${id === "inbox" ? `${m.text} ${m.text === "1" ? "item" : "items"}` : m.text}` : ""}${id === "projects" && sig.stalled ? `, ${sig.stalled} stalled` : ""}` };
     }),
     ...health,
+    { key: "deleted", view: "deleted", name: "Recently deleted", label: "Recently deleted" },
     { key: "settings", view: "settings", name: "Settings", label: "Settings" },
   ];
   const idx = (key: string) => entries.findIndex((e) => e.key === key);
@@ -238,6 +248,15 @@ export function Rail({ active }: { active: boolean }) {
       </section>
 
       <ul className="rail-list rail-settings">
+        {/* Out of the way at the foot, beside Settings: a place to look back, not a list to work. */}
+        <li>
+          <button type="button" {...stop(entries[entries.length - 2], "rail-item")}>
+            <span className="rail-name">Recently deleted</span>
+            <span className="rail-meta">
+              <RailKey k={go(9)} />
+            </span>
+          </button>
+        </li>
         <li>
           <button type="button" {...stop(entries[entries.length - 1], "rail-item")}>
             <span className="rail-name">Settings</span>

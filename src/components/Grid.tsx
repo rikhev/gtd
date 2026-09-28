@@ -19,6 +19,8 @@ export interface GridGroup<T> {
   label: string;
   /** Context colour: drawn as the 2px hairline code under the group label. */
   color?: string;
+  /** Area colour: the group label is "#Name" and its # takes this colour ("" for a plain #). */
+  areaColor?: string;
   meta?: ReactNode;
   rows: T[];
   /** No count after the label (for groups whose size says nothing, like a single settings row). */
@@ -70,6 +72,35 @@ export function useSort(listId: string): [SortState, (s: SortState) => void] {
 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * Dropping rows into a list that is sorted by a column: the list switches to its own (manual) order without
+ * anything jumping. The open rows' existing manual positions are handed out again in the order now on screen,
+ * with the dragged rows taken out and put back at the drop line; returns each row's new position.
+ */
+export function bakeDrop<T>(
+  groups: GridGroup<T>[],
+  keyOf: (r: T) => string,
+  sortOf: (r: T) => number,
+  isOpen: (r: T) => boolean,
+  keys: string[],
+  beforeKey: string | null,
+  groupKey: string,
+): Map<string, number> {
+  const all = groups.flatMap((g) => g.rows.filter(isOpen).map((r) => ({ r, g: g.key })));
+  const slots = all.map((x) => sortOf(x.r)).sort((a, b) => a - b);
+  const movers = keys.map((k) => all.find((x) => keyOf(x.r) === k)).filter((x): x is { r: T; g: string } => Boolean(x));
+  const rest = all.filter((x) => !keys.includes(keyOf(x.r)));
+  let at = beforeKey ? rest.findIndex((x) => keyOf(x.r) === beforeKey) : -1;
+  if (at < 0) {
+    // After the last open row of the drop group, or where that group starts when it has none.
+    const last = rest.map((x) => x.g).lastIndexOf(groupKey);
+    at = last >= 0 ? last + 1 : rest.findIndex((x) => groups.findIndex((g) => g.key === x.g) > groups.findIndex((g) => g.key === groupKey));
+    if (at < 0) at = rest.length;
+  }
+  const order = [...rest.slice(0, at), ...movers, ...rest.slice(at)];
+  return new Map(order.map((x, i) => [keyOf(x.r), slots[i]]));
+}
 
 /** Sorts the rows inside each group (groups keep their own order). Empty values always go last, whichever way. */
 export function sortGroups<T>(groups: GridGroup<T>[], sorters: Sorters<T>, sort: SortState): GridGroup<T>[] {
@@ -342,11 +373,12 @@ interface GridProps<T> {
   /** Column sorting: the current sort, which column keys can sort, and what a heading click sets. */
   sort?: { state: SortState; keys: string[]; onSort: (s: SortState) => void };
   /**
-   * Drag to reorder (the list is in its own, manual order): a row moves before `beforeKey`, or to the end of the
-   * group's open rows; dropped into another group, the view updates the field that group stands for.
+   * Drag to reorder (the list is in its own, manual order): the dragged rows (the whole selection when the pressed
+   * row is ticked, in list order) move before `beforeKey`, or to the end of the group's open rows; dropped into
+   * another group, the view updates the field that group stands for on each of them.
    */
   reorder?: {
-    onMove: (key: string, beforeKey: string | null, groupKey: string) => void;
+    onMove: (keys: string[], beforeKey: string | null, groupKey: string) => void;
     canDrag?: (key: string) => boolean;
     /** Whether a row may be dropped into this group (e.g. never "No context" on Next Actions). */
     canDrop?: (groupKey: string) => boolean;
@@ -474,7 +506,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   // Drag to reorder, as in Finder: press on a row and drag; a line shows where it lands. Only inside its own group,
   // never onto done rows (they stay at the bottom). A press without a drag stays a click.
   const [dropLine, setDropLine] = useState<{ x: number; y: number; w: number } | null>(null);
-  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<Set<string>>(new Set());
   const reorderRef = useRef(reorder);
   reorderRef.current = reorder;
   const startDrag = (key: string, rowEl: HTMLElement, x0: number, y0: number) => {
@@ -484,6 +516,11 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     if (!el || !scroller || !homeEl) return;
     const home = homeEl.dataset.group ?? "";
     const can = (k: string) => reorderRef.current?.canDrag?.(k) !== false;
+    // Pressing a ticked row drags every ticked row with it, as in Finder; otherwise just the one.
+    const sel = navRef.current.selected;
+    const inOrder = [...el.querySelectorAll<HTMLElement>(".row[data-key]")].map((r) => r.dataset.key!);
+    const keys = sel.size > 1 && sel.has(key) ? inOrder.filter((k) => sel.has(k) && can(k)) : [key];
+    const moving = new Set(keys);
     let dragging = false;
     let lastY = y0;
     let target: { group: string; before: string | null } | null = null;
@@ -501,7 +538,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
         target = null;
         setDropLine(null);
       } else {
-        const rows = [...g.querySelectorAll<HTMLElement>(".row[data-key]")].filter((r) => r.dataset.key !== key && can(r.dataset.key!));
+        const rows = [...g.querySelectorAll<HTMLElement>(".row[data-key]")].filter((r) => !moving.has(r.dataset.key!) && can(r.dataset.key!));
         const hit = rows.find((r) => {
           const rr = r.getBoundingClientRect();
           return lastY < rr.top + rr.height / 2;
@@ -525,7 +562,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       if (!dragging) {
         if (Math.hypot(ev.clientX - x0, lastY - y0) < 5) return;
         dragging = true;
-        setDraggingKey(key);
+        setDragging(moving);
         document.body.classList.add("is-banding", "is-dragging-row");
       }
       window.getSelection()?.removeAllRanges();
@@ -538,14 +575,14 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       if (!dragging) return;
       document.body.classList.remove("is-banding", "is-dragging-row");
       setDropLine(null);
-      setDraggingKey(null);
+      setDragging(new Set());
       if (target) {
-        // Dropping where it already was changes nothing.
+        // Dropping a single row where it already was changes nothing.
         const rows = [...homeEl.querySelectorAll<HTMLElement>(".row[data-key]")].filter((r) => can(r.dataset.key!));
         const i = rows.findIndex((r) => r.dataset.key === key);
         const nextNow = rows[i + 1]?.dataset.key ?? null;
-        const same = target.group === home && (target.before === nextNow || target.before === key);
-        if (!same) reorderRef.current?.onMove(key, target.before, target.group);
+        const same = keys.length === 1 && target.group === home && (target.before === nextNow || target.before === key);
+        if (!same) reorderRef.current?.onMove(keys, target.before, target.group);
       }
       const swallow = (ev: MouseEvent) => {
         ev.stopPropagation();
@@ -675,7 +712,16 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                 >
                   <span className={`chev ${collapsed ? "" : "open"}`} aria-hidden />
                   {/* One look for every list's group heads (owner's decision): Label Caps over a rule, then the count. */}
-                  <span className={`group-label ${g.color ? "is-ctx" : ""}`}>{g.label}</span>
+                  <span className={`group-label ${g.color ? "is-ctx" : ""} ${g.areaColor !== undefined ? "is-area" : ""}`}>
+                    {g.areaColor !== undefined && g.label.startsWith("#") ? (
+                      <>
+                        <span className="area-hash" style={g.areaColor ? { ["--area" as string]: g.areaColor } : undefined}>#</span>
+                        {g.label.slice(1)}
+                      </>
+                    ) : (
+                      g.label
+                    )}
+                  </span>
                   {!g.hideCount && <span className="group-count">{g.rows.length}</span>}
                   {g.meta && <span className="group-meta">{g.meta}</span>}
                 </div>
@@ -693,7 +739,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                       aria-selected={ticked}
                       data-key={k}
                       data-focused={focused || undefined}
-                      className={`row ${focused ? "is-focus" : ""} ${ticked ? "is-ticked" : ""} ${draggingKey === k ? "is-dragging" : ""} ${rowClass?.(row) ?? ""}`}
+                      className={`row ${focused ? "is-focus" : ""} ${ticked ? "is-ticked" : ""} ${dragging.has(k) ? "is-dragging" : ""} ${rowClass?.(row) ?? ""}`}
                       onClick={(e) => nav.click(k, e)}
                       onDoubleClick={() => onOpen?.(k)}
                     >

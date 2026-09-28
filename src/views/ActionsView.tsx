@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Paperclip, Repeat, AlignLeft, Clock, CalendarClock } from "lucide-react";
-import { archiveDone, mutate, useStore, isChase, isDeferred } from "../store.ts";
+import { archiveDone, mutate, plural, useStore, isChase, isDeferred } from "../store.ts";
 import { useUI, VIEW_TITLES } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
-import { Grid, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
+import { Grid, bakeDrop, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { ContextCode, DateCell, DoneBox, Energy, FlagButton, Marker, TimeCell, titleOr } from "../components/bits.tsx";
 import { useActionCommands } from "../actionCommands.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { addDays, today, daysBetween, formatDate, formatLong } from "../../shared/dates.ts";
-import type { Action, ActionStatus, State } from "../../shared/types.ts";
+import type { Action, ActionStatus, State, ID, Op } from "../../shared/types.ts";
 
 type Mode = "next" | "waiting" | "someday" | "done";
 type GroupBy = "project" | "who" | "context" | "due" | "today" | "none";
@@ -307,25 +307,46 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         return {};
     }
   };
+  // Rows always drag (Done excepted: it keeps no order of its own). In a column sort, a drop switches the list to
+  // its manual order, keeping everything where it was on screen.
   const reorder =
-    sort || mode === "done"
+    mode === "done"
       ? undefined
       : {
           canDrag: (k: string) => s.actions.find((a) => a.id === k)?.status !== "done",
           canDrop: (groupKey: string) => groupPatch(groupKey) !== null,
-          onMove: (key: string, beforeKey: string | null, groupKey: string) => {
+          onMove: (keys: string[], beforeKey: string | null, groupKey: string) => {
             const g = groups.find((x) => x.key === groupKey);
-            const me = s.actions.find((a) => a.id === key);
-            if (!g || !me) return;
-            const home = groups.find((x) => x.rows.some((a) => a.id === key))?.key;
-            const patch = groupKey === home ? {} : groupPatch(groupKey);
-            if (!patch) return;
-            const open = g.rows.filter((a) => a.status !== "done" && a.id !== key);
+            const movers = keys.map((k) => s.actions.find((a) => a.id === k)).filter((a): a is Action => Boolean(a));
+            if (!g || !movers.length) return;
+            const patch = groupPatch(groupKey);
+            // Each dragged action takes the drop group's field, unless it already sits in that group.
+            const homeOf = (id: ID) => groups.find((x) => x.rows.some((a) => a.id === id))?.key;
+            const changes = movers.map((a) => (homeOf(a.id) === groupKey ? {} : patch));
+            if (changes.some((c) => c === null)) return;
+            // They land together, in list order, spaced evenly between the rows either side of the drop line.
+            const open = g.rows.filter((a) => a.status !== "done" && !keys.includes(a.id));
             const i = beforeKey ? open.findIndex((a) => a.id === beforeKey) : -1;
-            const sortAt = i >= 0 ? (i > 0 ? (open[i - 1].sort + open[i].sort) / 2 : open[i].sort - 1) : open.length ? open[open.length - 1].sort + 1 : me.sort;
-            const moved = Object.keys(patch).length > 0;
-            mutate(moved ? `“${me.title || "Untitled action"}” → ${g.label || "no group"}` : "Moved", [{ type: "patch", table: "actions", id: key, data: { ...patch, sort: sortAt } }], { silent: !moved });
-            nav.setFocus(key);
+            const lo = i > 0 ? open[i - 1].sort : i === 0 ? null : open.length ? open[open.length - 1].sort : null;
+            const hi = i >= 0 ? open[i].sort : null;
+            const n = movers.length;
+            const sortAt = (j: number) => (lo !== null && hi !== null ? lo + ((hi - lo) * (j + 1)) / (n + 1) : lo !== null ? lo + j + 1 : hi !== null ? hi - (n - j) : movers[j].sort);
+            const moved = changes.some((c) => c && Object.keys(c).length > 0);
+            const who = movers.length === 1 ? `“${movers[0].title || "Untitled action"}”` : plural(movers.length, "action");
+            const ops: Op[] = [];
+            if (sort) {
+              const baked = bakeDrop(groups, (a) => a.id, (a) => a.sort, (a) => a.status !== "done", keys, beforeKey, groupKey);
+              for (const [id, at] of baked) {
+                const j = movers.findIndex((m) => m.id === id);
+                const a = s.actions.find((x) => x.id === id);
+                if (j >= 0) ops.push({ type: "patch", table: "actions", id, data: { ...changes[j], sort: at } });
+                else if (a && a.sort !== at) ops.push({ type: "patch", table: "actions", id, data: { sort: at } });
+              }
+              setSort(null);
+            } else movers.forEach((a, j) => ops.push({ type: "patch", table: "actions", id: a.id, data: { ...changes[j], sort: sortAt(j) } }));
+            const label = moved ? `${who} → ${g.label || "no group"}` : "Moved";
+            mutate(sort ? `${label} · now in manual order` : label, ops, { silent: !moved && !sort });
+            nav.setFocus(keys[keys.length - 1]);
           },
         };
   const archiveHere = () => archiveDone(s.actions.filter((a) => doneHere(a, mode)).map((a) => a.id), VIEW_TITLES[mode]);

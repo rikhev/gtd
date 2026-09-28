@@ -53,7 +53,7 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks() } });
+  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart() } });
 });
 
 app.put("/api/settings/key", async (c) => {
@@ -187,6 +187,45 @@ app.put("/api/settings/stall", async (c) => {
   setSetting("stallWeeks", String(w));
   return c.json({ stallWeeks: w });
 });
+
+/** The calendar's first day of the week: 1 Monday (the default), 0 Sunday. */
+const weekStart = () => (getSetting("weekStart", "1") === "0" ? 0 : 1);
+app.put("/api/settings/week", async (c) => {
+  const { start } = (await c.req.json().catch(() => ({}))) as { start?: number };
+  if (start !== 0 && start !== 1) return c.json({ error: "Choose Monday or Sunday" }, 400);
+  setSetting("weekStart", String(start));
+  return c.json({ weekStart: start });
+});
+
+/** Days a deleted item stays in Recently deleted before it is gone for good (the owner can change it in Settings). */
+const trashDays = () => Number(getSetting("trashDays", "7")) || 7;
+app.put("/api/settings/trash", async (c) => {
+  const { days } = (await c.req.json().catch(() => ({}))) as { days?: number };
+  const d = Math.round(Number(days));
+  if (!(d >= 1 && d <= 365)) return c.json({ error: "Choose between 1 and 365 days" }, 400);
+  setSetting("trashDays", String(d));
+  purgeTrash();
+  return c.json({ trashDays: d });
+});
+
+/** Deleted items past the keep period go for good, with their files. Runs at start, hourly and when the period changes. */
+function purgeTrash() {
+  const cutoff = new Date(Date.now() - trashDays() * 86_400_000).toISOString();
+  const owner = { actions: "action", projects: "project", stuff: "stuff", refs: "ref" } as const;
+  for (const t of ["actions", "projects", "stuff", "refs"] as const) {
+    const gone = db.prepare(`SELECT id FROM ${t} WHERE status = 'trashed' AND trashed_at IS NOT NULL AND trashed_at < ?`).all(cutoff) as { id: string }[];
+    for (const { id } of gone) {
+      const files = db.prepare("SELECT id FROM files WHERE owner_kind = ? AND owner_id = ?").all(owner[t], id) as { id: string }[];
+      for (const f of files) {
+        if (existsSync(`${FILES_DIR}/${f.id}`)) unlinkSync(`${FILES_DIR}/${f.id}`);
+        db.prepare("DELETE FROM files WHERE id = ?").run(f.id);
+      }
+      db.prepare(`DELETE FROM ${t} WHERE id = ?`).run(id);
+    }
+  }
+}
+purgeTrash();
+setInterval(purgeTrash, 3_600_000).unref();
 
 app.post("/api/review/complete", (c) => {
   const row = { id: randomUUID(), completed_at: now() };

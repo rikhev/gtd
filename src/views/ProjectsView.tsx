@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { getState, isStalled, mutate, named, newAction, newProject, patchMany, plural, projectHealth, stamp, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
-import { Grid, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { DateCell, DoneBox, Lamp, Tag } from "../components/bits.tsx";
+import { Grid, bakeDrop, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
+import { AreaName, DateCell, DoneBox, Lamp } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { areaItems, askContext, createAreaOp } from "../actionCommands.tsx";
+import { areaItems, areaName, askContext, createAreaOp } from "../actionCommands.tsx";
 import { formatLong } from "../../shared/dates.ts";
 import type { ID, Op, Project } from "../../shared/types.ts";
 
@@ -50,16 +50,18 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
           const { id, op } = createAreaOp(q);
           mutate(`${n(ids)} → ${q}`, [op, ...ids.map((p) => ({ type: "patch" as const, table: "projects" as const, id: p, data: { area_id: id } }))]);
         },
-        onPick: (id) => patchMany("projects", ids, { area_id: id }, `${n(ids)} → ${getState().areas.find((a) => a.id === id)?.name ?? "no area"}`),
+        onPick: (id) => patchMany("projects", ids, { area_id: id }, `${n(ids)} → ${areaName(getState().areas.find((a) => a.id === id)?.name) ?? "no area"}`),
       });
     },
-    date(ids: ID[], field: "due" | "bring_back") {
+    date(ids: ID[], field: "due" | "start" | "bring_back") {
       if (!ids.length) return;
+      const title = { due: "Project due date", start: "Project starts on", bring_back: "Bring back to the Inbox on" }[field];
+      const what = { due: "due", start: "starts", bring_back: "bring back" }[field];
       ui.openPicker({
         type: "date",
-        title: field === "due" ? "Project due date" : "Bring back to the Inbox on",
+        title,
         current: ids.length === 1 ? (getState().projects.find((p) => p.id === ids[0])?.[field] ?? null) : null,
-        onPick: (d) => patchMany("projects", ids, { [field]: d }, d ? `${n(ids)}: ${field === "due" ? "due" : "bring back"} ${formatLong(d)}` : `${n(ids)}: date cleared`),
+        onPick: (d) => patchMany("projects", ids, { [field]: d }, d ? `${n(ids)}: ${what} ${formatLong(d)}` : `${n(ids)}: date cleared`),
       });
     },
     move(ids: ID[]) {
@@ -208,7 +210,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     for (const p of rows) byArea.set(p.area_id ?? "none", [...(byArea.get(p.area_id ?? "none") ?? []), p]);
     return [...byArea.entries()]
       .sort((a, b) => (areaById.get(a[0])?.sort ?? 999) - (areaById.get(b[0])?.sort ?? 999))
-      .map(([k, r]) => ({ key: k, label: areaById.get(k)?.name ?? "No area", rows: r }));
+      .map(([k, r]) => ({ key: k, label: areaName(areaById.get(k)?.name) ?? "No area", areaColor: areaById.get(k) ? (areaById.get(k)!.color ?? "") : undefined, rows: r }));
   }, [rows, groupByArea, areaById]);
   // Areas keep their order; a heading click sorts the projects inside each one.
   const groups = useMemo(
@@ -298,6 +300,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.showdone", label: showDone ? "Hide completed projects" : "Show completed projects", group: "View", run: () => setShowDone(!showDone) },
     { id: "proj.area", label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
     { id: "proj.due", label: "Due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },
+    { id: "proj.start", label: "Start date", group: "Fields", keys: ["s"], enabled: has, run: () => ed.date(nav.targets(), "start") },
     { id: "proj.back", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], enabled: has, run: () => ed.date(nav.targets(), "bring_back") },
     { id: "proj.move", label: "Move to Someday / Active, or merge into another project", group: "Projects", keys: ["v"], enabled: has, run: () => ed.move(nav.targets()) },
     { id: "proj.trash", label: "Trash project", group: "Projects", keys: ["backspace", "delete"], enabled: has, run: () => ed.trash(nav.targets(), false) },
@@ -367,7 +370,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", drop: 2, render: (p: Project) => (p.area_id ? <Tag>{areaById.get(p.area_id)?.name}</Tag> : <span className="dash" aria-hidden="true">–</span>) }]),
+    ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", drop: 2, render: (p: Project) => (p.area_id ? <AreaName name={areaById.get(p.area_id)?.name ?? ""} color={areaById.get(p.area_id)?.color} /> : <span className="dash" aria-hidden="true">–</span>) }]),
     { key: "next", label: "Next action", width: "minmax(160px, 1fr)", drop: 3, render: (p) => (firstNext.get(p.id) ? <span className="muted-text">{firstNext.get(p.id)}</span> : <span className="dash" aria-hidden="true">–</span>) },
     { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
     { key: "due", label: "Due", width: "84px", render: (p) => <DateCell date={p.due} /> },
@@ -377,26 +380,43 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     <Grid
       listId="projects"
       sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
-      reorder={
-        sort
-          ? undefined
-          : {
-              // Drag to reorder while the list is in its own order; dropped into another area, the project moves there.
-              onMove: (key, beforeKey, groupKey) => {
-                const g = groups.find((x) => x.key === groupKey);
-                const me = s.projects.find((p) => p.id === key);
-                if (!g || !me) return;
-                const home = groups.find((x) => x.rows.some((p) => p.id === key))?.key;
-                const newArea = groupKey !== home && groupByArea ? (groupKey === "none" ? null : groupKey) : undefined;
-                const rest = g.rows.filter((p) => p.id !== key);
-                const i = beforeKey ? rest.findIndex((p) => p.id === beforeKey) : -1;
-                const sortAt = i >= 0 ? (i > 0 ? (rest[i - 1].sort + rest[i].sort) / 2 : rest[i].sort - 1) : rest.length ? rest[rest.length - 1].sort + 1 : me.sort;
-                const moved = newArea !== undefined;
-                mutate(moved ? `“${me.title || "Untitled project"}” → ${g.label}` : "Moved", [{ type: "patch", table: "projects", id: key, data: { sort: sortAt, ...(moved ? { area_id: newArea } : {}) } }], { silent: !moved });
-                nav.setFocus(key);
-              },
+      reorder={{
+        // Projects always drag; dropped into another area, the project moves there. In a column sort the drop
+        // switches the list to its manual order, keeping everything where it was on screen.
+        // Completed projects stay put at the bottom of their area.
+        canDrag: (k: string) => s.projects.find((p) => p.id === k)?.status !== "done",
+        onMove: (keys, beforeKey, groupKey) => {
+          const g = groups.find((x) => x.key === groupKey);
+          const movers = keys.map((k) => s.projects.find((p) => p.id === k)).filter((p): p is Project => Boolean(p));
+          if (!g || !movers.length) return;
+          // Dropped into another area group, every dragged project moves to that area.
+          const homeOf = (id: ID) => groups.find((x) => x.rows.some((p) => p.id === id))?.key;
+          const newArea = groupByArea ? (groupKey === "none" ? null : groupKey) : undefined;
+          const rest = g.rows.filter((p) => p.status !== "done" && !keys.includes(p.id));
+          const i = beforeKey ? rest.findIndex((p) => p.id === beforeKey) : -1;
+          const lo = i > 0 ? rest[i - 1].sort : i === 0 ? null : rest.length ? rest[rest.length - 1].sort : null;
+          const hi = i >= 0 ? rest[i].sort : null;
+          const n = movers.length;
+          const sortAt = (j: number) => (lo !== null && hi !== null ? lo + ((hi - lo) * (j + 1)) / (n + 1) : lo !== null ? lo + j + 1 : hi !== null ? hi - (n - j) : movers[j].sort);
+          const moves = movers.map((p) => newArea !== undefined && homeOf(p.id) !== groupKey);
+          const moved = moves.some(Boolean);
+          const who = movers.length === 1 ? `“${movers[0].title || "Untitled project"}”` : plural(movers.length, "project");
+          const ops: Op[] = [];
+          if (sort) {
+            const baked = bakeDrop(groups, (p) => p.id, (p) => p.sort, (p) => p.status !== "done", keys, beforeKey, groupKey);
+            for (const [id, at] of baked) {
+              const j = movers.findIndex((m) => m.id === id);
+              const p = s.projects.find((x) => x.id === id);
+              if (j >= 0) ops.push({ type: "patch", table: "projects", id, data: { sort: at, ...(moves[j] ? { area_id: newArea } : {}) } });
+              else if (p && p.sort !== at) ops.push({ type: "patch", table: "projects", id, data: { sort: at } });
             }
-      }
+            setSort(null);
+          } else movers.forEach((p, j) => ops.push({ type: "patch", table: "projects", id: p.id, data: { sort: sortAt(j), ...(moves[j] ? { area_id: newArea } : {}) } }));
+          const label = moved ? `${who} → ${g.label}` : "Moved";
+          mutate(sort ? `${label} · now in manual order` : label, ops, { silent: !moved && !sort });
+          nav.setFocus(keys[keys.length - 1]);
+        },
+      }}
       columns={columns}
       groups={groups}
       getKey={(p) => p.id}

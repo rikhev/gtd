@@ -1,12 +1,16 @@
 import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
 import type { UI } from "./ui.tsx";
-import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid } from "./store.ts";
+import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
 /** No red (kept for trouble: overdue, stalled, errors) and no green (kept for the "on track" lamp). */
 export const CONTEXT_COLORS = ["#2f6fb5", "#5b6b7e", "#8a5a2b", "#b7791f", "#6b4fa0", "#0f8a8a", "#a3476e", "#5b6b2e"];
+export const COLOR_NAMES: Record<string, string> = { "#2f6fb5": "Blue", "#5b6b7e": "Slate", "#8a5a2b": "Sienna", "#b7791f": "Ochre", "#6b4fa0": "Violet", "#0f8a8a": "Teal", "#a3476e": "Plum", "#5b6b2e": "Olive" };
+/** Areas draw from the same palette (no red, no green), in an order that keeps neighbours apart. */
+export const AREA_COLORS = ["#2f6fb5", "#0f8a8a", "#8a5a2b", "#6b4fa0", "#a3476e", "#b7791f", "#5b6b2e", "#5b6b7e"];
+export const nextAreaColor = () => AREA_COLORS[getState().areas.length % AREA_COLORS.length];
 
 export function createContextOp(name: string): { id: ID; op: Op } {
   const s = getState();
@@ -24,7 +28,7 @@ export function createContextOp(name: string): { id: ID; op: Op } {
 
 export function createAreaOp(name: string): { id: ID; op: Op } {
   const id = uid();
-  return { id, op: { type: "create", table: "areas", row: { id, name, sort: getState().areas.length } } };
+  return { id, op: { type: "create", table: "areas", row: { id, name: bareArea(name), sort: getState().areas.length, color: nextAreaColor() } } };
 }
 
 /** Everyone and everything the Waiting For list is waiting on right now, most recent first. */
@@ -104,14 +108,16 @@ export function projectItems() {
   return s.projects
     .filter((p) => p.status === "active" || p.status === "someday")
     .sort((a, b) => a.title.localeCompare(b.title))
-    .map((p) => ({ id: p.id, label: p.title || "Untitled project", hint: p.status === "someday" ? "Someday" : s.areas.find((a) => a.id === p.area_id)?.name }));
+    .map((p) => ({ id: p.id, label: p.title || "Untitled project", hint: p.status === "someday" ? "Someday" : areaName(s.areas.find((a) => a.id === p.area_id)?.name) }));
 }
+
+export const areaName = (name: string | undefined) => (name === undefined ? undefined : areaLabel(name));
 
 export function areaItems() {
   return getState()
     .areas.slice()
     .sort((a, b) => a.sort - b.sort)
-    .map((a) => ({ id: a.id, label: a.name }));
+    .map((a) => ({ id: a.id, label: areaLabel(a.name), color: a.color ?? undefined }));
 }
 
 const n = (ids: ID[]) => named("actions", ids, "action");

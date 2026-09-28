@@ -26,7 +26,10 @@ let meta: {
   authConfigured: boolean;
   /** Weeks without progress before a project counts as stalled (Settings). */
   stallWeeks: number;
-} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3 };
+  trashDays: number;
+  /** The calendar's first day of the week: 1 Monday, 0 Sunday. */
+  weekStart: 0 | 1;
+} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1 };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -202,9 +205,25 @@ function touchActions(ops: Op[]): Op[] {
   );
 }
 
+const TRASHABLE = new Set<TableName>(["actions", "projects", "stuff", "refs"]);
+/**
+ * Deleting is a status: a row turning "trashed" records when (one time for the whole edit, so a project and the
+ * actions deleted with it share it) and the status it had, for Recently deleted; any other status clears both.
+ * The server does the same for its own edits.
+ */
+function stampTrash(ops: Op[]): Op[] {
+  const at = stamp();
+  return ops.map((op) => {
+    if (op.type !== "patch" || !TRASHABLE.has(op.table) || !("status" in op.data) || "trashed_at" in op.data) return op;
+    const cur = find(op.table, op.id) as { status?: string } | undefined;
+    if (op.data.status === "trashed") return cur?.status === "trashed" ? op : { ...op, data: { ...op.data, trashed_at: at, trashed_from: cur?.status ?? null } };
+    return { ...op, data: { ...op.data, trashed_at: null, trashed_from: null } };
+  });
+}
+
 export function mutate(label: string, rawOps: Op[], opts: { silent?: boolean } = {}) {
   if (!rawOps.length) return;
-  const ops = touchActions(dropStaleWaiting(rawOps));
+  const ops = stampTrash(touchActions(dropStaleWaiting(rawOps)));
   const inverse = invert(ops);
   applyLocal(ops);
   void send(ops);
@@ -287,6 +306,15 @@ export { plural };
 
 /** Mark actions done; recurring ones spawn their next occurrence. */
 /** A toast's subject: the item itself when there is one ("“Pay the VAT”"), else a count ("3 actions"). */
+/** Areas read as "#Work", as contexts read as "@phone"; the # is shown, never stored. */
+export function areaLabel(name: string) {
+  return `#${bareArea(name) || "Untitled"}`;
+}
+/** An area name as stored: whatever the owner typed, without a leading #. */
+export function bareArea(name: string) {
+  return name.trim().replace(/^#+\s*/, "");
+}
+
 export function named(table: "actions" | "projects" | "stuff" | "refs", ids: ID[], noun: string): string {
   if (ids.length !== 1) return plural(ids.length, noun);
   const row = (state[table] as unknown as { id: ID; title?: string; text?: string }[]).find((r) => r.id === ids[0]);

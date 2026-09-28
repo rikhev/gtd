@@ -29,6 +29,9 @@ export interface Action {
   done_from: "next" | "waiting" | "someday" | "inbox" | null;
   /** When a done action was archived to the Done list; null while it still sits on its own list. */
   archived_at: string | null;
+  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  trashed_at?: string | null;
+  trashed_from?: string | null;
 }
 
 export interface Project {
@@ -43,8 +46,13 @@ export interface Project {
   sort: number;
   created_at: string;
   completed_at: string | null;
+  /** The day work on it starts; with a due date the calendar draws it as a bar between them. */
+  start?: string | null;
   /** Set when a completed project is archived off the Projects list. */
   archived_at: string | null;
+  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  trashed_at?: string | null;
+  trashed_from?: string | null;
 }
 
 export interface Stuff {
@@ -54,6 +62,9 @@ export interface Stuff {
   status: "inbox" | "done" | "processed" | "trashed";
   created_at: string;
   processed_at: string | null;
+  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  trashed_at?: string | null;
+  trashed_from?: string | null;
 }
 
 export interface Ref {
@@ -63,6 +74,9 @@ export interface Ref {
   project_id: ID | null;
   status: "active" | "trashed";
   created_at: string;
+  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  trashed_at?: string | null;
+  trashed_from?: string | null;
 }
 
 export interface Context {
@@ -76,6 +90,8 @@ export interface Area {
   id: ID;
   name: string;
   sort: number;
+  /** Shown only in the area's "#"; null draws a plain ink #. */
+  color: string | null;
 }
 
 export interface FileRow {

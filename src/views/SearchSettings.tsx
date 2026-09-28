@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { mutate, notify, plural, updateMeta, useMeta, useStore } from "../store.ts";
+import { mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { ContextCode, Tag } from "../components/bits.tsx";
+import { AreaName, ContextCode, Tag } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { CONTEXT_COLORS } from "../actionCommands.tsx";
+import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../actionCommands.tsx";
 import { suggestRules } from "../rules.ts";
 import { isDark, setTheme, useTheme } from "../theme.ts";
 import { promptApiKey, removeApiKey } from "../apiKey.ts";
@@ -108,7 +108,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: rules, contexts, Claude, export                            */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week"; id: ID; text: string; status?: string; color?: string };
 
 export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
@@ -126,10 +126,22 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [{ key: "theme", kind: "theme" as const, id: "theme", text: "Theme" }],
       },
       {
+        key: "calendar",
+        label: "Calendar",
+        hideCount: true,
+        rows: [{ key: "week", kind: "week" as const, id: "week", text: "Week starts on" }],
+      },
+      {
         key: "review",
         label: "Weekly Review",
         hideCount: true,
         rows: [{ key: "stall", kind: "stall" as const, id: "stall", text: "Stalled after" }],
+      },
+      {
+        key: "deleted",
+        label: "Recently deleted",
+        hideCount: true,
+        rows: [{ key: "trash", kind: "trash" as const, id: "trash", text: "Keep deleted items" }],
       },
       {
         key: "claude",
@@ -157,7 +169,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         // Areas of focus are managed here (the Projects list groups by them); creating one also works from any area picker.
         key: "areas",
         label: "Areas",
-        rows: [...s.areas].sort((a, b) => a.sort - b.sort).map((a) => ({ key: `a:${a.id}`, kind: "area" as const, id: a.id, text: a.name })),
+        rows: [...s.areas].sort((a, b) => a.sort - b.sort).map((a) => ({ key: `a:${a.id}`, kind: "area" as const, id: a.id, text: a.name, color: a.color ?? undefined })),
         meta: s.areas.length ? undefined : "None yet. N adds one; projects are grouped by area",
       },
       {
@@ -166,7 +178,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks],
+    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart],
   );
   const nav = useListNav("settings", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: true })), [groups]));
   const all = groups.flatMap((g) => g.rows);
@@ -208,6 +220,45 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             return { ok: true, text: `Stalled after ${plural(n, "week")} without progress` };
           },
           onPick: (v) => void saveStallWeeks(Number(v.trim())),
+        }),
+    },
+    {
+      id: "set.week",
+      label: "Choose the first day of the week",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "week",
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "Week starts on",
+          items: [
+            { id: "1", label: "Monday" },
+            { id: "0", label: "Sunday" },
+          ],
+          current: String(meta.weekStart),
+          onPick: (v) => v !== null && void saveWeekStart(v === "0" ? 0 : 1),
+        }),
+    },
+    {
+      id: "set.trash",
+      label: "Change how long deleted items are kept",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "trash",
+      run: () =>
+        ui.openPicker({
+          type: "text",
+          title: "Keep deleted items (days)",
+          current: String(meta.trashDays),
+          placeholder: "Number of days",
+          preview: (v) => {
+            const n = Number(v.trim());
+            if (!v.trim()) return { ok: false, text: "Type a number of days" };
+            if (!Number.isInteger(n) || n < 1 || n > 365) return { ok: false, text: "A whole number from 1 to 365" };
+            return { ok: true, text: `Deleted items are kept ${plural(n, "day")}, then gone for good` };
+          },
+          onPick: (v) => void saveTrashDays(Number(v.trim())),
         }),
     },
     {
@@ -267,7 +318,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       run: () => {
         const id = crypto.randomUUID();
         if (groupOfFocus === "areas") {
-          mutate("New area", [{ type: "create", table: "areas", row: { id, name: "", sort: Math.max(0, ...s.areas.map((a) => a.sort)) + 1 } }], { silent: true });
+          mutate("New area", [{ type: "create", table: "areas", row: { id, name: "", sort: Math.max(0, ...s.areas.map((a) => a.sort)) + 1, color: nextAreaColor() } }], { silent: true });
           nav.setFocus(`a:${id}`);
           setEditing(`a:${id}`);
         } else if (groupOfFocus === "contexts") {
@@ -307,18 +358,18 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     { id: "set.areadown", label: "Move area down", group: "Settings", keys: ["alt+arrowdown"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, 1) },
     {
       id: "set.color",
-      label: "Change context colour",
+      label: cur?.kind === "area" ? "Change area colour" : "Change context colour",
       group: "Settings",
       keys: ["c"],
-      enabled: cur?.kind === "context",
+      enabled: cur?.kind === "context" || cur?.kind === "area",
       run: () =>
         cur &&
         ui.openPicker({
           type: "list",
           title: "Colour",
-          items: CONTEXT_COLORS.map((c, i) => ({ id: c, label: ["Blue", "Slate", "Sienna", "Ochre", "Violet", "Teal", "Plum", "Olive"][i], color: c })),
+          items: (cur.kind === "area" ? AREA_COLORS : CONTEXT_COLORS).map((c) => ({ id: c, label: COLOR_NAMES[c], color: c })),
           current: cur.color,
-          onPick: (c) => c && mutate("Colour changed", [{ type: "patch", table: "contexts", id: cur.id, data: { color: c } }]),
+          onPick: (c) => c && mutate("Colour changed", [{ type: "patch", table: cur.kind === "area" ? "areas" : "contexts", id: cur.id, data: { color: c } }]),
         }),
     },
   ];
@@ -340,6 +391,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
               const field = r.kind === "rule" ? "text" : "name";
               let val = v.trim();
               if (r.kind === "context" && val && !val.startsWith("@")) val = `@${val}`;
+              if (r.kind === "area") val = bareArea(val);
               if (!val || val === "@") mutate("Discarded", [{ type: "delete", table, id: r.id }], { silent: true });
               else if (val !== r.text) mutate("Saved", [{ type: "patch", table, id: r.id, data: { [field]: val } }]);
             }}
@@ -348,6 +400,16 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           <span className="subject">
             <span className="subject-text strong">Theme</span>
             <span className="subject-more">Light, dark, or follow the system. Kept in this browser.</span>
+          </span>
+        ) : r.kind === "week" ? (
+          <span className="subject">
+            <span className="subject-text strong">Week starts on</span>
+            <span className="subject-more">The first column of the calendar's weeks and months.</span>
+          </span>
+        ) : r.kind === "trash" ? (
+          <span className="subject">
+            <span className="subject-text strong">Keep deleted items</span>
+            <span className="subject-more">Anything deleted stays in Recently deleted this long, so it can be put back. Then it is gone for good.</span>
           </span>
         ) : r.kind === "stall" ? (
           <span className="subject">
@@ -360,7 +422,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-more">{meta.hasKey ? `Kept out of the browser: only its last four characters are ever shown. Clarify with Claude uses Claude Sonnet 5.` : "Lets Claude propose projects and actions when you clarify with Claude (⌥K). Everything else works without it."}</span>
           </span>
         ) : r.kind === "area" ? (
-          <Tag>{r.text || "Untitled"}</Tag>
+          <AreaName name={r.text} color={r.color} />
         ) : r.kind === "context" ? (
           <ContextCode ctx={{ id: r.id, name: r.text, color: r.color!, sort: 0 }} />
         ) : (
@@ -376,6 +438,10 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           <span>{theme.pref === "system" ? `System (${theme.dark ? "dark" : "light"})` : theme.pref === "dark" ? "Dark" : "Light"}</span>
         ) : r.kind === "stall" ? (
           <span className="num">{plural(meta.stallWeeks, "week")}</span>
+        ) : r.kind === "trash" ? (
+          <span className="num">{plural(meta.trashDays, "day")}</span>
+        ) : r.kind === "week" ? (
+          <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>
         ) : r.kind === "apikey" ? (
           meta.hasKey ? (
             <span className="key-state">
@@ -427,5 +493,23 @@ async function saveStallWeeks(weeks: number) {
   if (j.stallWeeks) {
     updateMeta({ stallWeeks: j.stallWeeks });
     notify(`Projects now count as stalled after ${plural(j.stallWeeks, "week")} without progress.`);
+  } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
+}
+
+async function saveTrashDays(days: number) {
+  const res = await fetch("/api/settings/trash", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ days }) });
+  const j = (await res.json()) as { trashDays?: number; error?: string };
+  if (j.trashDays) {
+    updateMeta({ trashDays: j.trashDays });
+    notify(`Deleted items are now kept ${plural(j.trashDays, "day")}.`);
+  } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
+}
+
+async function saveWeekStart(start: 0 | 1) {
+  const res = await fetch("/api/settings/week", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ start }) });
+  const j = (await res.json()) as { weekStart?: 0 | 1; error?: string };
+  if (j.weekStart === 0 || j.weekStart === 1) {
+    updateMeta({ weekStart: j.weekStart });
+    notify(`Weeks now start on ${j.weekStart === 0 ? "Sunday" : "Monday"}.`);
   } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }

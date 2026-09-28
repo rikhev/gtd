@@ -15,13 +15,13 @@ export const COLUMNS: Record<TableName, string[]> = {
   actions: [
     "id", "title", "notes", "project_id", "context_id", "due", "defer", "time_min", "energy", "flagged",
     "status", "waiting_who", "waiting_since", "followup", "recurrence", "bring_back", "sort", "created_at", "completed_at", "updated_at",
-    "done_from", "archived_at",
+    "done_from", "archived_at", "trashed_at", "trashed_from",
   ],
-  projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at"],
-  stuff: ["id", "text", "kind", "status", "created_at", "processed_at"],
-  refs: ["id", "title", "notes", "project_id", "status", "created_at"],
+  projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at", "trashed_at", "trashed_from", "start"],
+  stuff: ["id", "text", "kind", "status", "created_at", "processed_at", "trashed_at", "trashed_from"],
+  refs: ["id", "title", "notes", "project_id", "status", "created_at", "trashed_at", "trashed_from"],
   contexts: ["id", "name", "color", "sort"],
-  areas: ["id", "name", "sort"],
+  areas: ["id", "name", "sort", "color"],
   files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at"],
   rules: ["id", "text", "status", "created_at"],
   corrections: ["id", "stuff_text", "field", "proposed", "chosen", "used", "created_at"],
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS refs (
   project_id TEXT, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS contexts (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, sort REAL NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS areas (id TEXT PRIMARY KEY, name TEXT NOT NULL, sort REAL NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS areas (id TEXT PRIMARY KEY, name TEXT NOT NULL, sort REAL NOT NULL DEFAULT 0, color TEXT);
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
   preview TEXT NOT NULL DEFAULT '', owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL, created_at TEXT NOT NULL
@@ -85,6 +85,27 @@ if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).som
   db.exec("ALTER TABLE projects ADD COLUMN archived_at TEXT");
   db.exec("UPDATE projects SET archived_at = COALESCE(completed_at, created_at) WHERE status = 'done'");
 }
+// Deleted items are kept (Recently deleted) until the keep period runs out: each remembers when it was deleted and
+// the status it had, so it can be put back. Anything already deleted gets the full period from now, once.
+for (const t of ["actions", "projects", "stuff", "refs"]) {
+  if (!(db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).some((c) => c.name === "trashed_at")) {
+    db.exec(`ALTER TABLE ${t} ADD COLUMN trashed_at TEXT`);
+    db.exec(`ALTER TABLE ${t} ADD COLUMN trashed_from TEXT`);
+    db.prepare(`UPDATE ${t} SET trashed_at = ? WHERE status = 'trashed'`).run(new Date().toISOString());
+  }
+}
+// Projects can start on a date, so the calendar draws them as a bar from start to due.
+if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).some((c) => c.name === "start")) {
+  db.exec("ALTER TABLE projects ADD COLUMN start TEXT");
+}
+// Areas carry a colour, shown only in their "#". Existing areas take the palette in their order, once.
+if (!(db.prepare("PRAGMA table_info(areas)").all() as { name: string }[]).some((c) => c.name === "color")) {
+  db.exec("ALTER TABLE areas ADD COLUMN color TEXT");
+  const palette = ["#2f6fb5", "#0f8a8a", "#8a5a2b", "#6b4fa0", "#a3476e", "#b7791f", "#5b6b2e", "#5b6b7e"];
+  const rows = db.prepare("SELECT id FROM areas ORDER BY sort").all() as { id: string }[];
+  const set = db.prepare("UPDATE areas SET color = ? WHERE id = ?");
+  rows.forEach((r, i) => set.run(palette[i % palette.length], r.id));
+}
 
 /** Owner preferences kept on the server (so every browser agrees). */
 export function getSetting(key: string, fallback: string): string {
@@ -110,8 +131,8 @@ function seed() {
   ];
   const ins = db.prepare("INSERT INTO contexts (id, name, color, sort) VALUES (?, ?, ?, ?)");
   contexts.forEach(([name, color], i) => ins.run(randomUUID(), name, color, i));
-  const insA = db.prepare("INSERT INTO areas (id, name, sort) VALUES (?, ?, ?)");
-  ["Work", "Home", "Health", "Finance"].forEach((name, i) => insA.run(randomUUID(), name, i));
+  const insA = db.prepare("INSERT INTO areas (id, name, sort, color) VALUES (?, ?, ?, ?)");
+  ([["Work", "#2f6fb5"], ["Home", "#0f8a8a"], ["Health", "#8a5a2b"], ["Finance", "#6b4fa0"]] as const).forEach(([name, color], i) => insA.run(randomUUID(), name, i, color));
 }
 seed();
 
@@ -189,13 +210,30 @@ export function deleteRow(table: TableName, id: string) {
   db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
 }
 
+const TRASHABLE = new Set(["actions", "projects", "stuff", "refs"]);
+
+/**
+ * Deleting is a status: when a row turns "trashed" it records when (one time for the whole batch, so a project
+ * and the actions deleted with it share it) and what it was; any other status clears both.
+ */
+function stampTrash(table: TableName, id: string, data: Record<string, unknown>, at: string) {
+  if (!TRASHABLE.has(table) || !("status" in data) || "trashed_at" in data) return data;
+  const cur = db.prepare(`SELECT status FROM ${table} WHERE id = ?`).get(id) as { status: string } | undefined;
+  if (data.status === "trashed") {
+    if (cur?.status === "trashed") return data;
+    return { ...data, trashed_at: at, trashed_from: cur?.status ?? null };
+  }
+  return { ...data, trashed_at: null, trashed_from: null };
+}
+
 export function applyOps(ops: Op[]) {
+  const at = now();
   db.exec("BEGIN");
   try {
     for (const op of ops) {
       if (!(op.table in COLUMNS)) throw new Error(`Unknown table ${op.table}`);
-      if (op.type === "create") insertRow(op.table, op.row);
-      else if (op.type === "patch") patchRow(op.table, op.id, op.data);
+      if (op.type === "create") insertRow(op.table, op.row.status === "trashed" && !op.row.trashed_at && TRASHABLE.has(op.table) ? { ...op.row, trashed_at: at } : op.row);
+      else if (op.type === "patch") patchRow(op.table, op.id, stampTrash(op.table, op.id, op.data, at));
       else if (op.type === "delete") deleteRow(op.table, op.id);
     }
     db.exec("COMMIT");
