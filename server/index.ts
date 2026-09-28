@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { applyOps, db, FILES_DIR, getSetting, insertRow, loadState, now, patchRow, setSetting } from "./db.ts";
 import { extract, guessMime, looksLikeEmail } from "./extract.ts";
-import { cancelClarify, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
+import { cancelClarify, clarifyLang, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
 import { exportJson, exportZip } from "./export.ts";
 import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
 import { today } from "../shared/dates.ts";
@@ -53,7 +53,7 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart() } });
+  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), clarifyLang: clarifyLang() } });
 });
 
 app.put("/api/settings/key", async (c) => {
@@ -195,6 +195,14 @@ app.put("/api/settings/week", async (c) => {
   if (start !== 0 && start !== 1) return c.json({ error: "Choose Monday or Sunday" }, 400);
   setSetting("weekStart", String(start));
   return c.json({ weekStart: start });
+});
+
+/** The language Claude clarifies in: English (the default) or Swedish. */
+app.put("/api/settings/language", async (c) => {
+  const { lang } = (await c.req.json().catch(() => ({}))) as { lang?: string };
+  if (lang !== "en" && lang !== "sv") return c.json({ error: "Choose English or Swedish" }, 400);
+  setSetting("clarifyLang", lang);
+  return c.json({ clarifyLang: lang });
 });
 
 /** Days a deleted item stays in the Trash before it is gone for good (the owner can change it in Settings). */

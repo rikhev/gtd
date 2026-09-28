@@ -64,8 +64,8 @@ export function InlineEdit({ value, onDone, placeholder }: { value: string; onDo
 
 /** Grouping choices per list: no project grouping where the Projects list already does that job. */
 function groupOptions(mode: Mode): GroupBy[] {
-  if (mode === "next") return ["context", "due", "today", "none"];
-  if (mode === "waiting") return ["who", "context", "due", "today", "none"];
+  if (mode === "next") return ["context", "project", "due", "today", "none"];
+  if (mode === "waiting") return ["who", "project", "context", "due", "today", "none"];
   if (mode === "someday") return ["project", "context", "due", "none"];
   return ["none"];
 }
@@ -402,8 +402,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
           <span className="subject-text">{titleOr(a)}</span>
           <span className="subject-icons">
             {a.recurrence && <Repeat size={12} strokeWidth={2} aria-label="Repeats" />}
-            {a.notes && <AlignLeft size={12} strokeWidth={2} aria-label="Has notes" />}
-            {filesByOwner.has(a.id) && <Paperclip size={12} strokeWidth={2} aria-label="Has files" />}
+            {a.notes && <AlignLeft className="ind-notes" size={12} strokeWidth={2} aria-label="Has notes" />}
+            {filesByOwner.has(a.id) && <Paperclip className="ind-files" size={12} strokeWidth={2} aria-label="Has files" />}
             {a.defer && a.defer > t && <Clock size={12} strokeWidth={2} aria-label={`Starts ${a.defer}`} />}
             {a.bring_back && (
               <span className="back-on" title={`Comes back to the Inbox on ${a.bring_back}`}>

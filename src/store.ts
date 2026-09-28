@@ -29,7 +29,9 @@ let meta: {
   trashDays: number;
   /** The calendar's first day of the week: 1 Monday, 0 Sunday. */
   weekStart: 0 | 1;
-} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1 };
+  /** The language Claude clarifies in. */
+  clarifyLang: "en" | "sv";
+} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, clarifyLang: "en" };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 

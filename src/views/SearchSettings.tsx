@@ -108,7 +108,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: rules, contexts, Claude, export                            */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "export"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "lang" | "export"; id: ID; text: string; status?: string; color?: string };
 
 /** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–5. */
 const TABS = [
@@ -125,6 +125,7 @@ const TAB_OF: Record<string, TabId> = {
   review: "general",
   trash: "general",
   claude: "claude",
+  language: "claude",
   suggested: "claude",
   rules: "claude",
   areas: "areas",
@@ -174,6 +175,12 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [{ key: "apikey", kind: "apikey" as const, id: "apikey", text: "API key", status: meta.hasKey ? "set" : "missing" }],
       },
       {
+        key: "language",
+        label: "Language",
+        hideCount: true,
+        rows: [{ key: "lang", kind: "lang" as const, id: "lang", text: "Clarify in" }],
+      },
+      {
         key: "suggested",
         label: "Suggested rules",
         rows: s.rules.filter((r) => r.status === "suggested").map((r) => ({ key: `r:${r.id}`, kind: "rule" as const, id: r.id, text: r.text, status: r.status })),
@@ -211,7 +218,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart],
+    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.clarifyLang],
   );
   const shown = useMemo(() => groups.filter((g) => TAB_OF[g.key] === tab), [groups, tab]);
   // No group headings: the tab already says what the list is (owner's decision); each tab is one plain list.
@@ -287,6 +294,24 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           ],
           current: String(meta.weekStart),
           onPick: (v) => v !== null && void saveWeekStart(v === "0" ? 0 : 1),
+        }),
+    },
+    {
+      id: "set.lang",
+      label: "Choose the language Claude clarifies in",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "lang",
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "Claude clarifies in",
+          items: [
+            { id: "en", label: "English" },
+            { id: "sv", label: "Swedish", hint: "Svenska" },
+          ],
+          current: meta.clarifyLang,
+          onPick: (v) => (v === "en" || v === "sv") && void saveClarifyLang(v),
         }),
     },
     {
@@ -462,6 +487,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Week starts on</span>
             <span className="subject-more">The first column of the calendar's weeks and months.</span>
           </span>
+        ) : r.kind === "lang" ? (
+          <span className="subject">
+            <span className="subject-text strong">Clarify in</span>
+            <span className="subject-more">The language of Claude's proposals and suggested rules, whatever the language of the captured stuff.</span>
+          </span>
         ) : r.kind === "trash" ? (
           <span className="subject">
             <span className="subject-text strong">Keep deleted items</span>
@@ -498,6 +528,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           <span className="num">{plural(meta.trashDays, "day")}</span>
         ) : r.kind === "week" ? (
           <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>
+        ) : r.kind === "lang" ? (
+          <span>{LANG_NAME[meta.clarifyLang]}</span>
         ) : r.kind === "export" ? (
           <span className="muted-text">Download</span>
         ) : r.kind === "apikey" ? (
@@ -577,6 +609,18 @@ async function saveTrashDays(days: number) {
   if (j.trashDays) {
     updateMeta({ trashDays: j.trashDays });
     notify(`Deleted items are now kept ${plural(j.trashDays, "day")}.`);
+  } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
+}
+
+const LANG_NAME = { en: "English", sv: "Swedish" } as const;
+
+async function saveClarifyLang(lang: "en" | "sv") {
+  const res = await fetch("/api/settings/language", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ lang }) });
+  const j = (await res.json()) as { clarifyLang?: "en" | "sv"; error?: string };
+  if (j.clarifyLang === "en" || j.clarifyLang === "sv") {
+    updateMeta({ clarifyLang: j.clarifyLang });
+    // Proposals already made in the other language are made again the next time Clarify with Claude runs.
+    notify(`Claude now clarifies in ${LANG_NAME[j.clarifyLang]}.`);
   } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }
 

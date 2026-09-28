@@ -54,6 +54,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `I` | On Waiting For (list or details pane): when the waiting began. New items start today; set the real day when you file one later ("20 sep" means the last 20 September; a future date is refused) |
 | `⇧P` | Turn a next action (or a someday one) into a project: its title becomes the outcome, and its notes, files, dates and area go with it. You're asked for the project's first next action straight away (Esc to add it later). Also in the Move picker (`V`) and ⌘K; `⌘Z` undoes it |
 | Column order | Drag a column heading sideways, or ⌘K › Arrange columns… (then Reset column order to undo). Remembered per list |
+| Column width | Drag the edge of a column heading; double-click the edge to fit the contents. Or ⌘K › Resize columns…, then `←` `→` (`⇧` for a pixel), `Tab` next column, `F` fit, `0` default, `↵` keep, `Esc` cancel. Reset column widths undoes it. Remembered per list |
 | Columns shown | Right-click a column heading, or ⌘K › Show or hide columns…: toggle any column, including extra ones such as Area, Created, Updated, Repeat. Remembered per list |
 | `⌥P` | Pin the details pane: it stays open beside every list and follows the cursor (× closes and unpins it) |
 | In the details pane | Each field shows its key while the pane has focus: `F2` the title, `N` the notes, the field letters (`P` project, `C` context, `D` due, `S` start, `I` waiting since…), `⌘O` attach a file, `T` a project's next action. `Esc` in a field leaves it (what you typed is saved) and keeps the pane; `Esc` again closes it |
@@ -72,6 +73,7 @@ These keys work inside Clarify:
 | `Esc` | Field → row, then leave Clarify. Leaving stops Claude; proposals already made are kept for next time |
 | `⇧Esc` | Stop Claude but keep reviewing the proposals that are ready (also the "Stop" link while Claude is reading) |
 | `C` `P` `D` `S` `T` `G` `V` `⇧F` | Correct a field |
+| `⇧P` | Make the item a project (more than one step): it's named after the item, its actions go into it, and the cursor lands on the first to name the next step. Also in File as (`V`) › Whole item → New project |
 | `N` / `⌥⌫` | Add / remove an action (`⌥⌫` only on the row, not while typing, where it deletes a word) |
 | `E` | Done now (two-minute rule) |
 | `⌘.` / `⌘,` | Skip to the next / previous item |

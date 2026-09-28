@@ -7,6 +7,7 @@ import { RAIL } from "../components/Chrome.tsx";
 import { promptApiKey } from "../apiKey.ts";
 import { suggestRules } from "../rules.ts";
 import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
+import { stuffTitle } from "./InboxView.tsx";
 import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
 import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
@@ -427,13 +428,15 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
           { id: "next", label: "Next action" },
           { id: "waiting", label: "Waiting for" },
           { id: "someday", label: "Someday / Maybe" },
+          { id: "item:project", label: "Whole item → New project" },
           { id: "item:reference", label: "Whole item → Reference" },
           { id: "item:trash", label: "Whole item → Trash" },
         ],
         current: a.kind,
         onPick: (k) => {
           if (!k) return;
-          if (k.startsWith("item:")) update((d) => (d.disposition = k.slice(5) as Draft["disposition"]));
+          if (k === "item:project") makeProject();
+          else if (k.startsWith("item:")) update((d) => (d.disposition = k.slice(5) as Draft["disposition"]));
           else if (k === "waiting") askWaitingOn(ui, a.waiting_who, (who) => update((d) => {
             d.actions[i].kind = "waiting";
             d.actions[i].waiting_who = who;
@@ -446,6 +449,24 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
             });
         },
       });
+  };
+
+  /**
+   * The item is a project: more than one step to the outcome. The project is named after the item, every action in
+   * the proposal goes into it, and the cursor lands on the first action to name the very next step (a project needs
+   * one). If that action only repeated the item's words, it is cleared to be written afresh.
+   */
+  const makeProject = () => {
+    if (!draft || !current) return;
+    const title = draft.new_project?.title || stuffTitle(current) || draft.actions[0]?.title || "New project";
+    update((d) => {
+      d.disposition = d.disposition === "someday" ? "someday" : "actionable";
+      d.new_project = { title, area: d.new_project?.area ?? null };
+      if (!d.actions.length) d.actions.push({ title: "", kind: "next", project: "new", context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false });
+      for (const a of d.actions) if (a.kind !== "someday" || d.disposition === "someday") a.project = "new";
+      if (normTitle(d.actions[0].title) === normTitle(title)) d.actions[0].title = "";
+    });
+    window.setTimeout(() => card.current?.querySelector<HTMLElement>("[data-row='0'] .p-title")?.focus(), 0);
   };
 
   const addRow = () =>
@@ -487,6 +508,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     } },
     { id: "cl.context", label: "Context", group: "Fields", keys: ["c"], enabled: ready, run: () => pickFor(rowOfFocus(), "context") },
     { id: "cl.project", label: "Project", group: "Fields", keys: ["p"], enabled: ready, run: () => pickFor(rowOfFocus(), "project") },
+    { id: "cl.makeproject", label: "Make this a project (more than one step)", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
     { id: "cl.due", label: "Due date", group: "Fields", keys: ["d"], enabled: ready, run: () => pickFor(rowOfFocus(), "due") },
     { id: "cl.defer", label: "Start date", group: "Fields", keys: ["s"], enabled: ready, run: () => pickFor(rowOfFocus(), "defer") },
     { id: "cl.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["t"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
@@ -764,6 +786,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
           { k: "mod+enter", label: "Accept" },
           ...(byHand ? [{ k: "n", label: "Add action" }] : []),
           { k: "v", label: "File as" },
+          { k: "shift+p", label: "Project" },
           { k: "e", label: "Done now" },
           { k: "backspace", label: "Trash" },
           { k: "mod+.", label: "Skip" },

@@ -2,6 +2,35 @@
    Tokens: near-white and grey with the faintest cast of still water, near-black ink, one blue for focus
    and selection, and colour only where it says something (overdue, stalled, flagged, project health). */
 
+/* Key symbols (⌘ ⌥ ⇧ ⌃ ↵ ⌫ ← → ↑ ↓ ◇ …) cut from Inter, which draws them to sit with a grotesque; Instrument Sans has
+   none, and the system fallbacks differ on every device. 3 KB, inlined, weight axis kept (400–700). OFL, see the licence file. */
+@font-face {
+  font-family: "Stiltje Keys";
+  src: url("./fonts/stiltje-keys.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: block;
+  /* Inter's symbols sit a little small beside Instrument Sans caps: drawn up to meet them. */
+  size-adjust: 112%;
+  unicode-range: U+2190-2193, U+21B5, U+21E5, U+21E7, U+2303, U+2318, U+2325, U+2326, U+232B, U+238B, U+23CE, U+25C7;
+}
+/* Metric-matched stand-ins while Instrument Sans loads, so nothing shifts when it arrives. */
+@font-face {
+  font-family: "Instrument Sans fallback";
+  src: local("Arial"), local("Helvetica Neue"), local("Helvetica");
+  size-adjust: 97%;
+  ascent-override: 100%;
+  descent-override: 25.8%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "Instrument Sans condensed fallback";
+  src: local("Arial Narrow"), local("Helvetica Neue Condensed"), local("Arial");
+  size-adjust: 97%;
+  ascent-override: 100%;
+  descent-override: 25.8%;
+  line-gap-override: 0%;
+}
+
 :root {
   color-scheme: light;
   --paper: #f3f5f7;
@@ -37,8 +66,10 @@
   --alert: #b3301c;
   --mark: #2a3139;
   --shadow: 0 10px 28px rgb(18 24 32 / 0.14), 0 2px 5px rgb(18 24 32 / 0.07);
-  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-  --font-label: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  /* The same face on every device (owner's request). "Stiltje Keys" only holds the key symbols, so it only ever
+     draws those; the labels are the same family condensed (see font-stretch where --font-label is used). */
+  --font-ui: "Stiltje Keys", "Instrument Sans Variable", "Instrument Sans fallback", system-ui, sans-serif;
+  --font-label: "Stiltje Keys", "Instrument Sans Variable", "Instrument Sans condensed fallback", "Arial Narrow", sans-serif;
   --row: 30px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -340,6 +371,7 @@ a:hover {
 .tag {
   display: inline-block;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -669,7 +701,12 @@ body.is-col-dragging * {
   user-select: none;
 }
 .gh {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.07em;
@@ -717,6 +754,93 @@ body.is-col-dragging * {
 }
 .gh.is-sorted .gh-arrow {
   opacity: 1;
+}
+/* Column edges: a quiet hairline on every edge while the pointer is over the headings (so the header says it can be
+   resized without ruling the list at rest), ink under the pointer, accent while a column is being sized. */
+.gh-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 9px;
+  z-index: 1;
+  cursor: col-resize;
+}
+.gh-edge::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  right: 0;
+  width: 1px;
+  background: var(--rule-strong);
+  opacity: 0;
+  transition: opacity 120ms var(--ease), background-color 120ms;
+}
+.grid-head:hover .gh-edge::after {
+  opacity: 1;
+}
+.gh-edge:hover::after {
+  top: 3px;
+  bottom: 3px;
+  background: var(--ink-2);
+}
+.gh.is-resizing {
+  color: var(--ink);
+}
+.gh.is-resizing .gh-edge::after {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  opacity: 1;
+  background: var(--accent);
+}
+.gh.is-resizing::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  pointer-events: none;
+}
+body.is-col-resizing,
+body.is-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+/* Resizing from the keyboard: the column's name and width, and the keys, just under its heading. */
+.col-resize-hints {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 10px;
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--ink) 10%, transparent);
+  white-space: nowrap;
+}
+.crh-what {
+  font: 400 13px/1.4 var(--font-ui);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.col-resize-hints .key-hints {
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-top: 0;
+  border-left: 1px solid var(--rule);
+  flex-wrap: nowrap;
+}
+@media (pointer: coarse) {
+  .gh-edge {
+    display: none;
+  }
 }
 .gh.end,
 .cell.end {
@@ -793,6 +917,11 @@ body.is-col-dragging * {
   gap: 3px;
   font-size: 12px;
 }
+/* A phone-width list keeps the text and drops what only says there is more inside (notes, files): the detail shows it. */
+.grid.is-compact .ind-notes,
+.grid.is-compact .ind-files {
+  display: none;
+}
 .subject-icons {
   display: inline-flex;
   gap: 4px;
@@ -802,6 +931,7 @@ body.is-col-dragging * {
 }
 .chase-label {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   text-transform: uppercase;
@@ -859,6 +989,7 @@ body.is-col-dragging * {
 }
 .group-label {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.06em;
@@ -1155,6 +1286,7 @@ body.is-col-dragging * {
 .badge {
   display: inline-block;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 700;
   font-size: 11px;
   line-height: 1;
@@ -1270,6 +1402,7 @@ body.is-col-dragging * {
 .detail-title {
   margin: 0;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -1291,6 +1424,7 @@ body.is-col-dragging * {
 }
 .detail-h {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -1327,6 +1461,7 @@ body.is-col-dragging * {
 .field-label,
 .p-lbl {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 11.5px;
   letter-spacing: 0.07em;
@@ -1504,6 +1639,7 @@ input.field-text {
   gap: 6px;
   margin-top: 12px;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -1541,6 +1677,7 @@ input.field-text {
 }
 .picker-title {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -1709,6 +1846,7 @@ input.field-text {
 }
 .help h3 {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.08em;
@@ -1861,6 +1999,7 @@ input.field-text {
   gap: 8px;
   margin: 0 0 10px;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.08em;
@@ -1966,6 +2105,7 @@ input.field-text {
 }
 .p-kind {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 700;
   font-size: 11.5px;
   letter-spacing: 0.08em;
@@ -2105,6 +2245,7 @@ input.field-text {
   padding-top: 10px;
   border-top: 1px solid var(--rule);
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.06em;
@@ -2150,6 +2291,7 @@ input.field-text {
   height: 26px;
   padding: 0 10px;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.06em;
@@ -2436,6 +2578,7 @@ input.field-text {
   color: var(--sheet);
   border: 1px solid var(--ink);
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 14px;
   letter-spacing: 0.08em;
@@ -2504,6 +2647,7 @@ input.field-text {
   height: auto;
   padding: 10px 8px 4px;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -2790,6 +2934,7 @@ input.field-text {
   padding: 0 10px;
   border-radius: 3px;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -2809,6 +2954,7 @@ input.field-text {
   grid-template-columns: 28px repeat(7, 1fr);
   border-bottom: 1px solid var(--rule-strong);
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -3162,6 +3308,7 @@ body.is-cal-dragging {
 }
 .cal-wd {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -3198,6 +3345,7 @@ body.is-cal-dragging {
   margin: 0 0 6px 22px;
   padding: 0;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   font-size: 13px;
   letter-spacing: 0.08em;
@@ -3222,6 +3370,7 @@ body.is-cal-dragging {
 }
 .cal-mini-wd {
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 600;
   letter-spacing: 0.06em;
 }
@@ -3342,6 +3491,7 @@ body.is-cal-dragging {
   align-items: center;
   padding: 0 16px;
   font-family: var(--font-label);
+  font-stretch: 75%;
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.08em;

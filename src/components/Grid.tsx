@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { isEditable, IS_MAC, isTouchDevice, pressedByTouch, useCommands, type Command } from "../keys.ts";
 import { useUI } from "../ui.tsx";
+import { KeyHints } from "./bits.tsx";
 
 export interface Column<T> {
   key: string;
@@ -15,10 +16,16 @@ export interface Column<T> {
 }
 
 /** On a phone the list keeps one column after the subject: the first of these it has. */
+const COMPACT_HIDE = ["done", "kind"];
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
 
 /** Smallest width a column can take: a fixed px width, or the minimum of a minmax(). */
 const minWidth = (w: string) => Number((/^minmax\((\d+)px/.exec(w) ?? /^(\d+)px/.exec(w))?.[1] ?? 0);
+/** The column that takes the room left over (the subject): it has no width of its own to set. */
+const isFlexible = (w: string) => w.includes("fr");
+const MIN_COL = 36;
+const MAX_COL = 640;
+const clampCol = (px: number) => Math.round(Math.max(MIN_COL, Math.min(MAX_COL, px)));
 
 export interface GridGroup<T> {
   key: string;
@@ -455,9 +462,181 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     setColOrder(keys);
   };
   const ui = useUI();
+  // The columns on screen right now (after narrow lists shed some), for the resize handlers defined before them.
+  const columnsRef = useRef<Column<T>[]>([]);
+  const leadOf = (cs: Column<T>[]) => {
+    const i = cs.findIndex((c) => c.label);
+    return i < 0 ? cs.length : i;
+  };
   const colName = (k: string) => {
     const c = ordered.find((x) => x.key === k);
     return typeof c?.label === "string" && c.label ? c.label : k;
+  };
+
+  // Column widths, per list: drag the edge of a heading, double-click the edge to fit the contents, or Resize columns…
+  // from the keyboard. Kept as px overrides of each column's own width; the subject always takes the room left over.
+  const [colWidth, setColWidth] = usePersisted<Record<string, number>>(`colwidth:${listId}`, {});
+  const [liveWidth, setLiveWidth] = useState<{ key: string; px: number } | null>(null);
+  const widthOf = (c: Column<T>) => {
+    if (c.label === "" || isFlexible(c.width)) return c.width;
+    const px = liveWidth?.key === c.key ? liveWidth.px : colWidth[c.key];
+    return px === undefined ? c.width : `${px}px`;
+  };
+  const setColumnWidth = (key: string, px: number | null) =>
+    setColWidth((m) => {
+      const next = { ...m };
+      if (px === null) delete next[key];
+      else next[key] = clampCol(px);
+      return next;
+    });
+  const headCell = (key: string) => box.current?.querySelector<HTMLElement>(`.grid-head .gh[data-col="${CSS.escape(key)}"]`) ?? null;
+  const renderedWidth = (key: string) => Math.round(headCell(key)?.getBoundingClientRect().width ?? 0);
+  /** The widest the column's heading or any of its cells wants to be, so nothing in it is cut off. */
+  const fitWidth = (key: string) => {
+    const el = box.current;
+    if (!el) return null;
+    let w = 0;
+    const measure = (cell: HTMLElement) => {
+      // A cell's content can be narrower than the cell (a date, a tile): measure what it holds, plus its padding.
+      const cs = getComputedStyle(cell);
+      const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      let inner = 0;
+      for (const ch of cell.children) inner += (ch as HTMLElement).scrollWidth || ch.getBoundingClientRect().width;
+      if (!cell.children.length) {
+        const r = document.createRange();
+        r.selectNodeContents(cell);
+        inner = r.getBoundingClientRect().width;
+      }
+      w = Math.max(w, Math.ceil(inner + pad));
+    };
+    const h = headCell(key);
+    if (h) measure(h.querySelector<HTMLElement>(".gh-sort")?.parentElement ?? h);
+    el.querySelectorAll<HTMLElement>(`.row .cell.c-${CSS.escape(key)}`).forEach(measure);
+    return w ? clampCol(w + 2) : null;
+  };
+
+  // Resizing from the keyboard: pick a column, then ← → set its width until ↵ keeps it or Esc puts it back.
+  const [resizing, setResizing] = useState<{ key: string; before: Record<string, number> } | null>(null);
+  const resizable = (cs: Column<T>[]) => cs.filter((c, i) => i >= leadOf(cs) && c.label !== "" && !isFlexible(c.width));
+  const resizeBy = (d: number) => {
+    if (!resizing) return;
+    const now = colWidth[resizing.key] ?? renderedWidth(resizing.key);
+    setColumnWidth(resizing.key, now + d);
+  };
+  const resizeStep = (dir: 1 | -1) => {
+    if (!resizing) return;
+    const keys = resizable(columnsRef.current).map((c) => c.key);
+    const i = keys.indexOf(resizing.key);
+    const next = keys[(i + dir + keys.length) % keys.length];
+    if (next) setResizing({ ...resizing, key: next });
+  };
+  const chooseResize = () =>
+    ui.openPicker({
+      type: "list",
+      title: "Resize which column?",
+      items: [
+        ...resizable(columnsRef.current).map((c) => ({ id: c.key, label: colName(c.key), hint: `${renderedWidth(c.key)} px`, section: "columns" })),
+        ...(Object.keys(colWidth).length ? [{ id: "__reset", label: "Reset column widths", section: "reset" }] : []),
+      ],
+      onPick: (key) => {
+        if (!key) return;
+        if (key === "__reset") return setColWidth({});
+        setResizing({ key, before: colWidth });
+      },
+    });
+  useCommands(
+    `grid-resize:${listId}`,
+    [
+      { id: "grid.resize.wider", label: "Wider", group: "Column width", keys: ["arrowright"], run: () => resizeBy(8) },
+      { id: "grid.resize.narrower", label: "Narrower", group: "Column width", keys: ["arrowleft"], run: () => resizeBy(-8) },
+      { id: "grid.resize.wider1", label: "Wider by a pixel", group: "Column width", keys: ["shift+arrowright"], run: () => resizeBy(1) },
+      { id: "grid.resize.narrower1", label: "Narrower by a pixel", group: "Column width", keys: ["shift+arrowleft"], run: () => resizeBy(-1) },
+      { id: "grid.resize.next", label: "Next column", group: "Column width", keys: ["tab"], run: () => resizeStep(1) },
+      { id: "grid.resize.prev", label: "Previous column", group: "Column width", keys: ["shift+tab"], run: () => resizeStep(-1) },
+      {
+        id: "grid.resize.fit",
+        label: "Fit to contents",
+        group: "Column width",
+        keys: ["f"],
+        run: () => {
+          const w = resizing && fitWidth(resizing.key);
+          if (resizing && w) setColumnWidth(resizing.key, w);
+        },
+      },
+      { id: "grid.resize.default", label: "Default width", group: "Column width", keys: ["0"], run: () => resizing && setColumnWidth(resizing.key, null) },
+      { id: "grid.resize.done", label: "Keep", group: "Column width", keys: ["enter"], run: () => setResizing(null) },
+      {
+        id: "grid.resize.cancel",
+        label: "Cancel",
+        group: "Column width",
+        keys: ["escape"],
+        run: () => {
+          if (resizing) setColWidth(resizing.before);
+          setResizing(null);
+        },
+      },
+    ],
+    { priority: 60, exclusive: true, active: active && resizing !== null },
+  );
+  // The list changing under the mode (another view, the column hidden) ends it, keeping what was set.
+  useEffect(() => {
+    if (resizing && (!active || !visible.some((c) => c.key === resizing.key))) setResizing(null);
+  }, [active, resizing, visible]);
+
+  // Drag the edge of a heading. Between a set-width column and the next, the edge sizes the column on its left; the
+  // subject's right edge sizes the column after it instead (dragging it left widens that one), since the subject
+  // only ever takes what is left.
+  const edgeTarget = (i: number): { key: string; sign: 1 | -1 } | null => {
+    const cs = columnsRef.current;
+    const c = cs[i];
+    if (!c || i < leadOf(cs) || c.label === "") return null;
+    if (!isFlexible(c.width)) return { key: c.key, sign: 1 };
+    const n = cs[i + 1];
+    return n && n.label !== "" && !isFlexible(n.width) ? { key: n.key, sign: -1 } : null;
+  };
+  const startResize = (e: React.MouseEvent, i: number) => {
+    const t = edgeTarget(i);
+    if (e.button !== 0 || !t) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const x0 = e.clientX;
+    const w0 = renderedWidth(t.key);
+    let last = w0;
+    document.body.classList.add("is-col-resizing");
+    const move = (ev: MouseEvent) => {
+      last = clampCol(w0 + t.sign * (ev.clientX - x0));
+      setLiveWidth({ key: t.key, px: last });
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.classList.remove("is-col-resizing");
+      setLiveWidth(null);
+      if (last !== w0) setColumnWidth(t.key, last);
+      // Letting go over a heading is not a click on it: don't let it sort.
+      const swallow = (ev: MouseEvent) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+      };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      window.setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+  /** Under the column being sized: from its left edge, or up to its right edge when it sits in the right half. */
+  const hintsPlace = (key: string) => {
+    const cell = headCell(key);
+    const row = cell?.parentElement;
+    if (!cell || !row) return { left: 0 };
+    return cell.offsetLeft + cell.offsetWidth / 2 > row.clientWidth / 2
+      ? { right: Math.max(0, row.clientWidth - cell.offsetLeft - cell.offsetWidth) }
+      : { left: cell.offsetLeft };
+  };
+  const fitEdge = (i: number) => {
+    const t = edgeTarget(i);
+    const w = t && fitWidth(t.key);
+    if (t && w) setColumnWidth(t.key, w);
   };
   useCommands(
     `grid-cols:${listId}`,
@@ -492,6 +671,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
           },
         ]
       : []),
+      ...(resizable(visible).length ? [{ id: "grid.resize", label: "Resize columns…", group: "View", run: chooseResize }] : []),
+      ...(Object.keys(colWidth).length ? [{ id: "grid.resize.reset", label: "Reset column widths", group: "View", run: () => setColWidth({}) }] : []),
     ],
     { priority: 5, active },
   );
@@ -548,12 +729,15 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     window.addEventListener("mouseup", up);
   };
 
+  const sized = useMemo(() => visible.map((c) => ({ ...c, width: widthOf(c) })), [visible, colWidth, liveWidth]); // eslint-disable-line react-hooks/exhaustive-deps
   const columns = useMemo(() => {
+    const visible = sized;
     if (!width) return visible;
-    // On a phone-width list, keep what identifies a row: its leading marks (marker, done box, icon), the subject with
-    // all the remaining room, and one date or value column. Chosen by what the columns are, never by their position.
+    // On a phone-width list, keep what identifies a row: its marker (flag, lamp), the subject with all the remaining
+    // room, and one date or value column. The done box and the kind icon go (owner's request: room for the text; a
+    // swipe right does what the box did). Chosen by what the columns are, never by their position.
     if (width < 560) {
-      const lead = visible.slice(0, visible.findIndex((c) => c.label) < 0 ? 0 : visible.findIndex((c) => c.label));
+      const lead = visible.slice(0, visible.findIndex((c) => c.label) < 0 ? 0 : visible.findIndex((c) => c.label)).filter((c) => !COMPACT_HIDE.includes(c.key));
       const subject = visible.find((c) => c.key === lockedKey);
       const tail = COMPACT_TAIL.map((k) => visible.find((c) => c.key === k)).find(Boolean);
       return [...lead, ...(subject ? [{ ...subject, width: "minmax(0, 1fr)" }] : []), ...(tail ? [tail] : [])];
@@ -566,7 +750,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       cols = cols.filter((x) => x !== c);
     }
     return cols;
-  }, [visible, width]);
+  }, [sized, width]); // eslint-disable-line react-hooks/exhaustive-deps
+  columnsRef.current = columns;
   const template = columns.map((c) => c.width).join(" ");
 
   // Rectangle select: press and drag over the rows, as on a Finder or Explorer desktop. Rows the band touches are ticked
@@ -851,7 +1036,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   return (
     <div
       ref={box}
-      className={`grid ${active ? "is-active" : ""}`}
+      className={`grid ${active ? "is-active" : ""} ${width && width < 560 ? "is-compact" : ""}`}
       data-list={listId}
       role="grid"
       aria-labelledby={label ? undefined : "view-title"}
@@ -877,7 +1062,25 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
           }}
         >
           {colDrop !== null && <span className="col-drop" style={{ left: colDrop }} aria-hidden />}
-          {columns.map((c) => {
+          {resizing && (
+            <div className="col-resize-hints" style={hintsPlace(resizing.key)} role="status">
+              <span className="crh-what">
+                {colName(resizing.key)} · {colWidth[resizing.key] ?? renderedWidth(resizing.key)} px
+              </span>
+              <KeyHints
+                hints={[
+                  { k: "arrowright", label: "Wider" },
+                  { k: "arrowleft", label: "Narrower" },
+                  { k: "tab", label: "Next" },
+                  { k: "f", label: "Fit" },
+                  { k: "0", label: "Default" },
+                  { k: "enter", label: "Keep" },
+                  { k: "escape", label: "Cancel" },
+                ]}
+              />
+            </div>
+          )}
+          {columns.map((c, i) => {
             const sortable = Boolean(sort && c.label && sort.keys.includes(c.key));
             const on = sortable && sort!.state?.key === c.key ? sort!.state!.dir : 0;
             return (
@@ -886,7 +1089,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                 role="columnheader"
                 aria-sort={on === 1 ? "ascending" : on === -1 ? "descending" : sortable ? "none" : undefined}
                 data-col={c.key}
-                className={`gh gh-${c.key} ${c.align === "end" ? "end" : ""} ${on ? "is-sorted" : ""} ${movableKeys.includes(c.key) ? "is-movable" : ""} ${colDragging === c.key ? "is-dragging" : ""}`}
+                className={`gh gh-${c.key} ${c.align === "end" ? "end" : ""} ${on ? "is-sorted" : ""} ${movableKeys.includes(c.key) ? "is-movable" : ""} ${colDragging === c.key ? "is-dragging" : ""} ${resizing?.key === c.key || liveWidth?.key === c.key ? "is-resizing" : ""}`}
                 onMouseDown={(e) => movableKeys.includes(c.key) && startColDrag(e, c.key)}
               >
                 {sortable ? (
@@ -909,6 +1112,19 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                   </button>
                 ) : (
                   c.label
+                )}
+                {edgeTarget(i) && (
+                  <span
+                    className="gh-edge"
+                    aria-hidden="true"
+                    title="Drag to resize · double-click to fit"
+                    onMouseDown={(e) => startResize(e, i)}
+                    onClick={(e) => e.stopPropagation()}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      fitEdge(i);
+                    }}
+                  />
                 )}
               </div>
             );

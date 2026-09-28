@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "@fontsource/barlow-condensed/600.css";
-import "@fontsource/barlow-condensed/700.css";
+// One family, variable in weight and width: the text at normal width, the labels condensed (font-stretch 75%).
+import "@fontsource-variable/instrument-sans/wdth.css";
 import "./styles.css";
 import App from "./App.tsx";
 import { Login } from "./components/Login.tsx";

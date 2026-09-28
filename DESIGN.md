@@ -30,59 +30,63 @@ colors:
   scrim: "rgb(18 24 32 / 0.3)"
 typography:
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
     fontSize: "19px"
     fontWeight: 650
     letterSpacing: "-0.01em"
   title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
     fontSize: "15px"
     fontWeight: 600
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
     fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.4
     fontFeature: "tnum"
   body-sheet:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.55
   body-touch-input:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
     fontSize: "16px"
     fontWeight: 400
   body-small:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Segoe UI, system-ui, sans-serif"
+    fontFamily: "Instrument Sans Variable, system-ui, sans-serif"
     fontSize: "12px"
     fontWeight: 400
   label-tag:
-    fontFamily: "Barlow Condensed, Arial Narrow, Helvetica Neue, sans-serif"
+    fontFamily: "Instrument Sans Variable (font-stretch 75%), Arial Narrow, sans-serif"
     fontSize: "11.5px"
     fontWeight: 600
     lineHeight: 1
     letterSpacing: "0.07em"
   label-caps:
-    fontFamily: "Barlow Condensed, Arial Narrow, Helvetica Neue, sans-serif"
+    fontFamily: "Instrument Sans Variable (font-stretch 75%), Arial Narrow, sans-serif"
     fontSize: "12px"
     fontWeight: 600
     letterSpacing: "0.08em"
   numeral:
-    fontFamily: "Barlow Condensed, Arial Narrow, Helvetica Neue, sans-serif"
+    fontFamily: "Instrument Sans Variable (font-stretch 75%), Arial Narrow, sans-serif"
     fontSize: "30px"
     fontWeight: 700
     lineHeight: 1
   numeral-lg:
-    fontFamily: "Barlow Condensed, Arial Narrow, Helvetica Neue, sans-serif"
+    fontFamily: "Instrument Sans Variable (font-stretch 75%), Arial Narrow, sans-serif"
     fontSize: "40px"
     fontWeight: 700
     lineHeight: 1
   numeral-sm:
-    fontFamily: "Barlow Condensed, Arial Narrow, Helvetica Neue, sans-serif"
+    fontFamily: "Instrument Sans Variable (font-stretch 75%), Arial Narrow, sans-serif"
     fontSize: "22px"
     fontWeight: 700
     lineHeight: 1
+  key-symbol:
+    fontFamily: "Stiltje Keys (Inter subset, ⌘⌥⇧⌃↵⌫⌦⎋⇥←→↑↓◇ only), then the surrounding stack"
+    fontSize: "112% of the surrounding size (size-adjust)"
+    fontWeight: 600
 rounded:
   hairline: "1px"
   xs: "2px"
@@ -219,7 +223,7 @@ The build rejects the category default of an airy sidebar and rounded cards. Sur
 - Near-neutral ground: white and grey with a faint water cast, never tinted enough to call blue.
 - One blue accent plus a pale blue selection fill, used only to show position and focus.
 - Colour is meaning: red for trouble (overdue, stalled, chase, errors), green and amber only in project-health lamps, the red flag for today. Everything else is ink on grey.
-- Condensed caps name things; the system face says things.
+- Condensed caps name things; the normal width says things.
 - Light and dark themes, both designed in their own right.
 
 ## Colors
@@ -262,10 +266,13 @@ The palette is still water in daylight: pale grey-white ground, near-black ink, 
 
 ## Typography
 
-**Display / Label Font:** Barlow Condensed 600 and 700 (with Arial Narrow, Helvetica Neue), self-hosted via @fontsource. (Roboto, a standard-width Barlow and a one-step larger scale were tried and reverted: owner's decision.)
-**Body Font:** the system UI stack (-apple-system, SF Pro Text, Segoe UI, system-ui).
+**Font:** Instrument Sans, one variable family (weight 400–700, width 75–100%), self-hosted via @fontsource-variable (owner's request: the same face on every device instead of each system's own; "classic and sleek"). A neo-grotesque with classic proportions and crisp terminals: it reads like the Swiss faces a desk tool should, without being Inter or Helvetica. IBM Plex Sans (also variable in width) was tried and set aside: more technical than sleek, and its condensed caps too wide.
+**Body:** Instrument Sans at normal width.
+**Labels:** the same family at `font-stretch: 75%` (condensed), 600, uppercase with tracking; it replaced Barlow Condensed, so naming and saying come from one family. Every rule that sets `--font-label` sets `font-stretch: 75%` beside it.
+**Key symbols:** Stiltje Keys, a 3 KB cut of Inter holding only ⌘ ⌥ ⇧ ⌃ ↵ ⌫ ⌦ ⎋ ⇥ ← → ↑ ↓ ◇, first in both stacks and limited by `unicode-range`, so it draws those glyphs and nothing else. Instrument Sans has none of them, and system fallbacks drew them differently on every device. Scaled 112% (`size-adjust`) to meet Instrument's caps; inlined in the CSS, `font-display: block`. Licence (OFL) beside it in `src/fonts/`.
+**Fallbacks:** metric-matched `@font-face` stand-ins over Arial (and Arial Narrow for labels) keep the text from shifting while the face loads.
 
-**Character:** A neutral system face does the reading. A condensed label face, always in uppercase with tracking, does the naming. Numerals are tabular everywhere (`font-variant-numeric: tabular-nums` on body).
+**Character:** A classic grotesque does the reading; its own condensed width, always in uppercase with tracking, does the naming. Numerals are tabular everywhere (`font-variant-numeric: tabular-nums` on body; the face has `tnum`).
 
 ### Hierarchy
 - **Headline** (650, 19px, -0.01em): the view title ("Next Actions"), followed by a plain `ink-2` count.
@@ -273,22 +280,22 @@ The palette is still water in daylight: pale grey-white ground, near-black ink, 
 - **Body** (400, 13px, 1.4): rows, fields, rail, detail text. Strong subjects use 600.
 - **Body Sheet** (400, 14px, 1.55, max 68ch): the captured text on the Clarify source sheet.
 - **Body Small** (400, 12px): meta, counts, file sizes, and toast notes.
-- **Label Tag** (Barlow 600, 11.5px, 0.07em, uppercase, line-height 1): tags. A state's title (Inbox zero, Ready to record) uses the same caps at 14px in `ink-2`, with no chip.
-- **Label Caps** (Barlow 600, 12–13px, 0.06–0.08em, uppercase, `ink-2` or `ink-3`): column heads, pane and detail section heads, field labels, plain group labels, review steps and picker titles. Review steps are `ink-3`; a finished step (visited, nothing open) is `ink-2` with a line through it; an open step carries its count in 12px 650 `alert`.
-- **Numeral** (Barlow 700, 40px): the review tallies.
+- **Label Tag** (condensed 600, 11.5px, 0.07em, uppercase, line-height 1): tags. A state's title (Inbox zero, Ready to record) uses the same caps at 14px in `ink-2`, with no chip.
+- **Label Caps** (condensed 600, 12–13px, 0.06–0.08em, uppercase, `ink-2` or `ink-3`): column heads, pane and detail section heads, field labels, plain group labels, review steps and picker titles. Review steps are `ink-3`; a finished step (visited, nothing open) is `ink-2` with a line through it; an open step carries its count in 12px 650 `alert`.
+- **Numeral** (condensed 700, 40px): the review tallies.
 
 ### Named Rules
-**The Two Voices Rule.** Condensed caps name things, and the system face says things. Barlow never sets a sentence or an editable value. The system face is never tracked out into caps.
+**The Two Voices Rule.** Condensed caps name things, and the normal width says things. The condensed width never sets a sentence or an editable value. The normal width is never tracked out into caps.
 
 ## Layout
 
 The desktop layout is a two-column app grid: a 236px rail and a fluid main column, running the full height of the window (there is no status bar). The main column stacks a 44px top bar (capture line flexing to fill, with a 220px search that widens to 320px when open) and a view head (16px 20px 8px). Below that, the work area holds the scrolling list region (20px side padding) and, when opened, a 380px detail pane on the right that runs the full height of the window; the top bar and view head then span only the list column. The pane can be pinned (the pin beside its ×, or ⌥P): pinned, it stays open beside every list, follows the cursor through the Inbox, lists, projects, areas, search and the Weekly Review, empties on a new view until that list's cursor fills it, and says "Nothing here has details…" on a row without any (an area, a group head). Esc steps out one level: from a text field it only leaves the field (the edit is saved) and the pane keeps focus, so its field keys work again; from the pane, pinned, it only steps back to the list; × closes the pane and unpins it. The pin is remembered per browser. Loose, the pin is a quiet `ink-2` icon tilted 45°; pinned, it stands upright, filled `accent` on a `select` chip.
 
-The grid uses CSS grid columns set per view through `--cols`: a 30px marker column, a `minmax(220px, 1fr)` subject, then fixed data columns (context 112px, due 84px, start 80px, time 52px right-aligned, energy). Cells pad 8px horizontally. The grid head is sticky, 28px tall, and underlined in `rule-strong`. Every list sorts the same way from its headings, as in Outlook: a heading with something to order by is a button; click once for A–Z (or oldest/smallest first), again for Z–A, a third time for the list's own order (manual, oldest first in the Inbox, A–Z in Reference, newest first in Done). The sorted heading turns `ink` with a 10px chevron (up ascending, down descending); other sortable headings show the chevron faintly on hover. Rows sort inside their groups (groups keep their order), empty values always last; the keyboard order follows what is shown; the choice is remembered per list, and the action lists' View menu "Sort by …" sets the same state. `aria-sort` names it for screen readers. Columns can be put in any order on every list (owner's request), remembered per list: drag a heading sideways (past 6px, so a click still sorts; the heading dims and a 2px `accent` line marks where it lands), or ⌘K › Arrange columns… (pick the column, then "Before …" or "At the end"; "Reset column order" goes back to the list's own). The unlabelled lead columns (marker, done box, kind icon) stay first. Narrow lists still shed columns in their fixed order, wherever those columns sit. Columns can also be shown or hidden per list (owner's request): right-click a heading, or ⌘K › Show or hide columns…, opens a picker listing each column as Shown or Hidden; Enter toggles and the picker stays open for the next. The subject column always shows. Lists also offer fields that start hidden: on the action lists Area (the project's), Created, Updated and, where fitting, Bring back, Repeat, Context and Due; on Projects Start, Bring back and Created. Group heads are 32px with 10px above. Beside the detail pane on 821–1100px screens the pane narrows to 340px so the list keeps its project column. When the list gets narrow (for instance beside the detail pane at 1024px) it sheds its least useful columns in a fixed order (start, energy, time, project on Next Actions; open, area, next action on Projects; since, project on Waiting For) instead of scrolling sideways; the grid never goes below 320px.
+The grid uses CSS grid columns set per view through `--cols`: a 30px marker column, a `minmax(220px, 1fr)` subject, then fixed data columns (context 112px, due 84px, start 80px, time 52px right-aligned, energy). Cells pad 8px horizontally. The grid head is sticky, 28px tall, and underlined in `rule-strong`. Every list sorts the same way from its headings, as in Outlook: a heading with something to order by is a button; click once for A–Z (or oldest/smallest first), again for Z–A, a third time for the list's own order (manual, oldest first in the Inbox, A–Z in Reference, newest first in Done). The sorted heading turns `ink` with a 10px chevron (up ascending, down descending); other sortable headings show the chevron faintly on hover. Rows sort inside their groups (groups keep their order), empty values always last; the keyboard order follows what is shown; the choice is remembered per list, and the action lists' View menu "Sort by …" sets the same state. `aria-sort` names it for screen readers. Columns can be put in any order on every list (owner's request), remembered per list: drag a heading sideways (past 6px, so a click still sorts; the heading dims and a 2px `accent` line marks where it lands), or ⌘K › Arrange columns… (pick the column, then "Before …" or "At the end"; "Reset column order" goes back to the list's own). The unlabelled lead columns (marker, done box, kind icon) stay first. Narrow lists still shed columns in their fixed order, wherever those columns sit. Columns can also be shown or hidden per list (owner's request): right-click a heading, or ⌘K › Show or hide columns…, opens a picker listing each column as Shown or Hidden; Enter toggles and the picker stays open for the next. The subject column always shows. Columns can be resized on every list (owner's request), remembered per list in px: while the pointer is over the headings every edge shows a 1px `rule-strong` hairline (none at rest, so the list isn't ruled), which turns `ink-2` and grows under the pointer; dragging it resizes live, the column's heading tinted with 7% `accent` and its edge a 2px `accent` line, and letting go never sorts. Double-clicking an edge fits the column to the widest heading or cell it holds. The subject has no width of its own (it takes what is left), so its right edge sizes the column after it. Widths run 36–640px. From the keyboard, ⌘K › Resize columns… picks a column (each listed with its width) and then ←/→ change it by 8px (⇧ by 1px), Tab moves to the next column, F fits, 0 restores the default, ↵ keeps and Esc puts every width back as it was; a small sheet under the heading names the column, its width and the keys, and its keys are tap targets. "Reset column widths" (⌘K, or at the end of the Resize picker) goes back to the list's own. On touch screens the edges are hidden; the ⌘K route remains. Narrow lists still shed columns with the widths as set. Lists also offer fields that start hidden: on the action lists Area (the project's), Created, Updated and, where fitting, Bring back, Repeat, Context and Due; on Projects Start, Bring back and Created. Group heads are 32px with 10px above. Beside the detail pane on 821–1100px screens the pane narrows to 340px so the list keeps its project column. When the list gets narrow (for instance beside the detail pane at 1024px) it sheds its least useful columns in a fixed order (start, energy, time, project on Next Actions; open, area, next action on Projects; since, project on Waiting For) instead of scrolling sideways; the grid never goes below 320px.
 
 The spacing rhythm is small and even: 4, 6, 8, 10, 14, 16, 20px. Gaps inside controls are 6–8px, and pane padding is 14–16px.
 
-Below 820px the rail is replaced by the bottom tab bar (see Rail). Search collapses to a 36px button. Below 560px of list width the grid keeps only the row's leading marks (marker, done box, kind icon), the subject with all the remaining room, and one date or value column (Due, Follow up, Captured, Gone in, a setting's value…). The list picks these by what the columns are, never by their position, so adding or reordering columns can't hide the subject. The detail pane becomes a fixed bottom sheet 72dvh tall at the foot of the screen, and Clarify's two panes stack into one column.
+Below 820px the rail is replaced by the bottom tab bar (see Rail). Search collapses to a 36px button. Below 560px of list width the grid keeps only the row's marker (flag, project lamp), the subject with all the remaining room, and one date or value column (Due, Follow up, Captured, Gone in, a setting's value…). The done box, the kind icon (note, email, file) and the notes and files marks after a subject are dropped there (owner's request: the room goes to the text; a swipe right marks done, and the detail shows notes and files). The list picks these by what the columns are, never by their position, so adding or reordering columns can't hide the subject. The detail pane becomes a fixed bottom sheet 72dvh tall at the foot of the screen, and Clarify's two panes stack into one column.
 
 ## Elevation & Depth
 
@@ -309,13 +316,13 @@ Corners are nearly square and scale with the object: thin marks (the drop line, 
 ## Components
 
 ### Tag
-A place name as a quiet chip: Label Tag caps (Barlow 600 11.5px, 0.07em) in `wash-ink` on `wash`, 3px radius, 3px 6px padding, no shadow. Tags name Clarify's disposition and Settings rule sources. Areas are never tags (owner's decision): an area is its colour tile with the # and the name in plain body text, as a context is "@phone" (see The Area Hash Rule), wherever it appears (the Projects area column, the detail pane's Area field, pickers, Settings › Areas, the Clarify proposal, toasts); group heads set it in the same Label Caps as every group ("#WORK"). The # is shown, never stored: typing "#Home" names the area "Home". At heading size (`Tag size="md"`) there is no chip: 14px caps in `ink-2` title a state (Inbox zero, Clarify stopped, Ready to record, the help overlay, the sign-in sheet's Stiltje). The rail uses no tags; list names are plain text.
+A place name as a quiet chip: Label Tag caps (condensed 600 11.5px, 0.07em) in `wash-ink` on `wash`, 3px radius, 3px 6px padding, no shadow. Tags name Clarify's disposition and Settings rule sources. Areas are never tags (owner's decision): an area is its colour tile with the # and the name in plain body text, as a context is "@phone" (see The Area Hash Rule), wherever it appears (the Projects area column, the detail pane's Area field, pickers, Settings › Areas, the Clarify proposal, toasts); group heads set it in the same Label Caps as every group ("#WORK"). The # is shown, never stored: typing "#Home" names the area "Home". At heading size (`Tag size="md"`) there is no chip: 14px caps in `ink-2` title a state (Inbox zero, Clarify stopped, Ready to record, the help overlay, the sign-in sheet's Stiltje). The rail uses no tags; list names are plain text.
 
 ### Rail (Navigation)
 - **Role:** a status panel, not only a menu (owner's decision after the rail critique). It answers "where am I?" and GTD's weekly "is my system current?".
 - **Style:** the `rail` tone, 236px (wide enough for the longest name, its signal and a key cap), 14px 10px padding, a `rule-strong` right edge.
 - **Mind like water (the pond):** the rail opens on a still water surface, David Allen's "mind like water" (owner's idea). An 84px band bleeds to the rail's edges: the rail's air above a 1px `water-line` horizon at 43px (level with the top bar's and the detail pane's bottom rule, so one line runs across the window), then water shading from `water-far` to `water-near`, masked so it fades into the drawer. At rest nothing moves and nothing runs. When something lands in the Inbox (a capture or an upload, never a page load or an undo), a drop in `water-drop` falls from above the band (about 0.4s, stretching into a tear as it speeds up), strikes the surface at a random spot across the middle (lower is nearer), throws up a small rebound droplet, and sends out three rings: a bright `water-crest` line over a darker `water-trough` line, flattened by the viewing angle (nearer rings are larger and rounder), expanding and dying out over about 3.5s until the water is smooth again. Several captures at once fall one after another, 160ms apart, never twice in the same place. The canvas draws only while something moves, then clears and stops. With reduced motion there is no fall: a single ring appears where the drop lands and fades in place. The pond is decorative (`aria-hidden`); the live region announces the count.
-- **App icon:** the pond as a modern macOS icon (`public/favicon.svg`): a continuous-corner squircle with a thin light glass rim, pale air above a white horizon at about 58%, deep water shading from #4f86c6 to #15315a, a glossy `accent`-blue drop falling in the air, and three flattened rings spreading from where it will land, fading as they widen. Drop and rings are drawn heavy enough to read at 16px in a browser tab. `public/apple-touch-icon.png` (180px) is the same art full bleed, since home screens round their own corners.
+- **App icon:** the pond at dead calm as a modern macOS icon (`public/favicon.svg`): a continuous-corner squircle with a thin light glass rim; pale, cool air over a misty horizon (a soft light band, not a ruled line) at about 59%; water that mirrors the sky near the horizon (#a9c4df) and deepens toward the viewer (#132f57); a glassy `accent`-blue drop lit from the upper left (a crisp highlight stroke and glint, the far edge shading away, light gathered low inside it as a crescent, a soft shadow), faintly reflected below; and four rings in perspective where it will land, each a light crest over a darker trough, thinning and fading as they widen. At tab size (the SVG's own media query, 48px and under) the fine detail drops out: a fuller drop, one bold highlight and two heavy rings, so it reads at 16px. `public/apple-touch-icon.png` (180px) is the same art full bleed, since home screens round their own corners.
 - **The Inbox, on top:** an ordinary rail item at the head of the first run (owner's decision: quieter, like the other items): the name, its count as a plain `ink-2` number when anything is waiting (nothing at zero), and its ⌃1 key cap. A polite live region still announces the count after a capture.
 - **Lists:** no stage headings. Two runs split by a `rule-strong` hairline, in order of use: Inbox, Next Actions, Waiting For, Projects, then Someday/Maybe, Reference, Done.
 - **Counts are signals, not inventory:** Next shows "N overdue" (alert red) or "N today" (flagged); Waiting shows "N to chase" (alert red); Projects shows "N stalled" (alert red); Done shows "N today" in `ink-3`; Someday, Reference and Areas show no number (their view titles do).
@@ -389,7 +396,7 @@ Files dragged in from the desktop turn the main column into a still surface to d
 A 380px sheet on the right, opened with Enter. It runs the full height of the window beside the top bar and list, and its 44px bar (Label Caps title, pin and close) shares the top bar's bottom rule, 14px 16px body padding and 14px section gaps. Section heads are Label Caps with `ink-3` counts. A project's header starts with its lamp. Nested action lists use 28px mini-rows that fill selection blue on focus. In a project's pane, T (as on the Projects list) puts the cursor in "Add a next action"; its key cap sits at the right of the Actions heading, like the field keys. Enter asks for the context before adding (a next action always has one), then leaves the cursor in the field for the next. Every notes field looks the same in every pane (owner's decision): a plain `paper` well, 8 lines tall to start, with no ruled lines (paper imitation is ruled out by the No Props Rule). Every pane opens on a one-line heading field (15px 600): an action's Subject, a project's name, a reference's Title, and an Inbox item's Stuff line (owner's decision: it used to be one big text area). For an Inbox item the heading is the line it is known by (an email's subject, otherwise the first line) and everything else captured sits below it in a Notes field; editing either writes the item back with the heading line first (an email keeps its "Subject:" label).
 
 ### Badge
-A state word beside a name: Barlow 700 11px caps, 0.1em tracking, 3px radius, 3px 5px 2px padding, no border. Neutral statuses (Someday, Done) are `ink-3` on `wash`. On a selected row it switches to `select-ink` on an 8% tint.
+A state word beside a name: condensed 700 11px caps, 0.1em tracking, 3px radius, 3px 5px 2px padding, no border. Neutral statuses (Someday, Done) are `ink-3` on `wash`. On a selected row it switches to `select-ink` on an 8% tint.
 
 ### Toast
 There is no status bar; the owner removed it because standing facts (Claude ready, flagged, deferred) added nothing. Standing facts belong in the view count instead ("12 actions · 1 deferred"), and Claude's connection is shown in Settings. Action feedback appears only when something happens: a slate (`toast`) toast with `toast-ink` text, 5px radius and the float shadow, centred 18px above the bottom edge. It rises in over 180ms, stays for 5 seconds (12 seconds for errors) and fades out. An undoable note ends with the "⌘Z undo" suffix. Errors turn the toast alert red with white 600-weight text. It never takes clicks and is announced politely to screen readers.
@@ -408,7 +415,7 @@ Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and e
 - **Do** show region focus on the focused element (selected row, ink cursor ring) and demote an inactive grid's cursor row to `rail-2`.
 - **Do** show project health with the traffic-light lamp, and give every lamp `role="img"` with an `aria-label` and `title` that name its state.
 - **Do** keep rows at 30px, body at 13px, and numerals tabular.
-- **Do** set names in Barlow Condensed caps with 0.06–0.08em tracking, and everything readable in the system face.
+- **Do** set names in the condensed caps with 0.06–0.08em tracking, and everything readable at normal width.
 - **Do** draw state as a mark: a red flag for flagged for today, a tick and line for done, a lamp for project health (red is stalled), a colour tile (@ or #) for contexts and areas.
 - **Do** design both themes: water-grey white (`paper`, `sheet`) by day, slate by night, switched by `prefers-color-scheme`.
 - **Do** honour `prefers-reduced-motion` for every animation and transition.

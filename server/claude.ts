@@ -3,14 +3,15 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { readFileSync, existsSync, writeFileSync, chmodSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { db, FILES_DIR, loadState, now } from "./db.ts";
+import { db, FILES_DIR, getSetting, loadState, now } from "./db.ts";
+import { oneStepPerAction } from "./oneStep.ts";
 import { IMAGE_MIMES } from "./extract.ts";
 import { today } from "../shared/dates.ts";
 import type { FileRow, Proposal, State, Stuff } from "../shared/types.ts";
 
 const MODEL = "claude-sonnet-5";
 /** Bump when the clarify instructions change, so older cached proposals are regenerated. */
-const PROMPT_VERSION = 5;
+const PROMPT_VERSION = 6;
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -98,11 +99,26 @@ export function clearApiKey() {
 /* Clarify                                                              */
 /* ------------------------------------------------------------------ */
 
+/** The language Claude writes proposals in (Settings › Claude): English by default, or Swedish. */
+export type ClarifyLang = "en" | "sv";
+export const clarifyLang = (): ClarifyLang => (getSetting("clarifyLang", "en") === "sv" ? "sv" : "en");
+const LANG_NAME: Record<ClarifyLang, string> = { en: "English", sv: "Swedish" };
+
+function languageRule(lang: ClarifyLang): string {
+  const other = lang === "sv" ? "English" : "Swedish";
+  const base = `- LANGUAGE: write everything you produce in ${LANG_NAME[lang]} (action titles, project titles, reference titles and notes; waiting-for names stay as names), even when the captured stuff is in ${other} or another language. Translate faithfully; keep proper nouns, product names and short quoted phrases as they are.`;
+  if (lang === "en") return base;
+  return `${base}
+  - Write natural Swedish in the imperative, as a Swede would note it down: "Ring Anna om Q3-siffrorna", "Skicka offerten till Per", "Boka tid för passfoto". Projects too: "Uppdatera användarmanualen för den nya mjukvaran", "Förnya passen inför Lissabonresan". Use Swedish date and number conventions in notes.
+  - The one-step rule holds in Swedish: "Kontrollera insatsen och offerera en lösning" is two actions ("Kontrollera insatsen", "Offerera en lösning") in one project.
+  - The examples in these instructions are in English; your output is not.`;
+}
+
 const ProposedActionSchema = z.object({
   title: z
     .string()
     .describe(
-      "In English. ONE concrete, physical, verb-first step that can be done in one sitting, e.g. 'Call Anna about the Q3 figures'. Never a bundle: no lists, no 'and', no parentheses enumerating sub-tasks. Under 80 characters.",
+      "In the owner's chosen language (see LANGUAGE). ONE concrete, physical, verb-first step that can be done in one sitting, e.g. 'Call Anna about the Q3 figures'. Never a bundle: no lists, no 'and', no parentheses enumerating sub-tasks. Under 80 characters.",
     ),
   kind: z.enum(["next", "waiting", "someday"]),
   project: z
@@ -150,7 +166,11 @@ Today is ${d.toLocaleDateString("en-GB", { weekday: "long" })} ${today()}.
 For each item ask: is it actionable?
 - Not actionable: "trash" (no value), "reference" (worth keeping; give a clear title and short notes), or "someday" (maybe later; put a someday action in "actions" with kind "someday").
 - Actionable: define the very next physical, visible action. Write every action title verb-first and concrete ("Email Per the shredder test results", never "shredder test"). Rewrite vague captures into a proper next action.
-- ONE STEP PER ACTION. A next action is a single physical step, never a bundle. If a title would need "and", a list, a range of items or parentheses enumerating parts ("Update pages 26–55 (manual mode image, map limits, photos…)"), it is not one action: it is a project, and each part becomes its own action.
+- ONE STEP PER ACTION, WITHOUT EXCEPTION. A next action is a single physical step, never a bundle. If a title would need "and" or "then" between two verbs, a list, a range of items or parentheses enumerating parts ("Update pages 26–55 (manual mode image, map limits, photos…)"), it is not one action: it is a project, and each step becomes its own action in that project.
+  - Wrong: one action "Check effort and quote a solution". Right: a project (for example "Quote a solution for the customer") with two actions, "Check the effort needed" and "Quote a solution".
+  - Wrong: "Draft the offer, then send it to Per". Right: two actions in one project, "Draft the offer" and "Send the offer to Per".
+  - "and" joining two people or things inside ONE step is fine: "Call Anna and Per about the trial" is one action.
+  - Before answering, read every action title once more: if it contains two verbs joined by "and", "then" or a comma, split it.
 - If the outcome needs more than one action, it is a project. Attach it to an existing project (use its id) when one fits; otherwise create "new_project" and set the actions' project to "new". Name projects in the same verb-first format as next actions, starting with an imperative verb: "Update the user guide for the new software", "Renew passports before the Lisbon trip", "Plan the Q4 team offsite". Never phrase a project title as a finished state ("Updated user guide…", "Passports renewed…"). The title is the project's whole definition of done, so make it specific enough to know when it is finished.
   - Independent pieces of work the source lists explicitly (separate corrections, separate pages, separate questions to answer) each get their own action, up to about 15.
   - For sequential work where later steps depend on earlier ones, propose only the first step or two, not the whole plan.
@@ -158,7 +178,7 @@ For each item ask: is it actionable?
 - Set two_minute true when the action would take under two minutes.
 - When several inbox items belong to the same new project, give each of them a new_project with exactly the same title (identical wording), so they end up in one project. Prefer an existing project over a new one whenever it fits.
 - Documents and emails can contain several separate commitments. Split them into several actions (and at most one new project) within that item's proposal.
-- LANGUAGE: write everything you produce in English (action titles, project titles, reference titles and notes, waiting-for names stay as names), even when the captured stuff is in Swedish or another language. Translate faithfully; keep proper nouns, product names and short quoted phrases as they are.
+${languageRule(clarifyLang())}
 - Choose contexts from the existing list where possible: ${contexts || "(none yet)"}. A new context must start with "@".
 - Areas of focus: ${areas || "(none)"}.
 - Only set due dates that are stated or clearly implied. Leave fields null when unknown; do not invent detail.
@@ -228,13 +248,16 @@ async function clarifyChunk(state: State, items: Stuff[], signal?: AbortSignal):
   if (response.stop_reason === "max_tokens") throw new Error("Claude's answer was cut off; try clarifying fewer items.");
   const parsed = response.parsed_output;
   if (!parsed) throw new Error("Claude returned an unreadable proposal.");
-  return parsed.proposals.map((p) => ({
-    ...p,
-    actions: p.actions.map((a) => ({
-      ...a,
-      energy: a.energy && a.energy >= 1 && a.energy <= 3 ? (a.energy as 1 | 2 | 3) : null,
-    })),
-  }));
+  return parsed.proposals.map((p) =>
+    // Whatever Claude wrote, a next action leaves here as one step (server/oneStep.ts).
+    oneStepPerAction({
+      ...p,
+      actions: p.actions.map((a) => ({
+        ...a,
+        energy: a.energy && a.energy >= 1 && a.energy <= 3 ? (a.energy as 1 | 2 | 3) : null,
+      })),
+    }),
+  );
 }
 
 interface Job {
@@ -265,10 +288,12 @@ export function startClarify(fresh: boolean): Job {
   };
   jobs.set(job.id, job);
 
+  const lang = clarifyLang();
   const cached = new Map<string, Proposal>();
   for (const r of db.prepare("SELECT stuff_id, data FROM proposals").all() as { stuff_id: string; data: string }[]) {
-    const p = JSON.parse(r.data) as Proposal & { v?: number };
-    if (p.v === PROMPT_VERSION) cached.set(r.stuff_id, p);
+    const p = JSON.parse(r.data) as Proposal & { v?: number; lang?: ClarifyLang };
+    // A proposal written in the other language (the setting changed since) is made again.
+    if (p.v === PROMPT_VERSION && (p.lang ?? "en") === lang) cached.set(r.stuff_id, oneStepPerAction(p));
   }
   const todo: Stuff[] = [];
   for (const s of inbox) {
@@ -294,7 +319,7 @@ export function startClarify(fresh: boolean): Job {
         for (const p of proposals) {
           if (!chunk.some((c) => c.id === p.stuff_id)) continue;
           job.proposals[p.stuff_id] = p;
-          save.run(p.stuff_id, JSON.stringify({ ...p, v: PROMPT_VERSION }), now());
+          save.run(p.stuff_id, JSON.stringify({ ...p, v: PROMPT_VERSION, lang }), now());
         }
         // Anything Claude skipped still gets an empty proposal the owner can fill in.
         for (const c of chunk) {
@@ -367,7 +392,7 @@ export async function suggestRules(): Promise<string[]> {
     thinking: { type: "adaptive" },
     output_config: { effort: "low", format: zodOutputFormat(RulesOutput) },
     system:
-      "You help a GTD app learn from its owner's corrections. Look for corrections that repeat the same pattern at least twice and turn each pattern into one short, specific standing rule (for example: \"Anything mentioning Per goes to @office in project 'Shredder test'\"). Ignore one-off corrections. Do not repeat existing rules. Write rules in English. Return an empty list if nothing repeats.",
+      "You help a GTD app learn from its owner's corrections. Look for corrections that repeat the same pattern at least twice and turn each pattern into one short, specific standing rule (for example: \"Anything mentioning Per goes to @office in project 'Shredder test'\"). Ignore one-off corrections. Do not repeat existing rules. Write rules in " + LANG_NAME[clarifyLang()] + ". Return an empty list if nothing repeats.",
     messages: [{ role: "user", content: `Existing rules:\n${existing}\n\nCorrections:\n${list}` }],
   });
   const rules = response.parsed_output?.rules ?? [];
