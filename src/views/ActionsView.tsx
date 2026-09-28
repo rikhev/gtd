@@ -180,6 +180,13 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         key = who ? `who:${who.toLowerCase()}` : "none";
         label = who || "Nobody named";
         order = who ? `0${who.toLowerCase()}` : "9";
+      } else if (groupBy === "context" && mode === "next" && isChase(a, t)) {
+        // Waiting items whose follow-up has come are the most time-sensitive thing here: they lead, on their own,
+        // instead of sitting in "No context" looking misfiled.
+        key = "chase";
+        label = "To chase";
+        order = "!";
+        meta = "follow-up due";
       } else if (groupBy === "context") {
         const c = a.context_id ? ctxById.get(a.context_id) : undefined;
         key = c?.id ?? "none";
@@ -226,7 +233,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       // New rows join the group the cursor is in.
       if (!nav.focus) return {};
       const g = isGroupKey(nav.focus) ? nav.focus.slice(6) : groups.find((x) => x.rows.some((r) => r.id === nav.focus))?.key;
-      if (!g || g === "none") return {};
+      if (!g || g === "none" || g === "chase") return {};
       if (groupBy === "project" && projById.has(g)) return { project_id: g };
       if (groupBy === "context" && ctxById.has(g)) return { context_id: g };
       if (groupBy === "who" && g.startsWith("who:")) return { waiting_who: groups.find((x) => x.key === g)?.label };
@@ -299,6 +306,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     const t = today();
     switch (groupBy) {
       case "context":
+        // Nothing is dropped into "To chase": an item gets there by its follow-up date, not by being moved.
+        if (groupKey === "chase") return null;
         return groupKey === "none" ? (mode === "next" ? null : { context_id: null }) : { context_id: groupKey };
       case "who":
         return groupKey === "none" ? { waiting_who: null } : { waiting_who: groups.find((g) => g.key === groupKey)?.label ?? null };
@@ -398,7 +407,10 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         <InlineEdit value={a.title} placeholder={SUBJECT_HINT[mode]} onDone={(v) => act.commitTitle(a.id, v)} />
       ) : (
         <span className="subject">
-          {isChase(a) && mode === "next" && <span className="chase-label">Chase {a.waiting_who ?? ""}</span>}
+          {isChase(a) && mode === "next" && (
+            // Under "To chase" the group already says it: the row names only who.
+            <span className="chase-label">{groupBy === "context" ? a.waiting_who ?? "Chase" : `Chase ${a.waiting_who ?? ""}`}</span>
+          )}
           <span className="subject-text">{titleOr(a)}</span>
           <span className="subject-icons">
             {a.recurrence && <Repeat size={12} strokeWidth={2} aria-label="Repeats" />}
@@ -420,6 +432,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     label: "Project",
     width: "minmax(120px, 200px)",
     drop: 4,
+    blank: (a) => !a.project_id,
     render: (a) => {
       const p = a.project_id ? projById.get(a.project_id) : undefined;
       return p ? <span className="proj-cell">{p.title}</span> : <span className="dash" aria-hidden="true">–</span>;
@@ -450,7 +463,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       return r ? <span className="muted-text">{recurrenceLabel(r)}</span> : <span className="dash" aria-hidden="true">–</span>;
     },
   };
-  const backCol: Column<Action> = { key: "back", label: "Bring back", width: "96px", render: (a) => <DateCell date={a.bring_back} kind="plain" /> };
+  const backCol: Column<Action> = { key: "back", label: "Bring back", width: "96px", blank: (a) => !a.bring_back, render: (a) => <DateCell date={a.bring_back} kind="plain" /> };
   const dueCol: Column<Action> = { key: "due", label: "Due", width: "84px", render: (a) => <DateCell date={a.due} /> };
   let columns: Column<Action>[];
   if (mode === "waiting") {
@@ -460,7 +473,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       subject,
       ...(groupBy === "who" ? [] : [{ key: "who", label: "Waiting on", width: "132px", render: (a: Action) => a.waiting_who || <span className="dash" aria-hidden="true">–</span> }]),
       { key: "since", label: "Since", width: "84px", drop: 1, render: (a) => <DateCell date={a.waiting_since} kind="plain" /> },
-      { key: "follow", label: "Follow up", width: "88px", render: (a) => <DateCell date={a.followup} /> },
+      { key: "follow", label: "Follow up", width: "88px", blank: (a) => !a.followup, render: (a) => <DateCell date={a.followup} /> },
       projCol,
       { ...ctxCol, optional: true },
       { ...dueCol, optional: true },
@@ -490,7 +503,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       ...(groupBy === "context" ? [] : [ctxCol]),
       ...(groupBy === "project" ? [] : [projCol]),
       dueCol,
-      { key: "defer", label: "Start", width: "80px", drop: 1, render: (a) => <DateCell date={a.defer} kind="defer" /> },
+      { key: "defer", label: "Start", width: "80px", drop: 1, blank: (a) => !a.defer, render: (a) => <DateCell date={a.defer} kind="defer" /> },
       { key: "time", label: "Time", width: "52px", align: "end", drop: 3, render: (a) => <TimeCell min={a.time_min} /> },
       { key: "energy", label: "Energy", width: "62px", drop: 2, render: (a) => <Energy level={a.energy} /> },
       areaCol,

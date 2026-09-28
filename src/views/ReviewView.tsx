@@ -342,7 +342,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </span>
       ),
     },
-    { key: "info", label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
     { key: "date", label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" ? "plain" : "due"} /> },
   ];
@@ -351,6 +351,10 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     return p ? projectHealth(s, p) : "done";
   }
 
+  // On a phone the steps are one sideways-scrolling strip: keep the current one in view.
+  useEffect(() => {
+    document.querySelector(".review-steps .is-current")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [stepIdx]);
   return (
     <div className="review">
       <ol className="review-steps" aria-label="Review steps">
@@ -420,8 +424,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       {!clarifying && (
         <KeyHints
           hints={[
-            ...(step.id !== "finish" ? [{ k: "mod+.", label: "Next step" }] : []),
-            { k: "mod+,", label: "Previous" },
+            // On touch the step bar is right above: moving between steps is a tap there, not a button here.
+            ...(step.id !== "finish" ? [{ k: "mod+.", label: "Next step", touch: "hide" as const }] : []),
+            { k: "mod+,", label: "Previous", touch: "hide" as const },
             ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "n", label: "Add next action" }] : []),
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),

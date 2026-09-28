@@ -4,6 +4,8 @@ import { useEffect, useRef } from "react";
  * Mind like water: the head of the rail is a still surface. Each thing that lands in the Inbox
  * falls in as a drop; its rings spread in perspective and die out until the water is smooth again.
  * The calm surface is plain CSS; this canvas only draws while something is moving, then stops.
+ * At rest the name stands on the horizon and the water gives it back, mirrored: dead calm, "stiltje". A drop
+ * stirs the reflection until the rings have died out.
  */
 
 const HORIZON = 43; // px from the top: steel "air" above, water below; level with the top bar's bottom rule
@@ -29,6 +31,7 @@ const RINGS = [
 
 export function Pond() {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = canvas.current;
@@ -167,8 +170,18 @@ export function Pond() {
       }
     };
 
+    let settle = 0;
     const onLanded = (e: Event) => {
       const n = Math.max(1, Math.min(5, Number((e as CustomEvent<number>).detail) || 1));
+      // The reflection shivers while the rings spread, then lies still again.
+      const pond = box.current;
+      if (pond && !reduce.matches) {
+        pond.classList.remove("is-stirred");
+        void pond.offsetWidth;
+        pond.classList.add("is-stirred");
+        window.clearTimeout(settle);
+        settle = window.setTimeout(() => pond.classList.remove("is-stirred"), 1600 + n * 160);
+      }
       if (!frame) {
         size();
         readColors();
@@ -183,11 +196,14 @@ export function Pond() {
     return () => {
       window.removeEventListener("gtd:landed", onLanded);
       cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
     };
   }, []);
 
   return (
-    <div className="pond" aria-hidden="true">
+    <div ref={box} className="pond" aria-hidden="true">
+      <span className="pond-name">Stiltje</span>
+      <span className="pond-name pond-mirror">Stiltje</span>
       <canvas ref={canvas} />
     </div>
   );

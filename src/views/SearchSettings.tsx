@@ -3,7 +3,7 @@ import { mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from 
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { AreaName, ContextCode, KeyHints } from "../components/bits.tsx";
+import { AreaName, ContextCode, KeyHints, type KeyHint } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../actionCommands.tsx";
@@ -551,9 +551,9 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
   ];
 
-  const hints: { k: string; label: string }[] = [
-    { k: "mod+.", label: "Next tab" },
-    { k: "mod+,", label: "Previous" },
+  const hints: KeyHint[] = [
+    { k: "mod+.", label: "Next tab", touch: "hide" as const },
+    { k: "mod+,", label: "Previous", touch: "hide" as const },
     ...(tab === "areas" || tab === "contexts"
       ? [
           { k: "n", label: "New" },
@@ -567,6 +567,10 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         : [{ k: "enter", label: "Change" }]),
   ];
 
+  // On a phone the tabs are one sideways-scrolling strip: keep the current one in view.
+  useEffect(() => {
+    document.querySelector(".settings-tabs .is-current")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [tab]);
   return (
     <div className="settings">
       <ol className="review-steps settings-tabs" role="tablist" aria-label="Settings">

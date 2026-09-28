@@ -154,8 +154,8 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "proj", label: "Project", width: "minmax(120px, 200px)", render: (r) => (r.project ? <span className="proj-cell">{r.project}</span> : <span className="dash" aria-hidden="true">–</span>) },
-    { key: "back", label: "Bring back", width: "100px", render: (r) => <DateCell date={r.bring_back} kind="plain" /> },
+    { key: "proj", label: "Project", width: "minmax(120px, 200px)", blank: (r) => !r.project, render: (r) => (r.project ? <span className="proj-cell">{r.project}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "back", label: "Bring back", width: "100px", blank: (r) => !r.bring_back, render: (r) => <DateCell date={r.bring_back} kind="plain" /> },
   ];
 
   return (
@@ -281,11 +281,12 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "proj", label: "Project", width: "minmax(120px, 200px)", render: (r) => <span className="proj-cell">{s.projects.find((p) => p.id === r.project_id)?.title ?? <span className="dash" aria-hidden="true">–</span>}</span> },
+    { key: "proj", label: "Project", width: "minmax(120px, 200px)", blank: (r) => !r.project_id, render: (r) => <span className="proj-cell">{s.projects.find((p) => p.id === r.project_id)?.title ?? <span className="dash" aria-hidden="true">–</span>}</span> },
     {
       key: "files",
       label: "Files",
       width: "64px",
+      blank: (r) => !filesBy.get(r.id),
       render: (r) =>
         filesBy.get(r.id) ? (
           <span className="files-count">
@@ -301,7 +302,8 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
       label: "Updated",
       width: "96px",
       drop: 1,
-      // A dash until it has changed since it was filed.
+      // Empty until it has changed since it was filed; the column steps aside while nothing has.
+      blank: (r) => !(refUpdated(s, r) > r.created_at),
       render: (r) => {
         const at = refUpdated(s, r);
         return at > r.created_at ? <span className="date">{formatDate(at.slice(0, 10))}</span> : <span className="dash" aria-hidden="true">–</span>;

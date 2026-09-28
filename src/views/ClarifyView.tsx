@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, StickyNote, Timer } from "lucide-react";
-import { getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore, bareArea } from "../store.ts";
+import { getMeta, getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore, bareArea } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { runWhenReady, useCommands, type Command } from "../keys.ts";
 import { RAIL } from "../components/Chrome.tsx";
@@ -63,6 +63,13 @@ export interface ClarifyHost {
   offerNext: boolean;
 }
 
+/** Sizes a one-line-of-meaning textarea to its wrapped lines. */
+const fitHeight = (el: HTMLTextAreaElement | null) => {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight}px`;
+};
+
 export function ClarifyView({ regionActive, withClaude = false, host: hosted }: { regionActive: boolean; withClaude?: boolean; host?: ClarifyHost }) {
   const ui = useUI();
   const host: ClarifyHost = hosted ?? {
@@ -100,6 +107,11 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       const proposals: Record<string, Proposal> = {};
       for (const st of items) proposals[st.id] = blankDecision(st.id, st.text);
       setJob({ id: "by-hand", order: items.map((x) => x.id), proposals, done: true, error: null });
+      return;
+    }
+    // Without a key there is nothing to wait for: go straight to the ways forward, never to "Claude is reading…".
+    if (!getMeta().hasKey) {
+      setStartError("No Claude API key yet.");
       return;
     }
     try {
@@ -613,6 +625,9 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
 
   const done = handled.size;
   const total = queue.length;
+  // The queue, felt: the next few items wait below, dimmer the further off they are.
+  const ahead = [...queue.slice(index + 1), ...queue.slice(0, index)].filter((id) => !handled.has(id));
+  const upNext = ahead.slice(0, 3).map((id) => s.stuff.find((x) => x.id === id)).filter((x): x is NonNullable<typeof x> => Boolean(x));
 
   return (
     <div className="clarify" ref={card}>
@@ -720,11 +735,31 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                     </div>
                   )}
                   <ol className="p-actions">
-                    {draft.actions.map((a, i) => (
+                    {draft.actions.map((a, i) => {
+                      // By hand, the first action starts as the capture's own words: until it is rewritten it is drawn
+                      // as raw material, with a prompt, and focusing it selects it so typing replaces it.
+                      const raw = byHand && Boolean(current) && a.title.trim() !== "" && a.title.trim() === stuffTitle(current!).trim();
+                      return (
                       <li key={i} data-row={i} tabIndex={0} aria-label={`Proposed action ${i + 1}: ${a.title}`} className={`p-row ${a.done ? "is-done" : ""}`} onFocus={() => setRow(i)}>
                         <div className="p-row-top">
                           <span className="p-kind">{a.kind === "next" ? "Next" : a.kind === "waiting" ? "Waiting" : "Someday"}</span>
-                          <input className="p-title" value={a.title} aria-label={`Action ${i + 1}`} placeholder="Describe the next action" onChange={(e) => updateRow(i, { title: e.target.value })} />
+                          {/* A title wraps rather than being cut off: the field grows to its lines (it stays one line of
+                              meaning, so Enter never adds a break). */}
+                          <textarea
+                            rows={1}
+                            ref={fitHeight}
+                            className={`p-title ${raw ? "is-raw" : ""}`}
+                            value={a.title}
+                            aria-label={`Action ${i + 1}`}
+                            aria-describedby={raw ? `p-raw-${i}` : undefined}
+                            placeholder="Describe the next action"
+                            onFocus={(e) => raw && e.currentTarget.select()}
+                            onKeyDown={(e) => e.key === "Enter" && !e.metaKey && !e.ctrlKey && e.preventDefault()}
+                            onChange={(e) => {
+                              fitHeight(e.currentTarget);
+                              updateRow(i, { title: e.target.value.replace(/\n/g, " ") });
+                            }}
+                          />
                           {a.two_minute && (
                             <span className={`two-min ${a.done ? "is-on" : ""}`} title="Under two minutes: E marks it done now">
                               <Timer size={12} strokeWidth={2} aria-hidden /> 2 min
@@ -769,9 +804,15 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                             <Energy level={a.energy} />
                           </button>
                         </div>
+                        {raw && (
+                          <p className="p-raw-note" id={`p-raw-${i}`}>
+                            Rewrite as a next action, verb first: what is the very next thing you'd do?
+                          </p>
+                        )}
                         {a.done && <p className="p-done-note">Done now: goes straight to the Done log.</p>}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ol>
                   {draft.actions.length === 0 && <p className="p-note">No actions proposed. Add one if this needs doing.</p>}
                 </>
@@ -783,15 +824,31 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       </div>
       <KeyHints
         hints={[
-          { k: "mod+enter", label: "Accept" },
-          ...(byHand ? [{ k: "n", label: "Add action" }] : []),
+          { k: "mod+enter", label: "Accept", primary: true },
+          ...(byHand ? [{ k: "n", label: "Add action", touch: "more" as const }] : []),
           { k: "v", label: "File as" },
-          { k: "shift+p", label: "Project" },
+          { k: "shift+p", label: "Project", touch: "more" as const },
           { k: "e", label: "Done now" },
-          { k: "backspace", label: "Trash" },
+          { k: "backspace", label: "Trash", touch: "more" as const },
           { k: "mod+.", label: "Skip" },
         ]}
       />
+      {upNext.length > 0 && (
+        <section className="clarify-next" aria-label="Up next">
+          <h2 className="pane-h">
+            Up next
+            {ahead.length > upNext.length && <span className="muted-text small">and {ahead.length - upNext.length} more</span>}
+          </h2>
+          <ol>
+            {upNext.map((st) => (
+              <li key={st.id}>
+                {st.kind === "email" ? <Mail size={13} strokeWidth={1.75} aria-hidden /> : st.kind === "file" ? <FileText size={13} strokeWidth={1.75} aria-hidden /> : <StickyNote size={13} strokeWidth={1.75} aria-hidden />}
+                <span>{stuffTitle(st) || "Untitled"}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
     </div>
   );
 }

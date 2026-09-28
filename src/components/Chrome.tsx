@@ -43,6 +43,7 @@ const LISTS: ViewId[][] = [
 type Entry = { key: string; view: ViewId; label: string; name: string; start?: boolean };
 
 export function Rail({ active }: { active: boolean }) {
+  useHeldModifier();
   const ui = useUI();
   const s = useStore((x) => x);
   const { stallWeeks } = useMeta(); // recount stalled projects when the threshold changes
@@ -249,7 +250,37 @@ export function Rail({ active }: { active: boolean }) {
 
 const keyOf = (v: ViewId) => RAIL.find((r) => r.id === v)?.key;
 
-/** Every rail stop shows its shortcut as a key cap, in one right-hand column (visual only; the key is in its accessible name). */
+/**
+ * The rail's key caps rest hidden and come up while a modifier is held, as the shortcuts in macOS menus do (owner's
+ * decision: twelve standing caps crowded the counts). A short hold, so a quick ⌘K doesn't flash them.
+ */
+function useHeldModifier() {
+  useEffect(() => {
+    let timer = 0;
+    const isMod = (k: string) => k === "Control" || k === "Meta";
+    const clear = () => {
+      window.clearTimeout(timer);
+      timer = 0;
+      document.body.classList.remove("keys-held");
+    };
+    const down = (e: KeyboardEvent) => {
+      if (!isMod(e.key)) return clear();
+      if (!timer) timer = window.setTimeout(() => document.body.classList.add("keys-held"), 220);
+    };
+    const up = (e: KeyboardEvent) => isMod(e.key) && clear();
+    window.addEventListener("keydown", down, true);
+    window.addEventListener("keyup", up, true);
+    window.addEventListener("blur", clear);
+    return () => {
+      clear();
+      window.removeEventListener("keydown", down, true);
+      window.removeEventListener("keyup", up, true);
+      window.removeEventListener("blur", clear);
+    };
+  }, []);
+}
+
+/** Every rail stop has its shortcut as a key cap in one right-hand column, shown on demand (visual only; the key is in its accessible name). */
 function RailKey({ k }: { k?: string }) {
   return k ? (
     <kbd className="kbd rail-key" aria-hidden="true">
@@ -263,8 +294,17 @@ export function TabBar() {
   const ui = useUI();
   const s = useStore((x) => x);
   const [more, setMore] = useState(false);
-  const inbox = s.stuff.filter((x) => x.status === "inbox").length;
-  const rest: ViewId[] = ["projects", "someday", "reference", "review", "done", "settings"];
+  const inboxItems = s.stuff.filter((x) => x.status === "inbox");
+  const inbox = inboxItems.length;
+  const rest: ViewId[] = ["calendar", "projects", "someday", "reference", "done", "trash", "settings"];
+  // The phone's system check, as in the rail: is the review due, and how old is the oldest thing in the Inbox?
+  const t = today();
+  const reviewAge = daysSinceReview(s);
+  const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
+  const reviewDue = reviewAge === null ? (firstDay ? daysBetween(firstDay.slice(0, 10), t) >= 7 : false) : reviewAge >= 7;
+  const oldest = inboxItems.reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
+  const oldestDays = oldest ? daysBetween(oldest.slice(0, 10), t) : null;
+  const checkDue = reviewDue || (oldestDays !== null && oldestDays >= 7);
   const go = (v: ViewId) => {
     setMore(false);
     if (v === "review") ui.startReview();
@@ -278,15 +318,38 @@ export function TabBar() {
   return (
     <nav className="tabbar" aria-label="Lists">
       {more && (
-        <ul className="tabbar-more">
-          {rest.map((v) => (
-            <li key={v}>
-              <button type="button" className={ui.view === v ? "is-current" : ""} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
-                {VIEW_TITLES[v]}
+        // The phone's rail: the pond and its name, the system check, then the rest of the lists.
+        <div className="tabbar-more">
+          <div className="more-pond" aria-hidden="true">
+            <span className="pond-name">Stiltje</span>
+            <span className="pond-name pond-mirror">Stiltje</span>
+          </div>
+          <ul className="more-check" aria-label="System check">
+            <li>
+              <button type="button" className={ui.view === "review" ? "is-current" : ""} onClick={() => go("review")}>
+                Weekly Review
+                <span className={reviewDue ? "is-due" : "more-meta"}>{reviewDue ? "due" : reviewAge === null ? "not yet" : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
               </button>
             </li>
-          ))}
-        </ul>
+            {oldestDays !== null && (
+              <li>
+                <button type="button" onClick={() => go("inbox")}>
+                  Oldest in Inbox
+                  <span className={oldestDays >= 7 ? "is-due" : "more-meta"}>{oldestDays === 0 ? "today" : `${oldestDays}d`}</span>
+                </button>
+              </li>
+            )}
+          </ul>
+          <ul className="more-list">
+            {rest.map((v) => (
+              <li key={v}>
+                <button type="button" className={ui.view === v ? "is-current" : ""} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
+                  {VIEW_TITLES[v]}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {tab(
         "inbox",
@@ -299,6 +362,8 @@ export function TabBar() {
       {tab("waiting", <span className="tab-name">Waiting</span>)}
       <button type="button" className={`tab ${more || rest.includes(ui.view) ? "is-current" : ""}`} aria-expanded={more} onClick={() => setMore(!more)}>
         <span className="tab-name">{rest.includes(ui.view) && !more ? VIEW_TITLES[ui.view] : "More"}</span>
+        {/* Something in the system check wants attention: a small alert dot, named for screen readers. */}
+        {checkDue && !more && <span className="tab-dot" role="img" aria-label="needs attention" />}
       </button>
     </nav>
   );

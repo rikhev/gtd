@@ -177,6 +177,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
       key: "files",
       label: "Files",
       width: "64px",
+      blank: (st) => !filesBy.get(st.id),
       render: (st) =>
         filesBy.get(st.id) ? (
           <span className="files-count">

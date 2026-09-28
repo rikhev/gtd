@@ -54,6 +54,7 @@ export function useMeta() {
   );
 }
 export const getState = () => state;
+export const getMeta = () => meta;
 
 /** Called when any API request comes back 401: the session expired or was revoked. */
 export function signedOut() {

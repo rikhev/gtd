@@ -12,6 +12,8 @@ export interface Column<T> {
   drop?: number;
   /** Offered but hidden until the owner shows it (Show or hide columns…). */
   optional?: boolean;
+  /** Whether a row has nothing in this column. When no row in the list has anything, the column steps aside. */
+  blank?: (row: T) => boolean;
   render: (row: T) => ReactNode;
 }
 
@@ -443,7 +445,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     ui.openPicker({
       type: "list",
       title: "Show columns",
-      items: toggleable.map((c) => ({ id: c.key, label: c.label, hint: isShown(c) ? "Shown" : "Hidden", section: "columns" })),
+      items: toggleable.map((c) => ({ id: c.key, label: c.label, hint: !isShown(c) ? "Hidden" : blankKeys.has(c.key) ? "Shown when filled" : "Shown", section: "columns" })),
       current: current ?? null,
       onPick: (key) => {
         if (!key) return;
@@ -454,7 +456,13 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
         window.setTimeout(() => chooseColumns(key), 0);
       },
     });
-  const visible = useMemo(() => ordered.filter((c, i) => i < lead || isShown(c)), [ordered, lead, colShow]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A column no row has anything in (Files in an Inbox of notes, Follow up when nothing needs chasing) steps aside
+  // instead of showing a column of blanks; it comes back with the first value.
+  const blankKeys = useMemo(() => {
+    const rows = groups.flatMap((g) => g.rows);
+    return new Set(rows.length ? allColumns.filter((c) => c.blank && rows.every(c.blank)).map((c) => c.key) : []);
+  }, [groups, allColumns]);
+  const visible = useMemo(() => ordered.filter((c, i) => i < lead || (isShown(c) && !blankKeys.has(c.key))), [ordered, lead, colShow, blankKeys]); // eslint-disable-line react-hooks/exhaustive-deps
   const movableKeys = visible.slice(lead).map((c) => c.key);
   const moveColumn = (key: string, to: number) => {
     const keys = movableKeys.filter((k) => k !== key);
@@ -1037,6 +1045,19 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     <div
       ref={box}
       className={`grid ${active ? "is-active" : ""} ${width && width < 560 ? "is-compact" : ""}`}
+      // Text cut short with an ellipsis (a long project, subject or next action) shows in full on hover: the first
+      // clipped element under the pointer, up to its cell, takes its own text as a title.
+      onMouseOver={(e) => {
+        let el = e.target as HTMLElement | null;
+        while (el && el !== e.currentTarget) {
+          if (el.scrollWidth > el.clientWidth + 1) {
+            if (!el.title) el.title = el.innerText.trim();
+            return;
+          }
+          if (el.classList.contains("cell")) return;
+          el = el.parentElement;
+        }
+      }}
       data-list={listId}
       role="grid"
       aria-labelledby={label ? undefined : "view-title"}

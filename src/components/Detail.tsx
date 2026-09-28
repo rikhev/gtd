@@ -179,7 +179,7 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
           </kbd>
         )}
       </h3>
-      {files.length === 0 && <p className="muted-text small">No files attached.</p>}
+
       <ul>
         {files.map((f) => (
           <li key={f.id} className="file-row">
@@ -204,6 +204,12 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
           </li>
         ))}
       </ul>
+      {/* The mouse's way in, beside ⌘O and dropping files on the pane. */}
+      <button type="button" className="text-btn attach-btn" onClick={() => input.current?.click()}>
+        <Paperclip size={13} strokeWidth={1.75} aria-hidden />
+        {files.length ? "Attach another file" : "Attach a file"}
+        <span className="muted-text">or drop one here</span>
+      </button>
       <input
         ref={input}
         type="file"
@@ -230,56 +236,82 @@ function ActionDetail({ a }: { a: Action }) {
   const proj = s.projects.find((p) => p.id === a.project_id);
   const rec = a.recurrence ? parseRecurrence(a.recurrence) : null;
   const done = a.status === "done";
+  const waiting = a.status === "waiting";
+  const projectField = (
+    <PickField label="Project" k="P" onOpen={() => ed.project([a.id])}>
+      {proj ? proj.title : none}
+    </PickField>
+  );
+  const contextField = (
+    <PickField label="Context" k="C" onOpen={() => ed.context([a.id])}>
+      <ContextCode ctx={ctx} />
+    </PickField>
+  );
+  const nextFields = (
+    <>
+      <PickField label="Due" k="D" onOpen={() => ed.date([a.id], "due")}>
+        {a.due ? <DueLong date={a.due} done={a.status === "done"} /> : none}
+      </PickField>
+      <PickField label="Start" k="S" onOpen={() => ed.date([a.id], "defer")}>
+        {a.defer ? formatLong(a.defer) : none}
+      </PickField>
+      <PickField label="Time" k="T" onOpen={() => ed.time([a.id])}>
+        {a.time_min ? formatTime(a.time_min) : none}
+      </PickField>
+      <PickField label="Energy" k="G" onOpen={() => ed.energy([a.id])}>
+        <Energy level={a.energy} />
+      </PickField>
+      <PickField label="Repeat" k="R" onOpen={() => ed.recurrence([a.id])}>
+        {rec ? recurrenceLabel(rec) : none}
+      </PickField>
+      <PickField label="Bring back" k="B" onOpen={() => ed.date([a.id], "bring_back")}>
+        {a.bring_back ? formatLong(a.bring_back) : none}
+      </PickField>
+    </>
+  );
+  const waitingFields = (
+    <>
+      <TextField
+        label="Waiting on"
+        value={a.waiting_who ?? ""}
+        onCommit={(v) => {
+          if (!v.trim()) {
+            notify("A Waiting For item needs someone or something to wait on. Move it with V to take it out of Waiting For.", { tone: "error" });
+            return false;
+          }
+          patch("actions", a.id, { waiting_who: v.trim() });
+        }}
+      />
+      <PickField label="Follow up" onOpen={() => ed.date([a.id], "followup")}>
+        {a.followup ? <DueLong date={a.followup} done={a.status !== "waiting"} /> : none}
+      </PickField>
+      {/* When the waiting began: today by default, set back to the real day when it is filed later. */}
+      <PickField label="Since" k="I" onOpen={() => ed.date([a.id], "waiting_since")}>
+        {a.waiting_since ? formatLong(a.waiting_since) : none}
+      </PickField>
+    </>
+  );
   return (
     <>
       {/* Flagged for today or done is the one thing the fields don't say, so its mark rides after the label. */}
       <TextField label="Subject" mark={a.flagged || done ? <Marker flagged={Boolean(a.flagged)} done={done} /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      {/* Fields in the order the item's kind asks for them: a waiting item leads with who it waits on, when to
+          follow up and since when, right after its project; a next action's own fields follow. */}
       <div className="field-grid">
-        <PickField label="Project" k="P" onOpen={() => ed.project([a.id])}>
-          {proj ? proj.title : none}
-        </PickField>
-        <PickField label="Context" k="C" onOpen={() => ed.context([a.id])}>
-          <ContextCode ctx={ctx} />
-        </PickField>
-        <PickField label="Due" k="D" onOpen={() => ed.date([a.id], "due")}>
-          {a.due ? <DueLong date={a.due} done={a.status === "done"} /> : none}
-        </PickField>
-        <PickField label="Start" k="S" onOpen={() => ed.date([a.id], "defer")}>
-          {a.defer ? formatLong(a.defer) : none}
-        </PickField>
-        <PickField label="Time" k="T" onOpen={() => ed.time([a.id])}>
-          {a.time_min ? formatTime(a.time_min) : none}
-        </PickField>
-        <PickField label="Energy" k="G" onOpen={() => ed.energy([a.id])}>
-          <Energy level={a.energy} />
-        </PickField>
-        <PickField label="Repeat" k="R" onOpen={() => ed.recurrence([a.id])}>
-          {rec ? recurrenceLabel(rec) : none}
-        </PickField>
-        <PickField label="Bring back" k="B" onOpen={() => ed.date([a.id], "bring_back")}>
-          {a.bring_back ? formatLong(a.bring_back) : none}
-        </PickField>
+        {projectField}
+        {waiting ? (
+          waitingFields
+        ) : (
+          <>
+            {contextField}
+            {nextFields}
+          </>
+        )}
       </div>
-      {a.status === "waiting" && (
+      {waiting && (
         <div className="field-grid">
-          <TextField
-            label="Waiting on"
-            value={a.waiting_who ?? ""}
-            onCommit={(v) => {
-              if (!v.trim()) {
-                notify("A Waiting For item needs someone or something to wait on. Move it with V to take it out of Waiting For.", { tone: "error" });
-                return false;
-              }
-              patch("actions", a.id, { waiting_who: v.trim() });
-            }}
-          />
-          <PickField label="Follow up" onOpen={() => ed.date([a.id], "followup")}>
-            {a.followup ? <DueLong date={a.followup} done={a.status !== "waiting"} /> : none}
-          </PickField>
-          {/* When the waiting began: today by default, set back to the real day when it is filed later. */}
-          <PickField label="Since" k="I" onOpen={() => ed.date([a.id], "waiting_since")}>
-            {a.waiting_since ? formatLong(a.waiting_since) : none}
-          </PickField>
+          {contextField}
+          {nextFields}
         </div>
       )}
       <TextField label="Notes" value={a.notes} multiline rows={8} onCommit={(v) => patch("actions", a.id, { notes: v })} placeholder="Details, links, phone numbers…" />

@@ -79,7 +79,11 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
     const byDay = new Map<string, Row[]>();
     for (const r of all) byDay.set(dayLabel(r.at), [...(byDay.get(dayLabel(r.at)) ?? []), r]);
     return sortGroups(
-      [...byDay.entries()].map(([label, rows]) => ({ key: label, label, rows })),
+      // Everything deleted on one day goes on the same day, so the countdown belongs to the day, not to each row.
+      [...byDay.entries()].map(([label, rows]) => {
+        const left = Math.min(...rows.map((r) => r.left));
+        return { key: label, label, rows, meta: <span className={left <= 1 ? "left-last" : "muted-text"}>{left <= 1 ? "Last day" : `gone in ${plural(left, "day")}`}</span> };
+      }),
       sorters,
       sort,
     );
@@ -150,8 +154,10 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
       label: "Gone in",
       width: "96px",
       align: "end",
-      // The last day reads in alert red: it is about to be gone for good.
-      render: (r) => <span className={`num ${r.left <= 1 ? "left-last" : ""}`}>{r.left <= 1 ? "Last day" : plural(r.left, "day")}</span>,
+      // Only the last day is marked on the row, in alert red: it is about to be gone for good. Otherwise the day's
+      // heading says it, and the column steps aside when nothing is on its last day.
+      blank: (r) => r.left > 1,
+      render: (r) => (r.left > 1 ? null : <span className="num left-last">Last day</span>),
     },
   ];
 

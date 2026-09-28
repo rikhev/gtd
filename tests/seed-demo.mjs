@@ -20,12 +20,12 @@ const action = (title, o = {}) => {
 };
 
 project("shred", "Deliver the shredder test report to Nordplast", "Work", "", { due: day(9) });
-project("cad", "CAD licences renewed for the design team", "Work");
+project("cad", "Renew the CAD licences for the design team", "Work");
 project("garage", "Convert the garage into a workshop", "Home");
-project("passport", "Passports renewed before the Lisbon trip", "Home", "", { due: day(21) });
-project("fitness", "Running a 10K in under 55 minutes", "Health");
-project("tax", "2025 tax return filed", "Finance");
-project("offsite", "Q4 team offsite planned", "Work");
+project("passport", "Renew the passports before the Lisbon trip", "Home", "", { due: day(21) });
+project("fitness", "Run a 10K in under 55 minutes", "Health");
+project("tax", "File the 2025 tax return", "Finance");
+project("offsite", "Plan the Q4 team offsite", "Work");
 
 action("Email Per the shredder throughput numbers", { project_id: P.shred, context_id: ctx["@computer"], due: day(-1), time_min: 15, energy: 2, flagged: 1 });
 action("Draft the test report outline", { project_id: P.shred, context_id: ctx["@computer"], due: day(3), time_min: 60, energy: 3 });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { formatDate, formatTime, daysBetween, today } from "../../shared/dates.ts";
 import type { Action, Context } from "../../shared/types.ts";
 import { keyLabel, runKey } from "../keys.ts";
@@ -202,16 +202,52 @@ export function KeyChoices({ choices, autoFocus = true }: { choices: { k: string
  * The keys a screen offers. Each hint is also a button that does what its key does, so the screen works by touch
  * (where the line becomes a row of tap targets and the key caps hide) and by mouse.
  */
-export function KeyHints({ hints }: { hints: { k: string; label: string }[] }) {
-  return (
-    <p className="key-hints" aria-label="Keyboard shortcuts">
-      {hints.map((h) => (
-        <button key={h.k + h.label} type="button" className="kh" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey(h.k)}>
-          <Kbd k={h.k} /> {h.label}
-        </button>
-      ))}
-    </p>
+/**
+ * On a touch screen the hints are the screen's buttons, so they are given an order: the one `primary` hint is a full
+ * width filled button, `touch: "more"` hints wait behind a More button, and `touch: "hide"` hints (moving between
+ * tabs or steps the screen already shows) are left out. With a keyboard every hint shows as its key, in order.
+ */
+export type KeyHint = { k: string; label: string; primary?: boolean; touch?: "more" | "hide" };
+export function KeyHints({ hints }: { hints: KeyHint[] }) {
+  const touch = useIsTouch();
+  const [more, setMore] = useState(false);
+  const btn = (h: KeyHint, extra = "") => (
+    <button key={h.k + h.label} type="button" className={`kh ${extra}`} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey(h.k)}>
+      <Kbd k={h.k} /> {h.label}
+    </button>
   );
+  if (!touch) return <p className="key-hints" aria-label="Keyboard shortcuts">{hints.map((h) => btn(h))}</p>;
+  const shown = hints.filter((h) => h.touch !== "hide");
+  const primary = shown.filter((h) => h.primary);
+  const rest = shown.filter((h) => !h.primary && h.touch !== "more");
+  const extra = shown.filter((h) => h.touch === "more");
+  return (
+    <div className="key-hints is-touch" aria-label="Actions">
+      {primary.map((h) => btn(h, "is-primary"))}
+      <div className="kh-row">
+        {rest.map((h) => btn(h))}
+        {extra.length > 0 && (
+          <button type="button" className={`kh ${more ? "is-open" : ""}`} aria-expanded={more} onClick={() => setMore(!more)}>
+            More
+          </button>
+        )}
+      </div>
+      {more && <div className="kh-row">{extra.map((h) => btn(h))}</div>}
+    </div>
+  );
+}
+
+/** A touch-first device (coarse pointer), kept current if the device changes mode. */
+function useIsTouch() {
+  const q = "(pointer: coarse)";
+  const [on, setOn] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const f = () => setOn(m.matches);
+    m.addEventListener("change", f);
+    return () => m.removeEventListener("change", f);
+  }, []);
+  return on;
 }
 
 export function titleOr(a: Pick<Action, "title">) {

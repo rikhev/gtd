@@ -41,6 +41,8 @@ const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WEEK_LANES = 99;
 const MONTH_LANES = 3;
+/** This week and the weeks after it are where the hard landscape is read: they get room for everything on them. */
+const MONTH_LANES_AHEAD = 8;
 
 const dow = (d: string) => fromIso(d).getDay();
 const startOfWeek = (d: string, ws: 0 | 1) => addDays(d, -((dow(d) - ws + 7) % 7));
@@ -124,13 +126,31 @@ function layoutRow(days: string[], items: Item[], cap: number) {
 
 type Drag = { key: string; start: string; end: string };
 
+/** A phone-width screen, where bars across seven columns can't be read: the calendar becomes dots and an agenda. */
+function usePhone() {
+  const q = "(max-width: 640px)";
+  const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setPhone(m.matches);
+    m.addEventListener("change", on);
+    return () => m.removeEventListener("change", on);
+  }, []);
+  return phone;
+}
+
 export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
   const meta = useMeta();
   const s = useStore((x) => x);
   const t = today();
   const ws = meta.weekStart;
-  const [mode, setMode] = usePersisted<Mode>("calendar:mode", "month");
+  const phone = usePhone();
+  // A phone keeps its own view, and opens on the week as an agenda: the month's seven columns are too narrow for titles.
+  const [deskMode, setDeskMode] = usePersisted<Mode>("calendar:mode", "month");
+  const [phoneMode, setPhoneMode] = usePersisted<Mode>("calendar:mode:phone", "week");
+  const mode = phone ? phoneMode : deskMode;
+  const setMode = phone ? setPhoneMode : setDeskMode;
   const [cursor, setCursor] = useState(t);
   const [itemKey, setItemKey] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -334,6 +354,14 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   ];
   useCommands("list:calendar", commands, { priority: 10, active: regionActive });
 
+  // Opening the month on the current one: this week goes to the top, the past a scroll away above it.
+  useEffect(() => {
+    if (mode !== "month" || monthOf(cursor) !== monthOf(t)) return;
+    const row = root.current?.querySelector<HTMLElement>(".cal-row.is-this-week");
+    const scroller = row?.closest<HTMLElement>(".cal-month");
+    if (row && scroller) scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  }, [mode, monthOf(cursor)]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Keep the cursor day in view in the week and month grids.
   useEffect(() => {
     root.current?.querySelector(`[data-date="${cursor}"].is-cursor`)?.scrollIntoView({ block: "nearest" });
@@ -388,6 +416,41 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     );
   };
 
+  /** One item as an agenda line (phones): its mark, the full title, and what the date is to it. */
+  const agendaRow = (i: Item, d: string) => {
+    const what =
+      i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : i.role === "start" || (i.role === "span" && d === i.start && d !== i.end) ? "Starts" : i.end === d ? "Due" : `Until ${formatShort(i.end)}`;
+    return (
+      <li key={i.key}>
+        <button
+          type="button"
+          className={`cal-agenda-row ${i.overdue && i.end === d ? "is-overdue" : ""} ${itemKey === i.key ? "is-focus" : ""}`}
+          onClick={() => {
+            setCursor(d);
+            setItemKey(i.key);
+            ui.openDetail({ kind: i.kind, id: i.id }, true);
+          }}
+        >
+          <span className="cal-agenda-mark" aria-hidden="true">
+            {i.kind === "project" && i.health ? <Lamp health={i.health} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? <Flag className="cal-flag" size={12} strokeWidth={2.2} /> : <span className="cal-agenda-dot" />}
+          </span>
+          <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>
+          <span className="cal-agenda-when">{what}</span>
+        </button>
+      </li>
+    );
+  };
+  const dots = (d: string) => {
+    const on = onDay(d).slice(0, 4);
+    return on.length ? (
+      <span className="cal-dots" aria-hidden="true">
+        {on.map((i) => (
+          <i key={i.key} className={i.overdue || ((i.role === "due" || i.role === "span") && i.end === d) ? "is-due" : i.role === "followup" ? "is-follow" : i.kind === "project" ? "is-project" : ""} />
+        ))}
+      </span>
+    ) : null;
+  };
+
   const dayCell = (d: string, opts: { outside?: boolean; hidden?: number; head?: boolean }) => (
     <div
       key={d}
@@ -409,9 +472,10 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           <span className="cal-num">{Number(d.slice(8))}</span>
         </span>
       ) : (
-        <span className="cal-num">{Number(d.slice(8)) === 1 ? `${Number(d.slice(8))} ${MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}` : Number(d.slice(8))}</span>
+        <span className="cal-num">{Number(d.slice(8)) === 1 && !phone ? `${Number(d.slice(8))} ${MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}` : Number(d.slice(8))}</span>
       )}
-      {Boolean(opts.hidden) && (
+      {phone && !opts.head && dots(d)}
+      {!phone && Boolean(opts.hidden) && (
         <button
           type="button"
           className="cal-more"
@@ -431,7 +495,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     <div className="cal-weekdays" aria-hidden="true">
       {mode === "month" && <span className="cal-wk" />}
       {range(startOfWeek(t, ws), 7).map((d) => (
-        <span key={d}>{WEEKDAY[dow(d)]}</span>
+        <span key={d}>{phone ? WEEKDAY[dow(d)][0] : WEEKDAY[dow(d)]}</span>
       ))}
     </div>
   );
@@ -439,25 +503,57 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   let body;
   if (mode === "year") body = <YearGrid year={year} ws={ws} items={all} cursor={cursor} t={t} onPick={(d) => (setCursor(d), setMode("month"))} onCursor={setCursor} />;
   else if (mode === "month") {
+    // Past weeks keep a compact three lanes ("+N more" for the rest); this week and later ones grow to hold what
+    // is on them, and the month opens scrolled to this week (owner's decision: the calendar looks forward).
+    const weeks = Array.from({ length: monthWeeks }, (_, w) => {
+      const days = range(addDays(gridStart, w * 7), 7);
+      const ahead = days[6] >= t;
+      const row = layoutRow(days, items, ahead ? MONTH_LANES_AHEAD : MONTH_LANES);
+      return { days, ahead, row, min: phone ? 48 : ahead ? Math.max(150, 29 + row.lanes * 24 + 26) : 112 };
+    });
     body = (
       <>
         {weekdayHead}
-        <div className="cal-month" style={{ gridTemplateRows: `repeat(${monthWeeks}, minmax(112px, 1fr))` }}>
-          {Array.from({ length: monthWeeks }, (_, w) => {
-            const days = range(addDays(gridStart, w * 7), 7);
-            const row = layoutRow(days, items, MONTH_LANES);
+        <div className="cal-month" style={{ gridTemplateRows: weeks.map((w) => `minmax(${w.min}px, 1fr)`).join(" ") }}>
+          {weeks.map(({ days, ahead, row }) => {
             return (
-              <div key={days[0]} className="cal-row">
+              <div key={days[0]} className={`cal-row ${ahead ? "is-ahead" : ""} ${days[0] <= t && t <= days[6] ? "is-this-week" : ""}`}>
                 <span className="cal-wk num" title={`Week ${isoWeek(days[3])}`}>
                   {isoWeek(days[3])}
                 </span>
                 <div className="cal-cells">{days.map((d, i) => dayCell(d, { outside: monthOf(d) !== monthOf(cursor), hidden: row.hidden[i] }))}</div>
-                <div className="cal-bars">{row.placed.map((p) => bar(p, false))}</div>
+                {!phone && <div className="cal-bars">{row.placed.map((p) => bar(p, false))}</div>}
               </div>
             );
           })}
         </div>
+        {/* On a phone the chosen day's items are listed in full under the grid (tap a day to choose it). */}
+        {phone && (
+          <section className="cal-agenda-day" aria-label={formatLong(cursor)}>
+            <h3 className="cal-agenda-head">{formatLong(cursor)}</h3>
+            {cursorItems.length ? <ul className="cal-agenda">{cursorItems.map((i) => agendaRow(i, cursor))}</ul> : <p className="cal-agenda-none">Nothing scheduled.</p>}
+          </section>
+        )}
       </>
+    );
+  } else if (phone) {
+    // The week as an agenda: one section per day, every item with its full title.
+    body = (
+      <div className="cal-agenda-week">
+        {weekDays.map((d) => {
+          const list = onDay(d);
+          return (
+            <section key={d} data-date={d} className={`cal-agenda-day ${d === t ? "is-today" : ""} ${d < t ? "is-past" : ""}`} aria-label={formatLong(d)}>
+              <h3 className="cal-agenda-head">
+                <span className="cal-wd">{WEEKDAY[dow(d)]}</span>
+                <span className="cal-num">{Number(d.slice(8))}</span>
+                <span className="cal-agenda-month">{MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}</span>
+              </h3>
+              {list.length ? <ul className="cal-agenda">{list.map((i) => agendaRow(i, d))}</ul> : <p className="cal-agenda-none">Nothing scheduled.</p>}
+            </section>
+          );
+        })}
+      </div>
     );
   } else {
     const row = layoutRow(weekDays, items, WEEK_LANES);
@@ -475,7 +571,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   }
 
   return (
-    <div className={`calendar is-${mode}`} ref={root} aria-label={`Calendar, ${title}`}>
+    <div className={`calendar is-${mode} ${phone ? "is-phone" : ""}`} ref={root} aria-label={`Calendar, ${title}`}>
       <div className="cal-bar-top">
         <h2 className="cal-title-period">{title}</h2>
         <div className="cal-nav">
