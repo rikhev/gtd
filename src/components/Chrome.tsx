@@ -305,6 +305,16 @@ export function TabBar() {
   const oldest = inboxItems.reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
   const oldestDays = oldest ? daysBetween(oldest.slice(0, 10), t) : null;
   const checkDue = reviewDue || (oldestDays !== null && oldestDays >= 7);
+  // The More sheet closes on a tap anywhere outside it (the More tab itself toggles it).
+  const barRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!more) return;
+    const outside = (e: PointerEvent) => {
+      if (!barRef.current?.contains(e.target as Node)) setMore(false);
+    };
+    window.addEventListener("pointerdown", outside, true);
+    return () => window.removeEventListener("pointerdown", outside, true);
+  }, [more]);
   const go = (v: ViewId) => {
     setMore(false);
     if (v === "review") ui.startReview();
@@ -316,7 +326,7 @@ export function TabBar() {
     </button>
   );
   return (
-    <nav className="tabbar" aria-label="Lists">
+    <nav ref={barRef} className="tabbar" aria-label="Lists">
       {more && (
         // The phone's rail: the pond and its name, the system check, then the rest of the lists.
         <div className="tabbar-more">

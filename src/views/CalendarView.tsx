@@ -34,6 +34,7 @@ interface Item {
   overdue?: boolean;
   sub?: string;
   health?: ReturnType<typeof projectHealth>;
+  projectStart?: string | null;
   stalled?: boolean;
 }
 
@@ -79,7 +80,7 @@ function itemsOf(s: State, t: string): Item[] {
   }
   for (const p of s.projects) {
     if (p.status === "active") {
-      const base = { kind: "project" as const, id: p.id, title: p.title || "Untitled project", health: projectHealth(s, p), stalled: isStalled(s, p) };
+      const base = { kind: "project" as const, id: p.id, title: p.title || "Untitled project", health: projectHealth(s, p), projectStart: p.start, stalled: isStalled(s, p) };
       if (p.start && p.due && p.start <= p.due) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.due, role: "span", startField: "start", endField: "due", overdue: p.due < t });
       else if (p.due) out.push({ ...base, key: `p:${p.id}`, start: p.due, end: p.due, role: "due", startField: null, endField: "due", overdue: p.due < t });
       else if (p.start) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.start, role: "start", startField: "start", endField: null });
@@ -403,7 +404,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       >
         {canStart && <span className="cal-grip is-start" onMouseDown={(e) => startDrag(e, i, "start")} aria-hidden="true" />}
         <span className="cal-line">
-          {i.kind === "project" && i.health && <Lamp health={i.health} />}
+          {i.kind === "project" && i.health && <Lamp health={i.health} start={i.projectStart} />}
           {i.role === "followup" && <Hourglass size={11} strokeWidth={2} aria-hidden />}
           {i.role === "tickler" && <CalendarClock size={11} strokeWidth={2} aria-hidden />}
           {i.flagged && <Flag className="cal-flag" size={10} strokeWidth={2.2} aria-label="Flagged for today" />}
@@ -432,7 +433,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           }}
         >
           <span className="cal-agenda-mark" aria-hidden="true">
-            {i.kind === "project" && i.health ? <Lamp health={i.health} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? <Flag className="cal-flag" size={12} strokeWidth={2.2} /> : <span className="cal-agenda-dot" />}
+            {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? <Flag className="cal-flag" size={12} strokeWidth={2.2} /> : <span className="cal-agenda-dot" />}
           </span>
           <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>
           <span className="cal-agenda-when">{what}</span>

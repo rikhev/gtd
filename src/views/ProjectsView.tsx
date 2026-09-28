@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getState, isStalled, mutate, named, newAction, newProject, patchMany, plural, projectHealth, stamp, useStore } from "../store.ts";
+import { getState, isStalled, mutate, named, newAction, newProject, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -341,7 +341,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       key: "mark",
       label: "",
       width: "30px",
-      render: (p) => <Lamp health={projectHealth(s, p)} />,
+      render: (p) => <Lamp health={projectHealth(s, p)} start={p.start} />,
     },
     {
       key: "done",
@@ -373,7 +373,24 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         ),
     },
     ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", drop: 2, render: (p: Project) => (p.area_id ? <AreaName name={areaById.get(p.area_id)?.name ?? ""} color={areaById.get(p.area_id)?.color} /> : <span className="dash" aria-hidden="true">–</span>) }]),
-    { key: "next", label: "Next action", width: "minmax(160px, 1fr)", drop: 3, render: (p) => (firstNext.get(p.id) ? <span className="muted-text">{firstNext.get(p.id)}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    {
+      key: "next",
+      label: "Next action",
+      width: "minmax(160px, 1fr)",
+      drop: 3,
+      // A project that hasn't begun says when it does instead of an empty cell; on its start day, without a next
+      // action, it asks for one.
+      render: (p) =>
+        firstNext.get(p.id) ? (
+          <span className="muted-text">{firstNext.get(p.id)}</span>
+        ) : notStarted(p) ? (
+          <span className="muted-text">Starts {formatLong(p.start!)}</span>
+        ) : startsToday(p) && p.status === "active" ? (
+          <span className="starts-today">Starts today · add a next action</span>
+        ) : (
+          <span className="dash" aria-hidden="true">–</span>
+        ),
+    },
     { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
     { key: "due", label: "Due", width: "84px", render: (p) => <DateCell date={p.due} /> },
     // Offered but hidden until shown (right-click a heading, or ⌘K › Show or hide columns…).

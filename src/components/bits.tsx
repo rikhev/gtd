@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
-import { formatDate, formatTime, daysBetween, today } from "../../shared/dates.ts";
+import { formatDate, formatLong, formatTime, daysBetween, today } from "../../shared/dates.ts";
 import type { Action, Context } from "../../shared/types.ts";
 import { keyLabel, runKey } from "../keys.ts";
 
@@ -108,11 +108,13 @@ const HEALTH_LABEL = {
   stalled: "Stalled: no next action, or nothing touched for weeks",
   someday: "Someday / Maybe",
   done: "Completed",
+  scheduled: "Not started yet",
 } as const;
 
-/** Traffic-light lamp for a project's health. */
-export function Lamp({ health }: { health: keyof typeof HEALTH_LABEL }) {
-  return <span className={`lamp ${health}`} role="img" aria-label={HEALTH_LABEL[health]} title={HEALTH_LABEL[health]} />;
+/** Traffic-light lamp for a project's health. A scheduled project's lamp names its start day. */
+export function Lamp({ health, start }: { health: keyof typeof HEALTH_LABEL; start?: string | null }) {
+  const label = health === "scheduled" && start ? (start === today() ? "Starts today: give it a next action" : `Not started yet: starts ${formatLong(start)}`) : HEALTH_LABEL[health];
+  return <span className={`lamp ${health}`} role="img" aria-label={label} title={label} />;
 }
 
 /**

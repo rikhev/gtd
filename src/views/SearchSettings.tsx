@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
-import { keyLabel, useCommands, type Command } from "../keys.ts";
+import { keyLabel, runKey, useCommands, type Command } from "../keys.ts";
+import { ChevronDown, Download } from "lucide-react";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { AreaName, ContextCode, KeyHints, type KeyHint } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
@@ -451,6 +452,28 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   ];
   useCommands("list:settings", commands, { priority: 10, active: regionActive });
 
+  // The mouse's way to change a setting: its value is a pop-up button that picks the row and does what Enter does
+  // (or the given key), so every setting can be changed without the keyboard.
+  const actOn = (r: SRow, k: string) => {
+    nav.setFocus(r.key);
+    requestAnimationFrame(() => runKey(k));
+  };
+  const valueBtn = (r: SRow, content: React.ReactNode, opts: { k?: string; icon?: "chevron" | "download"; label?: string } = {}) => (
+    <button
+      type="button"
+      className="set-value"
+      aria-label={opts.label}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        actOn(r, opts.k ?? "enter");
+      }}
+    >
+      {content}
+      {opts.icon === "download" ? <Download size={13} strokeWidth={2} aria-hidden /> : <ChevronDown size={13} strokeWidth={2} aria-hidden />}
+    </button>
+  );
+
   const columns: Column<SRow>[] = [
     {
       key: "subject",
@@ -521,28 +544,32 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       width: "160px",
       render: (r) =>
         r.kind === "theme" ? (
-          <span>{theme.pref === "system" ? `System (${theme.dark ? "dark" : "light"})` : theme.pref === "dark" ? "Dark" : "Light"}</span>
+          valueBtn(r, <span>{theme.pref === "system" ? `System (${theme.dark ? "dark" : "light"})` : theme.pref === "dark" ? "Dark" : "Light"}</span>)
         ) : r.kind === "stall" ? (
-          <span className="num">{plural(meta.stallWeeks, "week")}</span>
+          valueBtn(r, <span className="num">{plural(meta.stallWeeks, "week")}</span>)
         ) : r.kind === "trash" ? (
-          <span className="num">{plural(meta.trashDays, "day")}</span>
+          valueBtn(r, <span className="num">{plural(meta.trashDays, "day")}</span>)
         ) : r.kind === "week" ? (
-          <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>
+          valueBtn(r, <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>)
         ) : r.kind === "lang" ? (
-          <span>{LANG_NAME[meta.clarifyLang]}</span>
+          valueBtn(r, <span>{LANG_NAME[meta.clarifyLang]}</span>)
         ) : r.kind === "export" ? (
-          <span className="muted-text">Download</span>
+          valueBtn(r, <span>Download</span>, { icon: "download" })
         ) : r.kind === "apikey" ? (
-          meta.hasKey ? (
-            <span className="key-state">
-              Connected
-              {meta.keyHint && <span className="key-hint num">…{meta.keyHint}</span>}
-            </span>
-          ) : (
-            <span className="badge">Not set</span>
+          valueBtn(
+            r,
+            meta.hasKey ? (
+              <span className="key-state">
+                Connected
+                {meta.keyHint && <span className="key-hint num">…{meta.keyHint}</span>}
+              </span>
+            ) : (
+              <span className="badge">Not set</span>
+            ),
+            { label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key" },
           )
         ) : r.status === "suggested" ? (
-          <span className="muted-text small">Awaiting approval</span>
+          valueBtn(r, <span>Approve</span>, { label: "Approve rule" })
         ) : r.kind === "area" ? (
           <span className="num muted-text">{plural(s.projects.filter((p) => p.area_id === r.id && p.status === "active").length, "active project")}</span>
         ) : r.kind === "context" ? (
@@ -592,6 +619,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         showHeaders={heads}
         head={false}
         empty={null}
+        // Double-click: what Enter does, or rename for areas, contexts and rules.
+        onOpen={(k) => {
+          const r = all.find((x) => x.key === k);
+          if (r) actOn(r, r.kind === "area" || r.kind === "context" || (r.kind === "rule" && r.status !== "suggested") ? "f2" : "enter");
+        }}
       />
       <KeyHints hints={hints} />
     </div>

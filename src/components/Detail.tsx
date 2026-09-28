@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip, Pin } from "lucide-react";
-import { mutate, newAction, notify, projectHealth, refUpdated, stallReason, upload, useMeta, useStore } from "../store.ts";
+import { mutate, newAction, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, keyLabel, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors } from "../actionCommands.tsx";
@@ -353,7 +353,7 @@ function ProjectDetail({ p }: { p: Project }) {
   return (
     <>
       {/* Area and status live in their own fields below; the head only carries the project's health, beside its name. */}
-      <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} start={p.start} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
           {area ? <AreaName name={area.name} color={area.color} /> : none}
@@ -380,6 +380,9 @@ function ProjectDetail({ p }: { p: Project }) {
             </kbd>
           )}
         </h3>
+        {p.status === "active" && !open.length && (notStarted(p) || startsToday(p)) && (
+          <p className="badge-line is-quiet">{notStarted(p) ? `Starts ${formatLong(p.start!)}. No next action needed before then.` : "Starts today. Add its first next action below."}</p>
+        )}
         {stallReason(s, p) && (
           <p className="badge-line">
             {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Move it forward, or put it on hold.`}

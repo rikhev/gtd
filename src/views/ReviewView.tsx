@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { completeActions, isChase, isStale, isStalled, lastReview, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { completeActions, isChase, isStale, isStalled, lastReview, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
@@ -90,6 +90,11 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const weeks = meta.stallWeeks;
   const projectNote = (p: (typeof s.projects)[number]) => {
     const r = stallReason(s, p);
+    // A project that hasn't begun is listed every week all the same, with the day it begins, so a start date can't
+    // quietly park it for good; on that day it asks for its first next action.
+    const hasNext = s.actions.some((a) => a.project_id === p.id && (a.status === "next" || a.status === "waiting"));
+    if (notStarted(p, t)) return `Starts ${formatLong(p.start!)}`;
+    if (startsToday(p, t) && !hasNext) return "Starts today: add a next action";
     // The red lamp already says stalled; the note says why.
     return r === "no-next" ? "No next action" : r === "idle" ? `Nothing touched in ${weeks}+ weeks` : undefined;
   };
@@ -329,7 +334,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   };
 
   const columns: Column<Row>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health={healthOf(r.id)} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
     {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.

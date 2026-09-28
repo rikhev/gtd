@@ -420,12 +420,28 @@ export function patchMany(table: TableName, ids: ID[], data: Record<string, unkn
  * Why an active project is stalled, if it is: it has nothing open to do, or nothing in it has been
  * touched (edited or completed) for the stall threshold. Built in: no Claude needed.
  */
+/**
+ * A project with a start date hasn't begun until that day is over (owner's decision, GTD's "a calendar entry is a
+ * next step"): it can't be stalled before then. Set the start to the day of the meeting it waits for, and it is only
+ * flagged from the day after, if the meeting left no next action behind.
+ */
+export function notStarted(p: Project, t = today()): boolean {
+  return Boolean(p.start && p.start > t);
+}
+export function startsToday(p: Project, t = today()): boolean {
+  return p.start === t;
+}
+
 export function stallReason(s: State, p: Project): "no-next" | "idle" | null {
   if (p.status !== "active") return null;
+  const t = today();
+  if (p.start && p.start >= t) return null; // not begun, or begins today: nothing to be stalled yet
   const mine = s.actions.filter((a) => a.project_id === p.id);
   if (!mine.some((a) => a.status === "next" || a.status === "waiting")) return "no-next";
   const limit = Date.now() - meta.stallWeeks * 7 * 86_400_000;
-  if (Date.parse(p.created_at) > limit) return null; // too new to have stalled
+  // The idle clock runs from when the project began: its creation, or its start date if that came later.
+  const began = Math.max(Date.parse(p.created_at) || 0, p.start ? Date.parse(`${p.start}T23:59:59`) || 0 : 0);
+  if (began > limit) return null; // too new to have stalled
   const lastTouch = mine.reduce((m, a) => Math.max(m, Date.parse(a.updated_at ?? a.completed_at ?? a.created_at) || 0), 0);
   return lastTouch < limit ? "idle" : null;
 }
@@ -441,17 +457,22 @@ export function isStale(a: Action): boolean {
   return touched < Date.now() - meta.stallWeeks * 7 * 86_400_000;
 }
 
-export type ProjectHealth = "ok" | "waiting" | "stalled" | "someday" | "done";
+export type ProjectHealth = "ok" | "waiting" | "stalled" | "someday" | "done" | "scheduled";
 
-/** Traffic light: green has a next action, amber only waits on others, red has nothing moving. */
+/**
+ * Traffic light: green has a next action, amber only waits on others, red has nothing moving. A project that hasn't
+ * begun is "scheduled" (a ring with a clock), never green: nothing is moving yet, and nothing needs to be. On its start
+ * day it stays scheduled until it has a next action.
+ */
 export function projectHealth(s: State, p: Project): ProjectHealth {
   if (p.status === "someday") return "someday";
   if (p.status === "done" || p.status === "trashed") return "done";
+  if (notStarted(p)) return "scheduled";
   if (isStalled(s, p)) return "stalled";
   const open = s.actions.filter((a) => a.project_id === p.id);
   if (open.some((a) => a.status === "next")) return "ok";
   if (open.some((a) => a.status === "waiting")) return "waiting";
-  return "stalled";
+  return startsToday(p) ? "scheduled" : "stalled";
 }
 
 export function lastReview(s: State): string | null {

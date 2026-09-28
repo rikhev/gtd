@@ -22,6 +22,25 @@ export function Picker({ spec, close }: Props) {
     document.activeElement instanceof HTMLElement && document.activeElement !== document.body && !document.activeElement.closest(".picker") ? document.activeElement : null,
   );
 
+  // A click (or tap) anywhere outside the menu closes it, as Esc does, and is spent on closing it: it doesn't also
+  // press whatever was under it, as with a macOS menu.
+  useEffect(() => {
+    const outside = (e: PointerEvent) => {
+      if (box.current?.contains(e.target as Node)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const swallow = (ev: MouseEvent) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+      };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      window.setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 400);
+      close();
+    };
+    window.addEventListener("pointerdown", outside, true);
+    return () => window.removeEventListener("pointerdown", outside, true);
+  }, [close]);
+
   useCommands("picker", [{ id: "picker.close", label: "Cancel", group: "Picker", keys: ["escape"], inInput: true, run: close }], {
     priority: 200,
     exclusive: true,
@@ -30,15 +49,18 @@ export function Picker({ spec, close }: Props) {
   // Anchor under the focused row/field, clamped to the viewport.
   useLayoutEffect(() => {
     const act = opener;
+    // A row whose value is its own control (a setting) opens the picker under that value, by mouse or by Enter.
+    const valueEl = document.querySelector<HTMLElement>("[data-focused] .set-value");
     const anchor =
       (act?.closest(".detail, .clarify") ? act : null) ??
+      valueEl ??
       document.querySelector(".is-active [data-focused]") ??
       document.querySelector("[data-focused]");
     const r = anchor?.getBoundingClientRect();
     const w = box.current?.offsetWidth ?? 320;
     const h = box.current?.offsetHeight ?? 280;
     let top = r ? r.bottom + 4 : 120;
-    let left = r ? Math.max(r.left + 40, 12) : 320;
+    let left = r ? Math.max(anchor === valueEl ? r.left : r.left + 40, 12) : 320;
     if (top + h > window.innerHeight - 12) top = Math.max(12, (r ? r.top : top) - h - 4);
     if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;
     setPos({ top, left });
