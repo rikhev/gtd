@@ -64,16 +64,16 @@ function dayLabel(at: string) {
 }
 
 /**
- * Recently deleted: everything trashed in the keep period, newest first, grouped by the day it went. R puts it back
+ * Trash: everything trashed in the keep period, newest first, grouped by the day it went. R puts it back
  * where it was (a project brings back the actions deleted with it); Delete removes it for good.
  */
-export function DeletedView({ regionActive }: { regionActive: boolean }) {
+export function TrashView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
   const meta = useMeta();
   const s = useStore((x) => x);
   const all = useMemo(() => rowsOf(s, meta.trashDays), [s, meta.trashDays]);
 
-  const [sort, setSort] = useSort("deleted");
+  const [sort, setSort] = useSort("trash");
   const sorters: Sorters<Row> = useMemo(() => ({ subject: (r) => r.title, from: (r) => r.from, at: (r) => r.at, left: (r) => r.left }), []);
   const groups: GridGroup<Row>[] = useMemo(() => {
     const byDay = new Map<string, Row[]>();
@@ -85,7 +85,7 @@ export function DeletedView({ regionActive }: { regionActive: boolean }) {
     );
   }, [all, sorters, sort]);
   const multi = groups.length > 0;
-  const nav = useListNav("deleted", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: multi })), [groups, multi]));
+  const nav = useListNav("trash", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: multi })), [groups, multi]));
   const focus = all.find((r) => r.key === nav.focus);
   const targets = () => nav.targets().map((k) => all.find((r) => r.key === k)).filter((r): r is Row => Boolean(r));
 
@@ -119,12 +119,12 @@ export function DeletedView({ regionActive }: { regionActive: boolean }) {
 
   const commands: Command[] = [
     ...nav.commands,
-    { id: "del.restore", label: "Restore (put back where it was)", group: "Recently deleted", keys: ["r"], enabled: Boolean(focus), run: () => restore(targets()) },
-    { id: "del.open", label: "Open details", group: "Recently deleted", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
-    { id: "del.purge", label: "Delete for good", group: "Recently deleted", keys: ["backspace", "delete", "shift+backspace", "shift+delete"], enabled: Boolean(focus), run: () => purge(targets()) },
-    { id: "del.empty", label: `Empty Recently deleted${all.length ? ` (${plural(all.length, "item")})` : ""}`, group: "Recently deleted", keys: [], enabled: all.length > 0, run: () => purge(all, `Recently deleted emptied (${plural(all.length, "item")})`) },
+    { id: "del.restore", label: "Restore (put back where it was)", group: "Trash", keys: ["r"], enabled: Boolean(focus), run: () => restore(targets()) },
+    { id: "del.open", label: "Open details", group: "Trash", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
+    { id: "del.purge", label: "Delete for good", group: "Trash", keys: ["backspace", "delete", "shift+backspace", "shift+delete"], enabled: Boolean(focus), run: () => purge(targets()) },
+    { id: "del.empty", label: `Empty the Trash${all.length ? ` (${plural(all.length, "item")})` : ""}`, group: "Trash", keys: [], enabled: all.length > 0, run: () => purge(all, `Trash emptied (${plural(all.length, "item")})`) },
   ];
-  useCommands("list:deleted", commands, { priority: 10, active: regionActive });
+  useCommands("list:trash", commands, { priority: 10, active: regionActive });
 
   const icon = (r: Row) =>
     r.kind === "action" ? (
@@ -157,7 +157,7 @@ export function DeletedView({ regionActive }: { regionActive: boolean }) {
 
   return (
     <Grid
-      listId="deleted"
+      listId="trash"
       sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
       columns={columns}
       groups={groups}
@@ -171,9 +171,9 @@ export function DeletedView({ regionActive }: { regionActive: boolean }) {
       }}
       empty={
         <EmptyState
-          title="Nothing deleted"
-          note={`Anything you delete stays here for ${plural(meta.trashDays, "day")}, so it can be put back.`}
-          lines={["Change how long in Settings › Recently deleted."]}
+          title="The Trash is empty"
+          note={`Anything you delete stays in the Trash for ${plural(meta.trashDays, "day")}, so it can be put back.`}
+          lines={["Change how long in Settings › Trash."]}
         />
       }
     />

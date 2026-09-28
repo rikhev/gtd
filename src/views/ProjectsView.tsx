@@ -201,6 +201,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       next: (p) => firstNext.get(p.id),
       open: (p) => openCount.get(p.id) ?? 0,
       due: (p) => p.due,
+      start: (p) => p.start,
+      back: (p) => p.bring_back,
+      created: (p) => p.created_at,
     }),
     [areaById, firstNext, openCount],
   );
@@ -364,7 +367,6 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         ) : (
           <span className="subject">
             <span className="subject-text strong">{p.title || "Untitled project"}</span>
-            {isStalled(s, p) && <span className="badge">Stalled</span>}
             {p.status === "someday" && <span className="badge muted">Someday</span>}
             {p.status === "done" && p.archived_at && <span className="badge muted">Done</span>}
           </span>
@@ -374,6 +376,10 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { key: "next", label: "Next action", width: "minmax(160px, 1fr)", drop: 3, render: (p) => (firstNext.get(p.id) ? <span className="muted-text">{firstNext.get(p.id)}</span> : <span className="dash" aria-hidden="true">–</span>) },
     { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
     { key: "due", label: "Due", width: "84px", render: (p) => <DateCell date={p.due} /> },
+    // Offered but hidden until shown (right-click a heading, or ⌘K › Show or hide columns…).
+    { key: "start", label: "Start", width: "84px", optional: true, render: (p) => <DateCell date={p.start ?? null} kind="plain" /> },
+    { key: "back", label: "Bring back", width: "96px", optional: true, render: (p) => <DateCell date={p.bring_back} kind="plain" /> },
+    { key: "created", label: "Created", width: "84px", optional: true, render: (p) => <DateCell date={p.created_at.slice(0, 10)} kind="plain" /> },
   ];
 
   return (
@@ -427,6 +433,8 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         [isStalled(s, p) ? "is-stalled" : "", striking.has(p.id) ? `is-striking ${showDone ? "" : "is-leaving"}` : "", p.status === "done" ? "is-done" : ""].join(" ")
       }
       onOpen={(k) => ui.openDetail({ kind: "project", id: k }, true)}
+      // Touch: swipe right to complete the project (or reopen it), left to trash it with its actions.
+      swipe={{ right: { label: "Done", run: (id) => toggleDone([id]) }, left: { label: "Trash", run: (id) => ed.trash([id], false) } }}
       empty={<EmptyState title="No projects yet" lines={["Start one here, or let Claude propose projects when it clarifies your Inbox."]} />}
     />
   );

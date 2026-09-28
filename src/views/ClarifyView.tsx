@@ -481,7 +481,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       if (draft?.actions[i]) updateRow(i, { done: !draft.actions[i].done });
     } },
     { id: "cl.add", label: "Add an action", group: "Clarify", keys: ["n"], enabled: ready, run: addRow },
-    { id: "cl.remove", label: "Remove this action", group: "Clarify", keys: ["alt+backspace"], inInput: true, enabled: ready, run: () => {
+    { id: "cl.remove", label: "Remove this action", group: "Clarify", keys: ["alt+backspace"], enabled: ready, run: () => {
       const i = rowOfFocus();
       update((d) => d.actions.splice(i, 1));
     } },

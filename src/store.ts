@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { Action, ID, Op, Project, State, TableName, Tables } from "../shared/types.ts";
+import type { Action, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
 import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
 
 const empty: State = {
@@ -196,10 +196,13 @@ function dropStaleWaiting(ops: Op[]): Op[] {
   );
 }
 
-/** Any edit to an action (except a pure reorder) marks it touched, as the server does; undo restores the old date. */
+/** Any edit to an action or reference (except a pure reorder) marks it touched, as the server does; undo restores the old date. */
 function touchActions(ops: Op[]): Op[] {
   return ops.map((op) =>
-    op.type === "patch" && op.table === "actions" && !("updated_at" in op.data) && Object.keys(op.data).some((k) => k !== "sort")
+    op.type === "patch" &&
+    (op.table === "actions" || op.table === "refs") &&
+    !("updated_at" in op.data) &&
+    Object.keys(op.data).some((k) => (op.table === "refs" ? !["sort", "status", "trashed_at", "trashed_from"].includes(k) : k !== "sort"))
       ? { ...op, data: { ...op.data, updated_at: stamp() } }
       : op,
   );
@@ -208,7 +211,7 @@ function touchActions(ops: Op[]): Op[] {
 const TRASHABLE = new Set<TableName>(["actions", "projects", "stuff", "refs"]);
 /**
  * Deleting is a status: a row turning "trashed" records when (one time for the whole edit, so a project and the
- * actions deleted with it share it) and the status it had, for Recently deleted; any other status clears both.
+ * actions deleted with it share it) and the status it had, for the Trash; any other status clears both.
  * The server does the same for its own edits.
  */
 function stampTrash(ops: Op[]): Op[] {
@@ -313,6 +316,13 @@ export function areaLabel(name: string) {
 /** An area name as stored: whatever the owner typed, without a leading #. */
 export function bareArea(name: string) {
   return name.trim().replace(/^#+\s*/, "");
+}
+
+/** When a reference last changed: its own last edit, or a file attached to it since, whichever is later. */
+export function refUpdated(s: State, r: Ref): string {
+  let at = r.updated_at ?? r.created_at;
+  for (const f of s.files) if (f.owner_kind === "ref" && f.owner_id === r.id && f.created_at > at) at = f.created_at;
+  return at;
 }
 
 export function named(table: "actions" | "projects" | "stuff" | "refs", ids: ID[], noun: string): string {

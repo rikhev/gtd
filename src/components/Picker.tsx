@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Named } from "./bits.tsx";
 import type { PickerSpec, ListItem } from "../ui.tsx";
 import { useCommands } from "../keys.ts";
 import { parseDate, formatLong, TIME_PRESETS, formatTime, parseTime, today, addDays, fromIso } from "../../shared/dates.ts";
@@ -222,8 +223,18 @@ export function Picker({ spec, close }: Props) {
               else choose(o);
             }}
           >
-            {o.color && <span className="swatch" style={{ background: o.color }} />}
-            <span className="po-label">{o.label}</span>
+            {/* Contexts and areas show as they do everywhere: their mark in a tile of their colour, then the name. Plain
+                colour choices (Settings › colour) keep the swatch. */}
+            {o.color && /^[@#]/.test(o.label) ? (
+              <span className="po-label">
+                <Named mark={o.label[0] as "@" | "#"} name={o.label} color={o.color} />
+              </span>
+            ) : (
+              <>
+                {o.color && <span className="swatch" style={{ background: o.color }} />}
+                <span className="po-label">{o.label}</span>
+              </>
+            )}
             {o.hint && <span className="po-hint">{o.hint}</span>}
           </li>,
         ])}

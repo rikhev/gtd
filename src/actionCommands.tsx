@@ -3,7 +3,7 @@ import type { Command } from "./keys.ts";
 import type { UI } from "./ui.tsx";
 import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
-import { formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
+import { addMonths, daysBetween, formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
 /** No red (kept for trouble: overdue, stalled, errors) and no green (kept for the "on track" lamp). */
 export const CONTEXT_COLORS = ["#2f6fb5", "#5b6b7e", "#8a5a2b", "#b7791f", "#6b4fa0", "#0f8a8a", "#a3476e", "#5b6b2e"];
@@ -127,7 +127,7 @@ export function editors(ui: UI) {
   const actions = (ids: ID[]) => getState().actions.filter((a) => ids.includes(a.id));
   const one = (ids: ID[]) => (ids.length === 1 ? actions(ids)[0] : undefined);
 
-  return {
+  const api = {
     context(ids: ID[]) {
       if (!ids.length) return;
       ui.openPicker({
@@ -169,14 +169,23 @@ export function editors(ui: UI) {
         },
       });
     },
-    date(ids: ID[], field: "due" | "defer" | "followup" | "bring_back") {
+    date(ids: ID[], field: "due" | "defer" | "followup" | "bring_back" | "waiting_since") {
       if (!ids.length) return;
-      const titles = { due: "Due date", defer: "Start date (hidden until then)", followup: "Follow up on", bring_back: "Bring back to the Inbox on" };
+      const titles = { due: "Due date", defer: "Start date (hidden until then)", followup: "Follow up on", bring_back: "Bring back to the Inbox on", waiting_since: "Waiting since" };
       ui.openPicker({
         type: "date",
         title: titles[field],
         current: one(ids)?.[field] ?? null,
         onPick: (d) => {
+          // Waiting always has a since date: cleared, it goes back to today; it can't start in the future.
+          if (field === "waiting_since") {
+            let day = d ?? today();
+            // "20 sep" typed after the 20th means the last 20 September, not next year's: dates are read forward, but
+            // waiting looks back. Only a date months ahead is read that way; "tomorrow" or "fri" is simply refused.
+            if (daysBetween(today(), day) > 60 && addMonths(day, -12) <= today()) day = addMonths(day, -12);
+            if (day > today()) return notify("Waiting can't start in the future. Pick today or an earlier day.", { tone: "error" });
+            return patchMany("actions", ids, { waiting_since: day }, `${n(ids)}: waiting since ${formatLong(day)}`);
+          }
           const what = { due: "due", defer: "start", followup: "follow-up", bring_back: "bring back" }[field];
           patchMany("actions", ids, { [field]: d }, d ? `${n(ids)}: ${what} ${formatLong(d)}` : `${n(ids)}: ${what} date cleared`);
         },
@@ -223,17 +232,73 @@ export function editors(ui: UI) {
         patchMany("actions", ids, { status: "waiting", waiting_who: who, waiting_since: today(), flagged: 0 }, `${n(ids)} → Waiting For (${who})`),
       );
     },
+    /**
+     * An action that turned out to need more than one step becomes a project: its title is the outcome, and its notes,
+     * files, start and due dates and area go with it. A project needs a next action, so one is asked for straight away
+     * (skipped, the project shows as stalled). One undo puts the action back.
+     */
+    convert(ids: ID[]) {
+      const acts = actions(ids).filter((a) => a.status === "next" || a.status === "someday");
+      if (!acts.length) return;
+      const s = getState();
+      const ops: Op[] = [];
+      const made: { id: ID; title: string }[] = [];
+      for (const a of acts) {
+        const parent = a.project_id ? s.projects.find((p) => p.id === a.project_id) : undefined;
+        const p = newProject({
+          title: a.title,
+          notes: parent ? [a.notes, `Split out of “${parent.title}”.`].filter((x) => x.trim()).join("\n\n") : a.notes,
+          area_id: parent?.area_id ?? null,
+          status: a.status === "someday" ? "someday" : "active",
+          due: a.due,
+          start: a.defer,
+          bring_back: a.bring_back,
+        });
+        ops.push({ type: "create", table: "projects", row: { ...p } });
+        for (const f of s.files.filter((f) => f.owner_kind === "action" && f.owner_id === a.id)) {
+          ops.push({ type: "patch", table: "files", id: f.id, data: { owner_kind: "project", owner_id: p.id } });
+        }
+        ops.push({ type: "delete", table: "actions", id: a.id });
+        made.push({ id: p.id, title: p.title || "Untitled project" });
+      }
+      mutate(made.length === 1 ? `“${made[0].title}” is now a project` : `${made.length} actions are now projects`, ops);
+      if (made.length !== 1) return;
+      const proj = made[0];
+      const ctx = acts[0].context_id;
+      ui.openPicker({
+        type: "text",
+        title: `First next action for “${proj.title}”`,
+        current: "",
+        placeholder: "What's the very next step?",
+        onPick: (title) => {
+          if (!title.trim()) return;
+          const add = (contextId: ID, extra: Op[] = []) => {
+            const next = newAction({ title: title.trim(), status: "next", project_id: proj.id, context_id: contextId });
+            mutate(`“${next.title}” added to “${proj.title}”`, [...extra, { type: "create", table: "actions", row: { ...next } }]);
+          };
+          // It keeps the context the action had; without one, it asks, as every next action needs one.
+          if (ctx) add(ctx);
+          else askContext(ui, "Context", (c, extra) => add(c, extra));
+        },
+      });
+    },
     move(ids: ID[]) {
       if (!ids.length) return;
       ui.openPicker({
         type: "list",
         title: "Move to",
         // Say where the item already is (for a single item), so the picker answers "where is it now?" too.
-        items: destinationItems("list:").map((it) => {
-          const a = ids.length === 1 ? one(ids) : undefined;
-          const here = a && (it.id === `list:${a.status}` || it.id === a.project_id);
-          return here ? { ...it, hint: `${it.hint} · current` } : it;
-        }),
+        items: [
+          ...destinationItems("list:").map((it) => {
+            const a = ids.length === 1 ? one(ids) : undefined;
+            const here = a && (it.id === `list:${a.status}` || it.id === a.project_id);
+            return here ? { ...it, hint: `${it.hint} · current` } : it;
+          }),
+          // It turned out to need more than one step: it becomes a project of its own.
+          ...(actions(ids).every((a) => a.status === "next" || a.status === "someday")
+            ? [{ id: "convert", label: ids.length === 1 ? "Turn into a project" : "Turn each into a project", hint: "Needs more than one step", section: "now" }]
+            : []),
+        ],
         createLabel: (q) => `Create project “${q}” and move`,
         onCreate: (q) => {
           const p = newProject({ title: q });
@@ -244,6 +309,7 @@ export function editors(ui: UI) {
         },
         onPick: (target) => {
           if (!target) return;
+          if (target === "convert") return api.convert(ids);
           if (target === "list:reference") {
             const ops: Op[] = [];
             for (const a of actions(ids)) {
@@ -273,6 +339,7 @@ export function editors(ui: UI) {
       });
     },
   };
+  return api;
 }
 
 /**
@@ -386,11 +453,13 @@ export function useActionCommands(opts: {
       : { id: "act.done", label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
     { id: "act.flag", label: "Flag for today", group: "Actions", keys: ["insert", "mod+i"], run: flag },
     { id: "act.move", label: "Move to project or list", group: "Actions", keys: ["v"], run: () => ed.move(pick()) },
+    { id: "act.convert", label: "Turn into a project", group: "Actions", keys: ["shift+p"], run: () => ed.convert(pick()) },
     { id: "act.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(pick()) },
     { id: "act.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(pick()) },
     opts.waitingView
       ? { id: "act.followup", label: "Follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(pick(), "followup") }
       : { id: "act.due", label: "Due date", group: "Fields", keys: ["d"], run: () => ed.date(pick(), "due") },
+    ...(opts.waitingView ? [{ id: "act.since", label: "Waiting since", group: "Fields", keys: ["i"], run: () => ed.date(pick(), "waiting_since") }] : []),
     { id: "act.defer", label: "Start date", group: "Fields", keys: ["s"], run: () => ed.date(pick(), "defer") },
     { id: "act.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["t"], run: () => ed.time(pick()) },
     { id: "act.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(pick()) },

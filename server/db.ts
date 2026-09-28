@@ -19,7 +19,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   ],
   projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at", "trashed_at", "trashed_from", "start"],
   stuff: ["id", "text", "kind", "status", "created_at", "processed_at", "trashed_at", "trashed_from"],
-  refs: ["id", "title", "notes", "project_id", "status", "created_at", "trashed_at", "trashed_from"],
+  refs: ["id", "title", "notes", "project_id", "status", "created_at", "trashed_at", "trashed_from", "updated_at"],
   contexts: ["id", "name", "color", "sort"],
   areas: ["id", "name", "sort", "color"],
   files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at"],
@@ -85,7 +85,7 @@ if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).som
   db.exec("ALTER TABLE projects ADD COLUMN archived_at TEXT");
   db.exec("UPDATE projects SET archived_at = COALESCE(completed_at, created_at) WHERE status = 'done'");
 }
-// Deleted items are kept (Recently deleted) until the keep period runs out: each remembers when it was deleted and
+// Deleted items are kept (the Trash) until the keep period runs out: each remembers when it was deleted and
 // the status it had, so it can be put back. Anything already deleted gets the full period from now, once.
 for (const t of ["actions", "projects", "stuff", "refs"]) {
   if (!(db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).some((c) => c.name === "trashed_at")) {
@@ -93,6 +93,11 @@ for (const t of ["actions", "projects", "stuff", "refs"]) {
     db.exec(`ALTER TABLE ${t} ADD COLUMN trashed_from TEXT`);
     db.prepare(`UPDATE ${t} SET trashed_at = ? WHERE status = 'trashed'`).run(new Date().toISOString());
   }
+}
+// References remember when they were last changed; until then, that is when they were filed.
+if (!(db.prepare("PRAGMA table_info(refs)").all() as { name: string }[]).some((c) => c.name === "updated_at")) {
+  db.exec("ALTER TABLE refs ADD COLUMN updated_at TEXT");
+  db.exec("UPDATE refs SET updated_at = created_at");
 }
 // Projects can start on a date, so the calendar draws them as a bar from start to due.
 if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).some((c) => c.name === "start")) {
@@ -180,8 +185,10 @@ function clean(table: TableName, data: Record<string, unknown>) {
 
 /** An action counts as touched by any change except a pure reorder. */
 function touch(table: TableName, data: Record<string, string | number | null>) {
-  if (table !== "actions" || "updated_at" in data) return;
+  if ((table !== "actions" && table !== "refs") || "updated_at" in data) return;
   if (Object.keys(data).every((k) => k === "sort" || k === "id")) return;
+  // Deleting or restoring a reference is not an edit of it.
+  if (table === "refs" && Object.keys(data).every((k) => ["sort", "id", "status", "trashed_at", "trashed_from"].includes(k))) return;
   data.updated_at = now();
 }
 

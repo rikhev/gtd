@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip, Pin } from "lucide-react";
-import { mutate, newAction, notify, projectHealth, stallReason, upload, useMeta, useStore } from "../store.ts";
+import { mutate, newAction, notify, projectHealth, refUpdated, stallReason, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
-import { runWhenReady, useCommands } from "../keys.ts";
+import { isEditable, keyLabel, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
@@ -36,6 +36,15 @@ function TextField({
 }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
+  // Every pane marks its fields the same way: the heading field takes F2 (the pane's edit key) and the notes take N.
+  const active = useContext(DetailActive);
+  const area = useRef<HTMLTextAreaElement>(null);
+  const k = autoFocus ? "F2" : multiline ? "N" : undefined;
+  useCommands(
+    `detail-notes:${label}`,
+    multiline ? [{ id: `detail.notes.${label}`, label: `${label}…`, group: "Details", keys: ["n"], run: () => area.current?.focus() }] : [],
+    { priority: 21, active: active && Boolean(multiline) },
+  );
   const commit = () => {
     if (v !== value && onCommit(v) === false) setV(value);
   };
@@ -49,17 +58,25 @@ function TextField({
   };
   return (
     <label className={`field ${className ?? ""}`}>
-      <span className="field-label">
-        {label}
-        {mark}
+      <span className="field-head">
+        <span className="field-label">
+          {label}
+          {mark}
+        </span>
+        {k && active && (
+          <kbd className="kbd field-key" aria-hidden="true">
+            {keyLabel(k.toLowerCase())}
+          </kbd>
+        )}
       </span>
       {multiline ? (
-        <textarea {...common} rows={rows} className="field-text" data-autofocus={autoFocus || undefined} />
+        <textarea {...common} ref={area} rows={rows} className="field-text" data-autofocus={autoFocus || undefined} aria-keyshortcuts={k} />
       ) : (
         <input
           {...common}
           className="field-text"
           data-autofocus={autoFocus || undefined}
+          aria-keyshortcuts={k}
           onKeyDown={(e) => {
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
@@ -74,18 +91,10 @@ const DETAIL_HINTS: Record<string, { k: string; label: string }[]> = {
   stuff: [
     { k: "v", label: "File as" },
     { k: "k", label: "Clarify" },
-    { k: "f2", label: "Edit" },
     { k: "escape", label: "Close" },
   ],
-  project: [
-    { k: "t", label: "Add next action" },
-    { k: "f2", label: "Edit" },
-    { k: "escape", label: "Close" },
-  ],
-  other: [
-    { k: "f2", label: "Edit" },
-    { k: "escape", label: "Close" },
-  ],
+  project: [{ k: "escape", label: "Close" }],
+  other: [{ k: "escape", label: "Close" }],
 };
 
 /** Whether the detail pane is the active region: its fields' letter keys only work then. */
@@ -159,10 +168,16 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
   useCommands(`detail-files:${owner.id}`, [{ id: "detail.attach", label: "Attach file", group: "Details", keys: ["mod+o"], inInput: true, run: () => input.current?.click() }], {
     priority: 30,
   });
+  const active = useContext(DetailActive);
   return (
     <section className="detail-files">
       <h3 className="detail-h">
         Files <span className="count">{files.length || ""}</span>
+        {active && (
+          <kbd className="kbd field-key detail-h-key" aria-hidden="true">
+            {keyLabel("mod+o")}
+          </kbd>
+        )}
       </h3>
       {files.length === 0 && <p className="muted-text small">No files attached.</p>}
       <ul>
@@ -261,13 +276,13 @@ function ActionDetail({ a }: { a: Action }) {
           <PickField label="Follow up" onOpen={() => ed.date([a.id], "followup")}>
             {a.followup ? <DueLong date={a.followup} done={a.status !== "waiting"} /> : none}
           </PickField>
-          <div className="field">
-            <span className="field-label">Since</span>
-            <span className="field-static">{a.waiting_since ? formatLong(a.waiting_since) : "–"}</span>
-          </div>
+          {/* When the waiting began: today by default, set back to the real day when it is filed later. */}
+          <PickField label="Since" k="I" onOpen={() => ed.date([a.id], "waiting_since")}>
+            {a.waiting_since ? formatLong(a.waiting_since) : none}
+          </PickField>
         </div>
       )}
-      <TextField label="Notes" value={a.notes} multiline rows={6} onCommit={(v) => patch("actions", a.id, { notes: v })} placeholder="Details, links, phone numbers…" />
+      <TextField label="Notes" value={a.notes} multiline rows={8} onCommit={(v) => patch("actions", a.id, { notes: v })} placeholder="Details, links, phone numbers…" />
       <Files owner={{ kind: "action", id: a.id }} />
       <p className="detail-meta">
         Created {formatLong(a.created_at.slice(0, 10))}
@@ -335,7 +350,6 @@ function ProjectDetail({ p }: { p: Project }) {
         </h3>
         {stallReason(s, p) && (
           <p className="badge-line">
-            <span className="badge">Stalled</span>{" "}
             {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Move it forward, or put it on hold.`}
           </p>
         )}
@@ -384,7 +398,7 @@ function ProjectDetail({ p }: { p: Project }) {
           </>
         )}
       </section>
-      <TextField label="Support notes" value={p.notes} multiline rows={10} onCommit={(v) => patch("projects", p.id, { notes: v })} placeholder="Plans, meeting notes, phone numbers, links…" className="notes-page" />
+      <TextField label="Support notes" value={p.notes} multiline rows={8} onCommit={(v) => patch("projects", p.id, { notes: v })} placeholder="Plans, meeting notes, phone numbers, links…" />
       <Files owner={{ kind: "project", id: p.id }} />
     </>
   );
@@ -405,7 +419,7 @@ function StuffDetail({ st }: { st: Stuff }) {
           patch("stuff", st.id, { text: joinStuff(v, parts.rest, parts.prefix) }, "Edited");
         }}
       />
-      <TextField label="Notes" value={parts.rest} multiline rows={12} placeholder="Details, links, phone numbers…" className="notes-page" onCommit={(v) => patch("stuff", st.id, { text: joinStuff(parts.title, v, parts.prefix) }, "Edited")} />
+      <TextField label="Notes" value={parts.rest} multiline rows={8} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("stuff", st.id, { text: joinStuff(parts.title, v, parts.prefix) }, "Edited")} />
       <Files owner={{ kind: "stuff", id: st.id }} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
     </>
@@ -421,6 +435,7 @@ function RefDetail({ r }: { r: Ref }) {
       <TextField label="Title" value={r.title} onCommit={(v) => patch("refs", r.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       <PickField
         label="Project"
+        k="P"
         onOpen={() =>
           ui.openPicker({
             type: "list",
@@ -433,8 +448,12 @@ function RefDetail({ r }: { r: Ref }) {
       >
         {proj ? proj.title : none}
       </PickField>
-      <TextField label="Notes" value={r.notes} multiline rows={12} onCommit={(v) => patch("refs", r.id, { notes: v })} className="notes-page" />
+      <TextField label="Notes" value={r.notes} multiline rows={8} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("refs", r.id, { notes: v })} />
       <Files owner={{ kind: "ref", id: r.id }} />
+      <p className="detail-meta">
+        Created {formatLong(r.created_at.slice(0, 10))}
+        {refUpdated(s, r) > r.created_at ? ` · updated ${formatLong(refUpdated(s, r).slice(0, 10))}` : ""}
+      </p>
     </>
   );
 }
@@ -448,14 +467,21 @@ export function Detail({ target, active }: { target: Target | null; active: bool
     "detail",
     [
       {
-        // One Escape, from anywhere in the pane: edits are saved on blur, the pane closes (unless pinned), you're back on the row.
+        // Escape steps out one level. In a text field it only leaves the field (the edit is saved on blur) and the pane keeps
+        // focus, so its field keys work again; from the pane it closes it (unless pinned) and you're back on the row.
         id: "detail.back",
         label: ui.detailPinned ? "Back to the list" : "Close details and go back to the list",
         group: "Details",
         keys: ["escape"],
         inInput: true,
         run: () => {
-          (document.activeElement as HTMLElement | null)?.blur?.();
+          const el = document.activeElement as HTMLElement | null;
+          if (el && root.current?.contains(el) && isEditable(el)) {
+            el.blur();
+            root.current.focus({ preventScroll: true });
+            return;
+          }
+          el?.blur?.();
           if (!ui.detailPinned) ui.openDetail(null);
           ui.setRegion("list");
         },
@@ -478,7 +504,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           ui.setRegion("list");
         },
       },
-      { id: "detail.close", label: "Close details", group: "Details", keys: ["mod+backspace"], inInput: true, run: () => ui.openDetail(null) },
+      { id: "detail.close", label: "Close details", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
       // An Inbox item's pane offers the Inbox's own two verbs.
       {
         id: "detail.file",

@@ -197,7 +197,7 @@ app.put("/api/settings/week", async (c) => {
   return c.json({ weekStart: start });
 });
 
-/** Days a deleted item stays in Recently deleted before it is gone for good (the owner can change it in Settings). */
+/** Days a deleted item stays in the Trash before it is gone for good (the owner can change it in Settings). */
 const trashDays = () => Number(getSetting("trashDays", "7")) || 7;
 app.put("/api/settings/trash", async (c) => {
   const { days } = (await c.req.json().catch(() => ({}))) as { days?: number };

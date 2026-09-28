@@ -90,7 +90,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const weeks = meta.stallWeeks;
   const projectNote = (p: (typeof s.projects)[number]) => {
     const r = stallReason(s, p);
-    return r === "no-next" ? "Stalled: no next action" : r === "idle" ? `Stalled: nothing touched in ${weeks}+ weeks` : undefined;
+    // The red lamp already says stalled; the note says why.
+    return r === "no-next" ? "No next action" : r === "idle" ? `Nothing touched in ${weeks}+ weeks` : undefined;
   };
   const actionNote = (a: Action) => {
     if (a.status === "next" && a.due && a.due < t) return "Overdue";
@@ -337,7 +338,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       render: (r) => (
         <span className="subject">
           <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title || "Untitled"}</span>
-          {step.id === "projects" && r.kind === "project" && isStalled(s, s.projects.find((p) => p.id === r.id)!) && <span className="badge">Stalled</span>}
           {r.note && <span className="flag-note">{r.note}</span>}
         </span>
       ),

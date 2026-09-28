@@ -57,6 +57,22 @@ export function activeCommands(): Command[] {
   return out;
 }
 
+/** Run whatever the key does right now, as if it were pressed: lets a tap on a key hint do the key's work. */
+export function runKey(k: string) {
+  const c = activeCommands().find((x) => x.keys?.includes(k));
+  c?.run();
+}
+
+/**
+ * Whether the last press came from a finger. Touch devices send mouse events after a tap, so mouse-only gestures
+ * (rectangle select, drag to reorder) check this to stay out of a finger's way.
+ */
+let lastPointer = "mouse";
+if (typeof window !== "undefined") window.addEventListener("pointerdown", (e) => (lastPointer = e.pointerType), true);
+export const pressedByTouch = () => lastPointer === "touch" || lastPointer === "pen";
+/** A touch-first device: a coarse pointer and no hover. */
+export const isTouchDevice = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
 /** Run a command as soon as it becomes available, e.g. right after switching to its view. */
 export function runWhenReady(id: string, frames = 30) {
   const c = activeCommands().find((x) => x.id === id);
@@ -153,6 +169,9 @@ export function installKeyHandler() {
     const key = eventToKey(e);
     const candidates = aliases(key);
     const editing = isEditable(e.target);
+    // While typing, Backspace and Delete belong to the text, with any modifier: the system's delete word (⌥⌫,
+    // Ctrl+⌫), delete to line start (⌘⌫) and forward delete must never close a pane or remove a row instead.
+    if (editing && /(^|\+)(backspace|delete)$/.test(key)) return;
     for (const cmd of activeCommands()) {
       if (!cmd.keys) continue;
       if (!cmd.keys.some((k) => candidates.includes(k))) continue;
@@ -189,16 +208,16 @@ const SYMBOLS: Record<string, string> = {
   end: "End",
 };
 
-/** Outside the Mac, modifiers are spelled out and joined with "+", as Windows and Linux show them. */
-const WORDS: Record<string, string> = { mod: "Ctrl", ctrl: "Ctrl", alt: "Alt", shift: "Shift" };
-
+/**
+ * Key legends read the same on every system, in compact symbols (owner's decision): ⌃ Control, ⇧ Shift, and Alt as
+ * ⌥ on the Mac (Option) or the old Meta key's hollow diamond ◇ elsewhere, run together with no "+". The command key is ⌘ on the Mac and Control (⌃) elsewhere, since that is the key
+ * pressed there. Screen readers get the spelled-out names from keyAria.
+ */
 export function keyLabel(k: string): string {
-  const parts = k.split("+");
-  if (!IS_MAC && parts.length > 1) {
-    const key = parts.pop()!;
-    return [...parts.map((p) => WORDS[p] ?? p), SYMBOLS[key] ?? key.toUpperCase()].join("+");
-  }
-  return parts.map((p) => SYMBOLS[p] ?? p.toUpperCase()).join("");
+  return k
+    .split("+")
+    .map((p) => (p === "mod" && !IS_MAC ? "⌃" : p === "alt" && !IS_MAC ? "◇" : (SYMBOLS[p] ?? p.toUpperCase())))
+    .join("");
 }
 
 const ARIA: Record<string, string> = { mod: IS_MAC ? "Meta" : "Control", ctrl: "Control", alt: "Alt", shift: "Shift", ",": "Comma", ".": "Period", space: "Space" };

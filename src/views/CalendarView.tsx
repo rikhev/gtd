@@ -379,8 +379,6 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           {i.role === "followup" && <Hourglass size={11} strokeWidth={2} aria-hidden />}
           {i.role === "tickler" && <CalendarClock size={11} strokeWidth={2} aria-hidden />}
           {i.flagged && <Flag className="cal-flag" size={10} strokeWidth={2.2} aria-label="Flagged for today" />}
-          {/* A due date needs no word: the solid bar and its diamond say it. A lone start date says so, quietly. */}
-          {i.role === "start" && <span className="cal-kind">Start</span>}
           <span className="cal-title">{i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.title}</span>
         </span>
         {rich && i.role === "followup" && <span className="cal-sub">{i.title}</span>}

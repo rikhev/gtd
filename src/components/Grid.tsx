@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { isEditable, IS_MAC, type Command } from "../keys.ts";
+import { isEditable, IS_MAC, isTouchDevice, pressedByTouch, useCommands, type Command } from "../keys.ts";
+import { useUI } from "../ui.tsx";
 
 export interface Column<T> {
   key: string;
@@ -8,8 +9,13 @@ export interface Column<T> {
   align?: "end";
   /** When the list gets too narrow (e.g. beside the detail pane), columns with the lowest number go first. */
   drop?: number;
+  /** Offered but hidden until the owner shows it (Show or hide columns…). */
+  optional?: boolean;
   render: (row: T) => ReactNode;
 }
+
+/** On a phone the list keeps one column after the subject: the first of these it has. */
+const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
 
 /** Smallest width a column can take: a fixed px width, or the minimum of a minmax(). */
 const minWidth = (w: string) => Number((/^minmax\((\d+)px/.exec(w) ?? /^(\d+)px/.exec(w))?.[1] ?? 0);
@@ -17,7 +23,7 @@ const minWidth = (w: string) => Number((/^minmax\((\d+)px/.exec(w) ?? /^(\d+)px/
 export interface GridGroup<T> {
   key: string;
   label: string;
-  /** Context colour: drawn as the 2px hairline code under the group label. */
+  /** Context colour: the @ tile before the group label. */
   color?: string;
   /** Area colour: the group label is "#Name" and its # takes this colour ("" for a plain #). */
   areaColor?: string;
@@ -377,6 +383,11 @@ interface GridProps<T> {
    * row is ticked, in list order) move before `beforeKey`, or to the end of the group's open rows; dropped into
    * another group, the view updates the field that group stands for on each of them.
    */
+  /**
+   * Touch: swipe a row sideways for its two most common actions (right: done, left: trash, say). The row follows the
+   * finger over a band that names the action, and acts once pulled past a third of the way.
+   */
+  swipe?: { right?: { label: string; run: (key: string) => void }; left?: { label: string; run: (key: string) => void } };
   reorder?: {
     onMove: (keys: string[], beforeKey: string | null, groupKey: string) => void;
     canDrag?: (key: string) => boolean;
@@ -388,7 +399,7 @@ interface GridProps<T> {
 /** DOM id for a row, so the focused grid can point screen readers at it. */
 const rowDomId = (listId: string, key: string) => `r-${listId}-${key}`.replace(/[^A-Za-z0-9_-]/g, "_");
 
-export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, active, rowClass, onOpen, empty, showHeaders, head = true, label, sort, reorder }: GridProps<T>) {
+export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, active, rowClass, onOpen, empty, showHeaders, head = true, label, sort, reorder, swipe }: GridProps<T>) {
   const box = useRef<HTMLDivElement>(null);
   // Shed the least useful columns rather than scroll sideways when space runs out.
   const [width, setWidth] = useState(0);
@@ -399,17 +410,163 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // Columns can be put in any order, per list, and the order is remembered. The unlabelled columns at the start
+  // (marker, done box, kind icon) stay where they are: they belong to the row, not to the data.
+  const [colOrder, setColOrder] = usePersisted<string[]>(`colorder:${listId}`, []);
+  const lead = useMemo(() => {
+    const i = allColumns.findIndex((c) => c.label);
+    return i < 0 ? allColumns.length : i;
+  }, [allColumns]);
+  // Which columns show, per list: every column can be hidden except the first named one (the subject), and optional
+  // ones can be shown. Remembered as overrides of each column's default.
+  const [colShow, setColShow] = usePersisted<Record<string, boolean>>(`colshow:${listId}`, {});
+  const lockedKey = allColumns[lead]?.key;
+  const isShown = (c: Column<T>) => c.key === lockedKey || (colShow[c.key] ?? !c.optional);
+  const ordered = useMemo(() => {
+    const fixed = allColumns.slice(0, lead);
+    const rank = (c: Column<T>, i: number) => {
+      const at = colOrder.indexOf(c.key);
+      return at < 0 ? 1000 + i : at;
+    };
+    const movable = allColumns.slice(lead).map((c, i) => ({ c, r: rank(c, i) })).sort((a, b) => a.r - b.r).map((x) => x.c);
+    return [...fixed, ...movable];
+  }, [allColumns, colOrder, lead]);
+  const toggleable = ordered.slice(lead).filter((c) => c.key !== lockedKey);
+  const chooseColumns = (current?: string) =>
+    ui.openPicker({
+      type: "list",
+      title: "Show columns",
+      items: toggleable.map((c) => ({ id: c.key, label: c.label, hint: isShown(c) ? "Shown" : "Hidden", section: "columns" })),
+      current: current ?? null,
+      onPick: (key) => {
+        if (!key) return;
+        const c = toggleable.find((x) => x.key === key);
+        if (!c) return;
+        setColShow((m) => ({ ...m, [key]: !isShown(c) }));
+        // The picker comes back on the same column, so several can be switched in a row.
+        window.setTimeout(() => chooseColumns(key), 0);
+      },
+    });
+  const visible = useMemo(() => ordered.filter((c, i) => i < lead || isShown(c)), [ordered, lead, colShow]); // eslint-disable-line react-hooks/exhaustive-deps
+  const movableKeys = visible.slice(lead).map((c) => c.key);
+  const moveColumn = (key: string, to: number) => {
+    const keys = movableKeys.filter((k) => k !== key);
+    keys.splice(Math.max(0, Math.min(to, keys.length)), 0, key);
+    setColOrder(keys);
+  };
+  const ui = useUI();
+  const colName = (k: string) => {
+    const c = ordered.find((x) => x.key === k);
+    return typeof c?.label === "string" && c.label ? c.label : k;
+  };
+  useCommands(
+    `grid-cols:${listId}`,
+    [
+      ...(toggleable.length ? [{ id: "grid.columns", label: "Show or hide columns…", group: "View", run: () => chooseColumns() }] : []),
+      ...(movableKeys.length > 1
+      ? [
+          {
+            id: "grid.arrange",
+            label: "Arrange columns…",
+            group: "View",
+            run: () =>
+              ui.openPicker({
+                type: "list",
+                title: "Move which column?",
+                items: [
+                  ...movableKeys.map((k, i) => ({ id: k, label: colName(k), hint: `Column ${i + 1}`, section: "columns" })),
+                  ...(colOrder.length ? [{ id: "__reset", label: "Reset column order", section: "reset" }] : []),
+                ],
+                onPick: (key) => {
+                  if (!key) return;
+                  if (key === "__reset") return setColOrder([]);
+                  const others = movableKeys.filter((k) => k !== key);
+                  ui.openPicker({
+                    type: "list",
+                    title: `Put ${colName(key)}…`,
+                    items: [...others.map((k, i) => ({ id: String(i), label: `Before ${colName(k)}` })), { id: String(others.length), label: "At the end" }],
+                    onPick: (to) => to !== null && moveColumn(key, Number(to)),
+                  });
+                },
+              }),
+          },
+        ]
+      : []),
+    ],
+    { priority: 5, active },
+  );
+  // Drag a heading sideways to move its column; a click without a drag still sorts.
+  const [colDrop, setColDrop] = useState<number | null>(null);
+  const [colDragging, setColDragging] = useState<string | null>(null);
+  const startColDrag = (e: { button: number; clientX: number; clientY: number; stopPropagation: () => void; preventDefault: () => void; currentTarget: HTMLElement }, key: string) => {
+    if (e.button !== 0 || !movableKeys.includes(key)) return;
+    e.stopPropagation();
+    const head = e.currentTarget.closest<HTMLElement>(".grid-head");
+    if (!head) return;
+    const x0 = e.clientX;
+    let dragging = false;
+    let to = -1;
+    const cells = () => [...head.querySelectorAll<HTMLElement>(".gh[data-col]")].filter((el) => movableKeys.includes(el.dataset.col!));
+    const move = (ev: MouseEvent) => {
+      if (!dragging) {
+        if (Math.abs(ev.clientX - x0) < 6) return;
+        dragging = true;
+        setColDragging(key);
+        document.body.classList.add("is-col-dragging");
+      }
+      ev.preventDefault();
+      const cs = cells();
+      const others = cs.filter((el) => el.dataset.col !== key);
+      let i = others.findIndex((el) => {
+        const r = el.getBoundingClientRect();
+        return ev.clientX < r.left + r.width / 2;
+      });
+      if (i < 0) i = others.length;
+      to = i;
+      const hr = head.getBoundingClientRect();
+      const ref = others[i] ?? others[others.length - 1];
+      const rr = ref?.getBoundingClientRect();
+      setColDrop(rr ? (others[i] ? rr.left : rr.right) - hr.left : null);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.classList.remove("is-col-dragging");
+      setColDrop(null);
+      setColDragging(null);
+      if (!dragging) return;
+      if (to >= 0) moveColumn(key, to);
+      // The drag isn't a click: don't let it sort.
+      const swallow = (ev: MouseEvent) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+      };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      window.setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
   const columns = useMemo(() => {
-    if (!width) return allColumns;
-    let cols = allColumns;
+    if (!width) return visible;
+    // On a phone-width list, keep what identifies a row: its leading marks (marker, done box, icon), the subject with
+    // all the remaining room, and one date or value column. Chosen by what the columns are, never by their position.
+    if (width < 560) {
+      const lead = visible.slice(0, visible.findIndex((c) => c.label) < 0 ? 0 : visible.findIndex((c) => c.label));
+      const subject = visible.find((c) => c.key === lockedKey);
+      const tail = COMPACT_TAIL.map((k) => visible.find((c) => c.key === k)).find(Boolean);
+      return [...lead, ...(subject ? [{ ...subject, width: "minmax(0, 1fr)" }] : []), ...(tail ? [tail] : [])];
+    }
+    let cols = visible;
     const need = (cs: Column<T>[]) => cs.reduce((n, c) => n + minWidth(c.width), 0) + 16;
-    const order = allColumns.filter((c) => c.drop !== undefined).sort((a, b) => a.drop! - b.drop!);
+    const order = visible.filter((c) => c.drop !== undefined).sort((a, b) => a.drop! - b.drop!);
     for (const c of order) {
       if (need(cols) <= width) break;
       cols = cols.filter((x) => x !== c);
     }
     return cols;
-  }, [allColumns, width]);
+  }, [visible, width]);
   const template = columns.map((c) => c.width).join(" ");
 
   // Rectangle select: press and drag over the rows, as on a Finder or Explorer desktop. Rows the band touches are ticked
@@ -603,6 +760,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     const onDown = (e: MouseEvent) => {
       const el = box.current;
       if (!el || e.button !== 0) return;
+      // A finger scrolls and taps; rectangle select and drag to reorder are for the mouse.
+      if (pressedByTouch()) return;
       if (document.querySelector(".list-region .grid") !== el) return; // one list owns the page: the first in the list region
       const t = e.target as HTMLElement;
       if (!t.closest(".main") || t.closest(".detail, .picker, .overlay, .toast, .tabbar")) return;
@@ -626,6 +785,59 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
   }, []);
+  // Swipe a row (touch): the cells follow the finger over a band naming the action; past a third of the row it acts.
+  const swipedRef = useRef(false);
+  const swipeRef = useRef(swipe);
+  swipeRef.current = swipe;
+  const startSwipe = (e: { clientX: number; clientY: number; currentTarget: HTMLElement; pointerId: number }, key: string) => {
+    const row = e.currentTarget;
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    let dx = 0;
+    let on = false;
+    swipedRef.current = false;
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      const mx = ev.clientX - x0;
+      const my = ev.clientY - y0;
+      if (!on) {
+        if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) return end();
+        if (Math.abs(mx) < 12) return;
+        const side = mx > 0 ? swipeRef.current?.right : swipeRef.current?.left;
+        if (!side) return;
+        on = true;
+      }
+      const side = mx > 0 ? swipeRef.current?.right : swipeRef.current?.left;
+      dx = side ? mx : 0;
+      const past = Math.abs(dx) > row.offsetWidth / 3;
+      row.classList.add("is-swiping");
+      row.classList.toggle("swipe-right", dx > 0);
+      row.classList.toggle("swipe-left", dx < 0);
+      row.classList.toggle("swipe-armed", past);
+      row.dataset.swipe = side?.label ?? "";
+      row.style.setProperty("--dx", `${dx}px`);
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", end);
+      row.classList.remove("is-swiping", "swipe-right", "swipe-left", "swipe-armed");
+      row.style.removeProperty("--dx");
+    };
+    const up = () => {
+      const act = Math.abs(dx) > row.offsetWidth / 3 ? (dx > 0 ? swipeRef.current?.right : swipeRef.current?.left) : undefined;
+      if (on) {
+        swipedRef.current = true;
+        window.setTimeout(() => (swipedRef.current = false), 0);
+      }
+      end();
+      act?.run(key);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", end);
+  };
+
   // The grid holds real keyboard focus while its region is active, so screen readers follow the cursor.
   useEffect(() => {
     if (!active || !box.current) return;
@@ -654,7 +866,17 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       {dropLine && <div className="drop-line" style={{ left: dropLine.x, top: dropLine.y - 1, width: dropLine.w }} aria-hidden />}
       {/* No column headings over an empty list: they would label nothing. */}
       {showHead && (
-        <div className="grid-head" role="row">
+        <div
+          className="grid-head"
+          role="row"
+          title={toggleable.length ? "Right-click to show or hide columns" : undefined}
+          onContextMenu={(e) => {
+            if (!toggleable.length) return;
+            e.preventDefault();
+            chooseColumns();
+          }}
+        >
+          {colDrop !== null && <span className="col-drop" style={{ left: colDrop }} aria-hidden />}
           {columns.map((c) => {
             const sortable = Boolean(sort && c.label && sort.keys.includes(c.key));
             const on = sortable && sort!.state?.key === c.key ? sort!.state!.dir : 0;
@@ -663,7 +885,9 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                 key={c.key}
                 role="columnheader"
                 aria-sort={on === 1 ? "ascending" : on === -1 ? "descending" : sortable ? "none" : undefined}
-                className={`gh gh-${c.key} ${c.align === "end" ? "end" : ""} ${on ? "is-sorted" : ""}`}
+                data-col={c.key}
+                className={`gh gh-${c.key} ${c.align === "end" ? "end" : ""} ${on ? "is-sorted" : ""} ${movableKeys.includes(c.key) ? "is-movable" : ""} ${colDragging === c.key ? "is-dragging" : ""}`}
+                onMouseDown={(e) => movableKeys.includes(c.key) && startColDrag(e, c.key)}
               >
                 {sortable ? (
                   // Click: ascending, again: descending, a third time: back to the list's own order.
@@ -672,7 +896,10 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                     tabIndex={-1}
                     className="gh-sort"
                     title={on === 1 ? `Sorted by ${c.label.toLowerCase()}, A–Z: click for Z–A` : on === -1 ? `Sorted by ${c.label.toLowerCase()}, Z–A: click for the list's own order` : `Sort by ${c.label.toLowerCase()}`}
-                    onMouseDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      startColDrag({ ...e, currentTarget: e.currentTarget.parentElement as HTMLElement, stopPropagation: () => {}, preventDefault: () => {} }, c.key);
+                    }}
                     onClick={() => sort!.onSort(on === 0 ? { key: c.key, dir: 1 } : on === 1 ? { key: c.key, dir: -1 } : null)}
                   >
                     {c.label}
@@ -713,9 +940,14 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                   <span className={`chev ${collapsed ? "" : "open"}`} aria-hidden />
                   {/* One look for every list's group heads (owner's decision): Label Caps over a rule, then the count. */}
                   <span className={`group-label ${g.color ? "is-ctx" : ""} ${g.areaColor !== undefined ? "is-area" : ""}`}>
-                    {g.areaColor !== undefined && g.label.startsWith("#") ? (
+                    {g.color && g.label.startsWith("@") ? (
                       <>
-                        <span className="area-hash" style={g.areaColor ? { ["--area" as string]: g.areaColor } : undefined}>#</span>
+                        <span className="named-tile" style={{ ["--tile" as string]: g.color }}>@</span>
+                        {g.label.slice(1)}
+                      </>
+                    ) : g.areaColor !== undefined && g.label.startsWith("#") ? (
+                      <>
+                        <span className="named-tile" style={g.areaColor ? { ["--tile" as string]: g.areaColor } : undefined}>#</span>
                         {g.label.slice(1)}
                       </>
                     ) : (
@@ -740,8 +972,14 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                       data-key={k}
                       data-focused={focused || undefined}
                       className={`row ${focused ? "is-focus" : ""} ${ticked ? "is-ticked" : ""} ${dragging.has(k) ? "is-dragging" : ""} ${rowClass?.(row) ?? ""}`}
-                      onClick={(e) => nav.click(k, e)}
+                      onClick={(e) => {
+                        if (swipedRef.current) return;
+                        nav.click(k, e);
+                        // A tap opens the row on a touch screen, where there is no Enter and no double-click.
+                        if (pressedByTouch() && isTouchDevice()) onOpen?.(k);
+                      }}
                       onDoubleClick={() => onOpen?.(k)}
+                      onPointerDown={(e) => swipe && e.pointerType !== "mouse" && startSwipe(e, k)}
                     >
                       {columns.map((c) => (
                         <div key={c.key} role="gridcell" className={`cell c-${c.key} ${c.align === "end" ? "end" : ""}`}>

@@ -286,37 +286,54 @@ a:hover {
 /* Tags                                                                 */
 /* ------------------------------------------------------------------ */
 
-/* An area is plain text, "#Work", as a context is "@phone": no chip, no caps. It only keeps to one line. */
-.area-name {
+/* An area's colour needs area to be seen at a glance: its # sits in a small tile of the area's colour, white on the fill,
+   with the name in plain ink after it. Square, so it never reads as a health lamp (round); a context's colour stays an
+   underline. The tile keeps its colour on a focused row, as a lamp does. */
+.named {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+/* The name itself is plain text in the regular face, kept to one line. */
+.named-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-/* The area's colour lives in its # only: the one mark that tells an area from a context (whose colour is an underline). */
-.area-hash {
-  color: var(--area, var(--ink-3));
+.named-tile {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--tile, var(--ink-3));
+  color: #fff;
+  font-family: var(--font-ui);
   font-weight: 700;
-  margin-right: 1px;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0;
 }
-/* On a focused row everything switches to select-ink, as markers and dates do. */
-.is-focus .area-hash {
-  color: var(--select-ink);
-}
+/* In dark the tile lifts a little so it doesn't sink into the graphite. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .area-hash {
-    color: color-mix(in srgb, var(--area, var(--ink-3)) 60%, #fff);
-  }
-  :root:not([data-theme="light"]) .is-focus .area-hash {
-    color: var(--select-ink);
+  :root:not([data-theme="light"]) .named-tile {
+    background: color-mix(in srgb, var(--tile, var(--ink-3)) 82%, #fff);
+    color: #10151a;
   }
 }
-:root[data-theme="dark"] .area-hash {
-  color: color-mix(in srgb, var(--area, var(--ink-3)) 60%, #fff);
+:root[data-theme="dark"] .named-tile {
+  background: color-mix(in srgb, var(--tile, var(--ink-3)) 82%, #fff);
+  color: #10151a;
 }
-:root[data-theme="dark"] .is-focus .area-hash {
-  color: var(--select-ink);
+.group-label.is-area {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* A tag names a disposition or a section: Label Caps on a quiet water-grey chip. Areas are not tags. */
@@ -405,16 +422,6 @@ a:hover {
   padding-top: 10px;
   border-top: 1px solid var(--rule-strong);
 }
-.rail-heading {
-  margin: 0 0 4px;
-  padding: 0 10px;
-  font-family: var(--font-label);
-  font-weight: 600;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
 .rail-item {
   width: 100%;
   display: flex;
@@ -469,11 +476,6 @@ a:hover {
 .rail-health {
   padding-top: 10px;
   border-top: 1px solid var(--rule-strong);
-}
-.rail-clear {
-  padding: 4px 10px 0;
-  font-size: 12px;
-  color: var(--ink-3);
 }
 .rail-settings {
   margin-top: auto;
@@ -646,6 +648,25 @@ body.is-banding {
   height: 28px;
   background: var(--paper);
   border-bottom: 1px solid var(--rule-strong);
+}
+/* Moving a column: its heading dims and a 2px accent line marks where it will land. */
+.col-drop {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.gh.is-dragging {
+  opacity: 0.4;
+}
+body.is-col-dragging,
+body.is-col-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
 }
 .gh {
   font-family: var(--font-label);
@@ -845,7 +866,9 @@ body.is-banding {
   color: var(--ink-2);
 }
 .group-label.is-ctx {
-  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .group-count {
   color: var(--ink-3);
@@ -1072,8 +1095,8 @@ body.is-banding {
   font-weight: inherit;
   text-decoration: none;
 }
-.row.is-done .ctx {
-  text-decoration-color: var(--rule-strong);
+.row.is-done .named-tile {
+  opacity: 0.5;
 }
 .row.is-done .energy i,
 .row.is-done .energy span {
@@ -1081,14 +1104,6 @@ body.is-banding {
 }
 .row.is-deferred {
   color: var(--ink-3);
-}
-
-.ctx {
-  text-decoration: underline;
-  text-decoration-color: var(--ctx);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-  color: var(--ink);
 }
 
 .date {
@@ -1341,12 +1356,6 @@ input.field-text {
 .field-title .field-text {
   font-size: 15px;
   font-weight: 600;
-}
-.notes-page .field-text {
-  background-image: repeating-linear-gradient(transparent 0 18.5px, var(--rule) 18.5px 19.5px);
-  background-attachment: local;
-  line-height: 19.5px;
-  padding-top: 4px;
 }
 .field-grid {
   display: grid;
@@ -2352,31 +2361,7 @@ input.field-text {
   .grid {
     min-width: 0;
   }
-  .grid-head,
-  .row {
-    grid-template-columns: 30px minmax(0, 1fr) auto !important;
-  }
-  .grid-head > :nth-child(n + 3),
-  .row > .cell:nth-child(n + 3) {
-    display: none;
-  }
-  .row > .cell.c-due,
-  .row > .cell.c-when,
-  .row > .cell.c-date,
-  .row > .cell.c-follow {
-    display: flex;
-  }
-  .row > .cell.c-subject:first-child {
-    grid-column: 1 / 3;
-  }
-  .grid[data-list="settings"] .grid-head,
-  .grid[data-list="settings"] .row {
-    grid-template-columns: minmax(0, 1fr) auto !important;
-  }
-  .grid[data-list="settings"] .grid-head > :nth-child(2),
-  .grid[data-list="settings"] .row > .cell:nth-child(2) {
-    display: flex;
-  }
+  /* Which columns a phone shows is decided by the list itself (Grid keeps the marks, the subject and one date). */
   .detail {
     position: fixed;
     inset: auto 0 calc(52px + env(safe-area-inset-bottom, 0px)) 0; /* sits above the tab bar */
@@ -2737,7 +2722,7 @@ input.field-text {
   }
 }
 
-/* Recently deleted: an item on its last day before it is gone for good. */
+/* Trash: an item on its last day before it is gone for good. */
 .left-last {
   color: var(--alert);
   font-weight: 600;
@@ -2974,21 +2959,9 @@ input.field-text {
 .cal-bar.is-overdue.is-quiet {
   border-color: transparent;
 }
-/* Which date a one-date item holds. A due date is a deadline and must be seen at once: the item is inked solid
-   (red when overdue). A start date stays a quiet bar with its tag. Every due end, alone or at the end of a span,
-   carries the planner's milestone mark: a solid diamond. */
-.cal-kind {
-  flex: none;
-  font-family: var(--font-label);
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  line-height: 1;
-}
-.cal-bar.role-start .cal-kind {
-  color: var(--ink-3);
-}
+/* A due date is a deadline and must be seen at once: an item with only a due date is inked solid (red when overdue),
+   and every due end, alone or at the end of a span, carries the planner's milestone mark: a solid diamond. An item
+   with only a start date is a plain bar. */
 .cal-bar.has-due-end {
   padding-right: 18px;
 }
@@ -3254,6 +3227,11 @@ body.is-cal-dragging {
 }
 .cal-mini-day {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  text-align: center;
   height: 24px;
   margin: 0 1px;
   border-radius: 3px;
@@ -3317,5 +3295,166 @@ body.is-cal-dragging {
   }
   .cal-grip {
     width: 10px;
+  }
+}
+
+/* Settings tabs share the Weekly Review's step bar; the list sits right under it. */
+.settings-tabs {
+  margin-bottom: 0;
+}
+.settings .grid-group:first-child .group-head {
+  margin-top: 0;
+}
+
+/* Key hints are buttons too: a click or tap does what the key does. On a mouse screen they look as before. */
+.key-hints .kh {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.key-hints .kh:hover {
+  color: var(--ink);
+}
+
+/* Swiping a row (touch): the cells slide with the finger over a band that names the action, and the band inks in
+   once the swipe has gone far enough to act. Done slides right over ink; Trash slides left over alert red. */
+.row.is-swiping > .cell {
+  transform: translateX(var(--dx, 0));
+}
+.row.is-swiping {
+  overflow: hidden;
+  background: var(--rail);
+}
+.row.is-swiping::before {
+  content: attr(data-swipe);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.row.swipe-right::before {
+  left: 0;
+}
+.row.swipe-left::before {
+  right: 0;
+}
+/* The band wins over the focus fill: once armed, the row says what will happen. */
+.row.is-swiping {
+  background: var(--rail) !important;
+}
+.row.swipe-right.swipe-armed {
+  background: var(--ink) !important;
+}
+.row.swipe-left.swipe-armed {
+  background: var(--alert) !important;
+}
+.row.swipe-armed::before {
+  color: var(--sheet);
+}
+.row:not(.is-swiping) > .cell {
+  transition: transform 160ms var(--ease);
+}
+
+/* Touch screens: the same app, sized for a thumb. Targets reach 44px, text fields stay at 16px (so the phone
+   doesn't zoom on focus), key caps give way to tap targets, and pickers rise from the bottom as sheets. */
+@media (pointer: coarse) {
+  :root {
+    --row: 48px;
+  }
+  .row {
+    touch-action: pan-y;
+  }
+  .group-head {
+    min-height: 44px;
+  }
+  .done-box,
+  .flag-btn {
+    width: 40px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+  }
+  .grid .cell.c-mark,
+  .grid .cell.c-done {
+    justify-content: center;
+  }
+  input,
+  textarea,
+  select,
+  .capture-input,
+  .field-text {
+    font-size: 16px;
+  }
+  .field-pick,
+  input.field-text {
+    height: 44px;
+  }
+  /* Keys mean nothing without a keyboard: the caps hide, the hint lines become buttons to tap. */
+  .rail-key,
+  .field-key,
+  .detail-h-key {
+    display: none;
+  }
+  .key-hints {
+    gap: 8px;
+  }
+  .key-hints .kh {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 5px;
+    background: var(--sheet);
+    color: var(--ink);
+    font-size: 13px;
+  }
+  .key-hints .kbd {
+    display: none;
+  }
+  .picker {
+    left: 8px !important;
+    right: 8px !important;
+    top: auto !important;
+    /* Above the tab bar, within the thumb's reach. */
+    bottom: calc(52px + 8px + env(safe-area-inset-bottom, 0px)) !important;
+    width: auto;
+    max-height: 64dvh;
+    overflow: auto;
+    border-radius: 5px;
+    padding: 12px;
+  }
+  .picker [role="option"] {
+    min-height: 44px;
+  }
+  .picker input {
+    height: 44px;
+  }
+  .detail-bar .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .review-steps button,
+  .cal-modes button,
+  .cal-nav .icon-btn,
+  .cal-today {
+    min-height: 40px;
+  }
+  .row:hover {
+    background: none;
   }
 }

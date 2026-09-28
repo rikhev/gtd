@@ -29,7 +29,7 @@ export interface Action {
   done_from: "next" | "waiting" | "someday" | "inbox" | null;
   /** When a done action was archived to the Done list; null while it still sits on its own list. */
   archived_at: string | null;
-  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
   trashed_at?: string | null;
   trashed_from?: string | null;
 }
@@ -50,7 +50,7 @@ export interface Project {
   start?: string | null;
   /** Set when a completed project is archived off the Projects list. */
   archived_at: string | null;
-  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
   trashed_at?: string | null;
   trashed_from?: string | null;
 }
@@ -62,7 +62,7 @@ export interface Stuff {
   status: "inbox" | "done" | "processed" | "trashed";
   created_at: string;
   processed_at: string | null;
-  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
   trashed_at?: string | null;
   trashed_from?: string | null;
 }
@@ -74,7 +74,9 @@ export interface Ref {
   project_id: ID | null;
   status: "active" | "trashed";
   created_at: string;
-  /** When it was deleted (Recently deleted keeps it for the keep period), and the status it had. */
+  /** Last edited (title, notes, project); null until it has been. */
+  updated_at?: string | null;
+  /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
   trashed_at?: string | null;
   trashed_from?: string | null;
 }

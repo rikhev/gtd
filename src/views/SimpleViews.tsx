@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
-import { getState, mutate, newAction, patchMany, plural, stamp, uid, upload, useStore } from "../store.ts";
+import { getState, mutate, newAction, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -191,8 +191,8 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
   // A–Z by title is the list's own order; a heading click sorts by that column instead.
   const [sort, setSort] = useSort("reference");
   const sorters: Sorters<Ref> = useMemo(
-    () => ({ subject: (r) => r.title, proj: (r) => s.projects.find((p) => p.id === r.project_id)?.title, files: (r) => filesBy.get(r.id) ?? null, when: (r) => r.created_at }),
-    [s.projects, filesBy],
+    () => ({ subject: (r) => r.title, proj: (r) => s.projects.find((p) => p.id === r.project_id)?.title, files: (r) => filesBy.get(r.id) ?? null, when: (r) => r.created_at, updated: (r) => refUpdated(s, r) }),
+    [s, filesBy],
   );
   const rows = useMemo(
     () => sortGroups([{ key: "refs", label: "", rows: s.refs.filter((r) => r.status === "active").sort((a, b) => a.title.localeCompare(b.title)) }], sorters, sort)[0].rows,
@@ -295,7 +295,18 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
           <span className="dash" aria-hidden="true">–</span>
         ),
     },
-    { key: "when", label: "Filed", width: "96px", render: (r) => <span className="date">{formatDate(r.created_at.slice(0, 10))}</span> },
+    { key: "when", label: "Created", width: "96px", render: (r) => <span className="date">{formatDate(r.created_at.slice(0, 10))}</span> },
+    {
+      key: "updated",
+      label: "Updated",
+      width: "96px",
+      drop: 1,
+      // A dash until it has changed since it was filed.
+      render: (r) => {
+        const at = refUpdated(s, r);
+        return at > r.created_at ? <span className="date">{formatDate(at.slice(0, 10))}</span> : <span className="dash" aria-hidden="true">–</span>;
+      },
+    },
   ];
 
   return (

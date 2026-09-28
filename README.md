@@ -24,7 +24,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | Keys | What they do |
 |---|---|
 | `⌃1`–`8` | Inbox · Calendar · Next Actions · Waiting For · Projects · Someday · Reference · Done (rail order). Control on every system, also on the Mac (⌘1–8 are the browser's tabs) |
-| `⌃9` | Recently deleted: everything deleted in the last week (Settings › Recently deleted sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty Recently deleted clears it |
+| `⌃9` | Trash: everything deleted in the last week (Settings › Trash sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty the Trash clears it |
 | Calendar | `1` `2` `3` Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `T` today · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click a day for a new action |
 | `W` | Start the Weekly Review |
 | `⌘⇧,` | Settings |
@@ -51,7 +51,13 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | Click the flag area | Flag a row for today, or take the flag off. The keyboard way is `Ins` |
 | Click the box | Mark an action done, as in classic Outlook: it stays on its list, greyed and struck through, at the bottom of its group. Click again (or `E`) to take it back |
 | `⇧E` | Archive this list's done items (the Inbox's, or completed projects on Projects). The View menu (`⌥V`) also has Show/Hide done actions |
+| `I` | On Waiting For (list or details pane): when the waiting began. New items start today; set the real day when you file one later ("20 sep" means the last 20 September; a future date is refused) |
+| `⇧P` | Turn a next action (or a someday one) into a project: its title becomes the outcome, and its notes, files, dates and area go with it. You're asked for the project's first next action straight away (Esc to add it later). Also in the Move picker (`V`) and ⌘K; `⌘Z` undoes it |
+| Column order | Drag a column heading sideways, or ⌘K › Arrange columns… (then Reset column order to undo). Remembered per list |
+| Columns shown | Right-click a column heading, or ⌘K › Show or hide columns…: toggle any column, including extra ones such as Area, Created, Updated, Repeat. Remembered per list |
 | `⌥P` | Pin the details pane: it stays open beside every list and follows the cursor (× closes and unpins it) |
+| In the details pane | Each field shows its key while the pane has focus: `F2` the title, `N` the notes, the field letters (`P` project, `C` context, `D` due, `S` start, `I` waiting since…), `⌘O` attach a file, `T` a project's next action. `Esc` in a field leaves it (what you typed is saved) and keeps the pane; `Esc` again closes it |
+| While typing | `Backspace` and `Delete` always belong to the text field, with any modifier: `⌥⌫` / `Ctrl+⌫` delete a word, `⌘⌫` deletes to the line start. `⌘⌫` closes the details pane only when you're not in a field |
 | `⌥Q` | Search |
 | `⌘Z` | Undo (there are no confirmation dialogs) |
 | `⌘O` / `⌘V` | Upload files / paste text, an email or a file into the Inbox |
@@ -66,7 +72,7 @@ These keys work inside Clarify:
 | `Esc` | Field → row, then leave Clarify. Leaving stops Claude; proposals already made are kept for next time |
 | `⇧Esc` | Stop Claude but keep reviewing the proposals that are ready (also the "Stop" link while Claude is reading) |
 | `C` `P` `D` `S` `T` `G` `V` `⇧F` | Correct a field |
-| `N` / `⌥⌫` | Add / remove an action |
+| `N` / `⌥⌫` | Add / remove an action (`⌥⌫` only on the row, not while typing, where it deletes a word) |
 | `E` | Done now (two-minute rule) |
 | `⌘.` / `⌘,` | Skip to the next / previous item |
 | `Del` | Trash the item |

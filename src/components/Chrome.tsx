@@ -11,7 +11,7 @@ import { daysBetween, today } from "../../shared/dates.ts";
  * Control+1–8 on every system follow the rail from the top: the Inbox, the calendar, then the lists in rail order.
  * On the Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs.
  * Elsewhere the page takes Ctrl+1–9 over the browser's tab switching (Chrome and Firefox allow it).
- * Recently deleted, at the foot, is Control+9. The Weekly Review has no number (W starts it); Settings is ⌘⇧,
+ * Trash, at the foot, is Control+9. The Weekly Review has no number (W starts it); Settings is ⌘⇧,
  * (Ctrl+Shift+, elsewhere).
  */
 // Control on every system: on the Mac that is "ctrl" (⌘ is "mod"), elsewhere Ctrl is "mod".
@@ -26,7 +26,7 @@ export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "someday", key: go(6) },
   { id: "reference", key: go(7) },
   { id: "done", key: go(8) },
-  { id: "deleted", key: go(9) },
+  { id: "trash", key: go(9) },
   { id: "review" },
 ];
 
@@ -76,6 +76,7 @@ export function Rail({ active }: { active: boolean }) {
     if (id === "inbox") return sig.inbox ? { text: String(sig.inbox) } : null;
     if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : sig.flagged ? { text: `${sig.flagged} today` } : null;
     if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
+    if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
     // What today's landscape holds: things due or starting today.
     if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} today`, tone: "quiet" } : null;
@@ -91,17 +92,15 @@ export function Rail({ active }: { active: boolean }) {
       start: true,
       label: `Weekly Review, ${reviewAge === null ? "not done yet" : reviewAge === 0 ? "done today" : `last done ${reviewAge} days ago`}${reviewDue ? ", due" : ""}`,
     },
-    ...(sig.stalled ? [{ key: "h-stalled", view: "projects" as ViewId, name: "Stalled projects", label: `${sig.stalled} stalled ${sig.stalled === 1 ? "project" : "projects"}` }] : []),
-    ...(sig.chase ? [{ key: "h-chase", view: "waiting" as ViewId, name: "Follow-ups", label: `${sig.chase} ${sig.chase === 1 ? "follow-up" : "follow-ups"} due` }] : []),
     ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} days`}` }] : []),
   ];
   const entries: Entry[] = [
     ...LISTS.flat().map((id) => {
       const m = listMeta(id);
-      return { key: id, view: id, name: VIEW_TITLES[id], label: `${VIEW_TITLES[id]}${m ? `, ${id === "inbox" ? `${m.text} ${m.text === "1" ? "item" : "items"}` : m.text}` : ""}${id === "projects" && sig.stalled ? `, ${sig.stalled} stalled` : ""}` };
+      return { key: id, view: id, name: VIEW_TITLES[id], label: `${VIEW_TITLES[id]}${m ? `, ${id === "inbox" ? `${m.text} ${m.text === "1" ? "item" : "items"}` : m.text}` : ""}` };
     }),
     ...health,
-    { key: "deleted", view: "deleted", name: "Recently deleted", label: "Recently deleted" },
+    { key: "trash", view: "trash", name: "Trash", label: "Trash" },
     { key: "settings", view: "settings", name: "Settings", label: "Settings" },
   ];
   const idx = (key: string) => entries.findIndex((e) => e.key === key);
@@ -184,7 +183,6 @@ export function Rail({ active }: { active: boolean }) {
                 <button type="button" {...stop(entries[idx(id)], "rail-item")}>
                   <span className="rail-name">{VIEW_TITLES[id]}</span>
                   <span className="rail-meta">
-                    {id === "projects" && sig.stalled > 0 && <span className="badge tiny">{sig.stalled} stalled</span>}
                     {m && <span className={`num ${m.tone === "due" ? "is-due" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
                     <RailKey k={keyOf(id)} />
                   </span>
@@ -196,10 +194,8 @@ export function Rail({ active }: { active: boolean }) {
       ))}
 
       {/* The system check: is my system current? Each line goes where it is fixed. */}
-      <section className="rail-health" aria-labelledby="rail-health-h">
-        <h2 className="rail-heading" id="rail-health-h">
-          System check
-        </h2>
+      {/* No visible heading (owner's decision): the divider sets it apart; screen readers still hear the group. */}
+      <section className="rail-health" aria-label="System check">
         <ul className="rail-list">
           {health.map((e) => (
             <li key={e.key}>
@@ -210,24 +206,6 @@ export function Rail({ active }: { active: boolean }) {
                     <span className="rail-meta">
                       <span className={`num ${reviewDue ? "is-due" : ""}`}>{reviewAge === null ? (reviewDue ? "due" : "not yet") : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
                       <RailKey k="w" />
-                    </span>
-                  </>
-                )}
-                {e.key === "h-stalled" && (
-                  <>
-                    <span className="rail-name">Stalled projects</span>
-                    <span className="rail-meta">
-                      <span className="num is-due">{sig.stalled}</span>
-                      <RailKey k={keyOf("projects")} />
-                    </span>
-                  </>
-                )}
-                {e.key === "h-chase" && (
-                  <>
-                    <span className="rail-name">Follow-ups due</span>
-                    <span className="rail-meta">
-                      <span className="num is-due">{sig.chase}</span>
-                      <RailKey k={keyOf("waiting")} />
                     </span>
                   </>
                 )}
@@ -243,7 +221,6 @@ export function Rail({ active }: { active: boolean }) {
               </button>
             </li>
           ))}
-          {health.length === 1 && <li className="rail-clear">Nothing stalled, overdue or waiting.</li>}
         </ul>
       </section>
 
@@ -251,7 +228,7 @@ export function Rail({ active }: { active: boolean }) {
         {/* Out of the way at the foot, beside Settings: a place to look back, not a list to work. */}
         <li>
           <button type="button" {...stop(entries[entries.length - 2], "rail-item")}>
-            <span className="rail-name">Recently deleted</span>
+            <span className="rail-name">Trash</span>
             <span className="rail-meta">
               <RailKey k={go(9)} />
             </span>

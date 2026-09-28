@@ -4,7 +4,7 @@ import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, type C
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
-import { DeletedView } from "./views/DeletedView.tsx";
+import { TrashView } from "./views/TrashView.tsx";
 import { CalendarView } from "./views/CalendarView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
@@ -24,7 +24,7 @@ import { today } from "../shared/dates.ts";
  * Views with their own address (#inbox, #projects, #reference…), so the browser's Back and Forward move between
  * them and a reload or bookmark lands on the same list. Search is a query, not a place, and gets no entry.
  */
-const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "projects", "someday", "reference", "done", "deleted", "review", "settings", "clarify"];
+const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "projects", "someday", "reference", "done", "trash", "review", "settings", "clarify"];
 function viewFromHash(): ViewId | null {
   const h = window.location.hash.slice(1) as ViewId;
   // Clarify can't be rebuilt from an address (it needs the run that opened it): it lands on the Inbox it clarifies.
@@ -368,7 +368,7 @@ export default function App() {
     someday: plural(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
     reference: plural(s.refs.filter((r) => r.status === "active").length, "reference"),
     done: plural(s.actions.filter((a) => a.status === "done").length, "action"),
-    deleted: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
+    trash: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
   };
 
   let body;
@@ -406,8 +406,8 @@ export default function App() {
     case "calendar":
       body = <CalendarView regionActive={listActive} />;
       break;
-    case "deleted":
-      body = <DeletedView regionActive={listActive} />;
+    case "trash":
+      body = <TrashView regionActive={listActive} />;
       break;
     case "settings":
       body = <SettingsView regionActive={listActive} />;

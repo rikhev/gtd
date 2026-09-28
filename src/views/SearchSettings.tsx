@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
-import { Grid, useListNav, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { AreaName, ContextCode, Tag } from "../components/bits.tsx";
+import { Grid, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
+import { AreaName, ContextCode, KeyHints } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../actionCommands.tsx";
@@ -108,7 +108,29 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: rules, contexts, Claude, export                            */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "export"; id: ID; text: string; status?: string; color?: string };
+
+/** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–5. */
+const TABS = [
+  { id: "general", title: "General" },
+  { id: "areas", title: "Areas" },
+  { id: "contexts", title: "Contexts" },
+  { id: "claude", title: "Claude" },
+  { id: "data", title: "Data" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+const TAB_OF: Record<string, TabId> = {
+  appearance: "general",
+  calendar: "general",
+  review: "general",
+  trash: "general",
+  claude: "claude",
+  suggested: "claude",
+  rules: "claude",
+  areas: "areas",
+  contexts: "contexts",
+  export: "data",
+};
 
 export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
@@ -116,6 +138,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const meta = useMeta();
   const [editing, setEditing] = useState<string | null>(null);
   const theme = useTheme();
+  const [tab, setTab] = usePersisted<TabId>("settings:tab", "general");
+  const tabIdx = Math.max(0, TABS.findIndex((t) => t.id === tab));
 
   const groups: GridGroup<SRow>[] = useMemo(
     () => [
@@ -138,14 +162,14 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [{ key: "stall", kind: "stall" as const, id: "stall", text: "Stalled after" }],
       },
       {
-        key: "deleted",
-        label: "Recently deleted",
+        key: "trash",
+        label: "Trash",
         hideCount: true,
         rows: [{ key: "trash", kind: "trash" as const, id: "trash", text: "Keep deleted items" }],
       },
       {
         key: "claude",
-        label: "Claude",
+        label: "Connection",
         hideCount: true,
         rows: [{ key: "apikey", kind: "apikey" as const, id: "apikey", text: "API key", status: meta.hasKey ? "set" : "missing" }],
       },
@@ -173,6 +197,15 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         meta: s.areas.length ? undefined : "None yet. N adds one; projects are grouped by area",
       },
       {
+        key: "export",
+        label: "Export",
+        hideCount: true,
+        rows: [
+          { key: "zip", kind: "export" as const, id: "/api/export/zip", text: "Markdown files (.zip)" },
+          { key: "json", kind: "export" as const, id: "/api/export/json", text: "JSON" },
+        ],
+      },
+      {
         key: "contexts",
         label: "Contexts",
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
@@ -180,10 +213,15 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     ],
     [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart],
   );
-  const nav = useListNav("settings", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: true })), [groups]));
+  const shown = useMemo(() => groups.filter((g) => TAB_OF[g.key] === tab), [groups, tab]);
+  // No group headings: the tab already says what the list is (owner's decision); each tab is one plain list.
+  const heads = false;
+  const nav = useListNav(`settings:${tab}`, useMemo(() => shown.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: heads })), [shown, heads]));
   const all = groups.flatMap((g) => g.rows);
   const cur = all.find((r) => r.key === nav.focus);
-  const groupOfFocus = nav.focus && isGroupKey(nav.focus) ? nav.focus.slice(6) : groups.find((g) => g.rows.some((r) => r.key === nav.focus))?.key;
+  const groupOfFocus =
+    (nav.focus && isGroupKey(nav.focus) ? nav.focus.slice(6) : groups.find((g) => g.rows.some((r) => r.key === nav.focus))?.key) ??
+    (tab === "areas" ? "areas" : tab === "contexts" ? "contexts" : undefined);
 
   // Only rules, contexts and areas can be renamed or deleted; the other rows are settings, not list items.
   const listRow = cur?.kind === "rule" || cur?.kind === "context" || cur?.kind === "area";
@@ -200,6 +238,17 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
 
   const commands: Command[] = [
     ...nav.commands,
+    { id: "set.nexttab", label: "Next settings tab", group: "Settings", keys: ["mod+."], inInput: true, run: () => setTab(TABS[(tabIdx + 1) % TABS.length].id) },
+    { id: "set.prevtab", label: "Previous settings tab", group: "Settings", keys: ["mod+,"], inInput: true, run: () => setTab(TABS[(tabIdx - 1 + TABS.length) % TABS.length].id) },
+    ...TABS.map((t, i) => ({ id: `set.tab.${t.id}`, label: `Settings: ${t.title}`, group: "Settings", keys: [String(i + 1)], run: () => setTab(t.id) })),
+    {
+      id: "set.export",
+      label: "Download this export",
+      group: "Settings",
+      keys: ["enter"],
+      enabled: cur?.kind === "export",
+      run: () => cur && (window.location.href = cur.id),
+    },
     {
       id: "set.stall",
       label: "Change when projects count as stalled",
@@ -315,6 +364,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       label: groupOfFocus === "contexts" ? "New context" : groupOfFocus === "areas" ? "New area" : "New rule",
       group: "Settings",
       keys: ["n"],
+      // N adds to the list in front of you: areas, contexts, or Claude's rules; General and Data have nothing to add.
+      enabled: tab === "areas" || tab === "contexts" || tab === "claude",
       run: () => {
         const id = crypto.randomUUID();
         if (groupOfFocus === "areas") {
@@ -401,6 +452,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Theme</span>
             <span className="subject-more">Light, dark, or follow the system. Kept in this browser.</span>
           </span>
+        ) : r.kind === "export" ? (
+          <span className="subject">
+            <span className="subject-text strong">{r.text}</span>
+            <span className="subject-more">{r.key === "zip" ? "Every list as Markdown, one file each, zipped." : "Everything in one file, as data."}</span>
+          </span>
         ) : r.kind === "week" ? (
           <span className="subject">
             <span className="subject-text strong">Week starts on</span>
@@ -409,7 +465,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ) : r.kind === "trash" ? (
           <span className="subject">
             <span className="subject-text strong">Keep deleted items</span>
-            <span className="subject-more">Anything deleted stays in Recently deleted this long, so it can be put back. Then it is gone for good.</span>
+            <span className="subject-more">Anything deleted stays in the Trash this long, so it can be put back. Then it is gone for good.</span>
           </span>
         ) : r.kind === "stall" ? (
           <span className="subject">
@@ -442,6 +498,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           <span className="num">{plural(meta.trashDays, "day")}</span>
         ) : r.kind === "week" ? (
           <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>
+        ) : r.kind === "export" ? (
+          <span className="muted-text">Download</span>
         ) : r.kind === "apikey" ? (
           meta.hasKey ? (
             <span className="key-state">
@@ -461,28 +519,45 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
   ];
 
+  const hints: { k: string; label: string }[] = [
+    { k: "mod+.", label: "Next tab" },
+    { k: "mod+,", label: "Previous" },
+    ...(tab === "areas" || tab === "contexts"
+      ? [
+          { k: "n", label: "New" },
+          { k: "f2", label: "Rename" },
+          { k: "c", label: "Colour" },
+          ...(tab === "areas" ? [{ k: "alt+arrowup", label: "Move" }] : []),
+          { k: "delete", label: "Delete" },
+        ]
+      : tab === "data"
+        ? [{ k: "enter", label: "Download" }]
+        : [{ k: "enter", label: "Change" }]),
+  ];
+
   return (
     <div className="settings">
+      <ol className="review-steps settings-tabs" role="tablist" aria-label="Settings">
+        {TABS.map((t, i) => (
+          <li key={t.id} className={t.id === tab ? "is-current" : ""}>
+            <button type="button" role="tab" aria-selected={t.id === tab} aria-keyshortcuts={String(i + 1)} title={`${t.title} (${i + 1})`} onClick={() => setTab(t.id)}>
+              {t.title}
+            </button>
+          </li>
+        ))}
+      </ol>
       <Grid
-        listId="settings"
+        listId={`settings-${tab}`}
         columns={columns}
-        groups={groups}
+        groups={shown}
         getKey={(r) => r.key}
         nav={nav}
         active={regionActive}
-        showHeaders
+        showHeaders={heads}
         head={false}
         empty={null}
       />
-      {/* Export last: the things you set come first, taking your data out comes after. */}
-      <div className="settings-facts">
-        <div>
-          <Tag>Export</Tag>
-          <p>
-            <a href="/api/export/zip">Markdown files (.zip)</a> · <a href="/api/export/json">JSON</a>. Both are also in the command palette.
-          </p>
-        </div>
-      </div>
+      <KeyHints hints={hints} />
     </div>
   );
 }

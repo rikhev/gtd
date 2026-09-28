@@ -4,10 +4,10 @@ import { archiveDone, mutate, plural, useStore, isChase, isDeferred } from "../s
 import { useUI, VIEW_TITLES } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { ContextCode, DateCell, DoneBox, Energy, FlagButton, Marker, TimeCell, titleOr } from "../components/bits.tsx";
+import { AreaName, ContextCode, DateCell, DoneBox, Energy, FlagButton, Marker, TimeCell, titleOr } from "../components/bits.tsx";
 import { useActionCommands } from "../actionCommands.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
-import { addDays, today, daysBetween, formatDate, formatLong } from "../../shared/dates.ts";
+import { addDays, today, daysBetween, formatDate, formatLong, parseRecurrence, recurrenceLabel } from "../../shared/dates.ts";
 import type { Action, ActionStatus, State, ID, Op } from "../../shared/types.ts";
 
 type Mode = "next" | "waiting" | "someday" | "done";
@@ -135,8 +135,15 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       follow: (a) => a.followup,
       back: (a) => a.bring_back,
       when: (a) => a.completed_at,
+      area: (a) => {
+        const p = a.project_id ? projById.get(a.project_id) : undefined;
+        return p?.area_id ? s.areas.find((x) => x.id === p.area_id)?.name : undefined;
+      },
+      created: (a) => a.created_at,
+      updated: (a) => a.updated_at ?? a.created_at,
+      repeat: (a) => a.recurrence,
     }),
-    [ctxById, projById],
+    [ctxById, projById, s.areas],
   );
 
   const baseGroups: GridGroup<Action>[] = useMemo(() => {
@@ -419,6 +426,32 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     },
   };
 
+  // Offered but hidden until shown (right-click a heading, or ⌘K › Show or hide columns…).
+  const areaCol: Column<Action> = {
+    key: "area",
+    label: "Area",
+    width: "110px",
+    optional: true,
+    render: (a) => {
+      const p = a.project_id ? projById.get(a.project_id) : undefined;
+      const area = p?.area_id ? s.areas.find((x) => x.id === p.area_id) : undefined;
+      return area ? <AreaName name={area.name} color={area.color} /> : <span className="dash" aria-hidden="true">–</span>;
+    },
+  };
+  const createdCol: Column<Action> = { key: "created", label: "Created", width: "84px", optional: true, render: (a) => <DateCell date={a.created_at.slice(0, 10)} kind="plain" /> };
+  const updatedCol: Column<Action> = { key: "updated", label: "Updated", width: "84px", optional: true, render: (a) => <DateCell date={(a.updated_at ?? a.created_at).slice(0, 10)} kind="plain" /> };
+  const repeatCol: Column<Action> = {
+    key: "repeat",
+    label: "Repeat",
+    width: "110px",
+    optional: true,
+    render: (a) => {
+      const r = a.recurrence ? parseRecurrence(a.recurrence) : null;
+      return r ? <span className="muted-text">{recurrenceLabel(r)}</span> : <span className="dash" aria-hidden="true">–</span>;
+    },
+  };
+  const backCol: Column<Action> = { key: "back", label: "Bring back", width: "96px", render: (a) => <DateCell date={a.bring_back} kind="plain" /> };
+  const dueCol: Column<Action> = { key: "due", label: "Due", width: "84px", render: (a) => <DateCell date={a.due} /> };
   let columns: Column<Action>[];
   if (mode === "waiting") {
     columns = [
@@ -429,9 +462,14 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       { key: "since", label: "Since", width: "84px", drop: 1, render: (a) => <DateCell date={a.waiting_since} kind="plain" /> },
       { key: "follow", label: "Follow up", width: "88px", render: (a) => <DateCell date={a.followup} /> },
       projCol,
+      { ...ctxCol, optional: true },
+      { ...dueCol, optional: true },
+      areaCol,
+      createdCol,
+      updatedCol,
     ];
   } else if (mode === "someday") {
-    columns = [marker, doneCol, subject, ...(groupBy === "project" ? [] : [projCol]), ctxCol, { key: "back", label: "Bring back", width: "96px", render: (a) => <DateCell date={a.bring_back} kind="plain" /> }];
+    columns = [marker, doneCol, subject, ...(groupBy === "project" ? [] : [projCol]), ctxCol, backCol, { ...dueCol, optional: true }, areaCol, createdCol, updatedCol];
   } else if (mode === "done") {
     columns = [
       marker,
@@ -441,6 +479,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       ctxCol,
       // Grouped by day, the group heading already carries the date.
       ...(groupBy === "none" ? [] : [{ key: "when", label: "Done", width: "96px", render: (a: Action) => <DateCell date={a.completed_at?.slice(0, 10) ?? null} kind="plain" /> }]),
+      areaCol,
+      createdCol,
     ];
   } else {
     columns = [
@@ -449,10 +489,15 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       subject,
       ...(groupBy === "context" ? [] : [ctxCol]),
       ...(groupBy === "project" ? [] : [projCol]),
-      { key: "due", label: "Due", width: "84px", render: (a) => <DateCell date={a.due} /> },
+      dueCol,
       { key: "defer", label: "Start", width: "80px", drop: 1, render: (a) => <DateCell date={a.defer} kind="defer" /> },
       { key: "time", label: "Time", width: "52px", align: "end", drop: 3, render: (a) => <TimeCell min={a.time_min} /> },
       { key: "energy", label: "Energy", width: "62px", drop: 2, render: (a) => <Energy level={a.energy} /> },
+      areaCol,
+      { ...backCol, optional: true },
+      repeatCol,
+      createdCol,
+      updatedCol,
     ];
   }
 
@@ -472,6 +517,21 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       listId={mode}
       sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
       reorder={reorder}
+      // Touch: swipe right to complete (or bring a done row back), left to trash; both undo with the toast.
+      swipe={
+        mode === "done"
+          ? { right: { label: "Not done", run: (id) => act.reopenOne(id) } }
+          : {
+              right: { label: "Done", run: (id) => (s.actions.find((a) => a.id === id)?.status === "done" ? act.reopenOne(id) : act.completeOne(id)) },
+              left: {
+                label: "Trash",
+                run: (id) => {
+                  const a = s.actions.find((x) => x.id === id);
+                  if (a) mutate(`“${a.title || "Untitled action"}” trashed`, [{ type: "patch", table: "actions", id, data: { status: "trashed" } }]);
+                },
+              },
+            }
+      }
       columns={columns}
       groups={groups}
       getKey={(a) => a.id}

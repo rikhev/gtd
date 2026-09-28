@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ReactNode, type SyntheticEvent } from "react";
 import { formatDate, formatTime, daysBetween, today } from "../../shared/dates.ts";
 import type { Action, Context } from "../../shared/types.ts";
-import { keyLabel } from "../keys.ts";
+import { keyLabel, runKey } from "../keys.ts";
 
 /** A disposition or section name as a quiet chip; md is a state's title in plain caps. */
 export function Tag({ children, size = "sm" }: { children: ReactNode; size?: "sm" | "md" }) {
@@ -115,24 +115,30 @@ export function Lamp({ health }: { health: keyof typeof HEALTH_LABEL }) {
   return <span className={`lamp ${health}`} role="img" aria-label={HEALTH_LABEL[health]} title={HEALTH_LABEL[health]} />;
 }
 
-export function ContextCode({ ctx }: { ctx?: Context }) {
-  if (!ctx) return <span className="dash" aria-hidden="true">–</span>;
+/**
+ * Areas and contexts read alike (owner's decision): the mark in a small tile of the item's colour, then the name in plain
+ * ink. An area's mark is #, a context's @. The tile carries the colour so it can be seen at a glance.
+ */
+export function Named({ mark, name, color }: { mark: "#" | "@"; name: string; color?: string | null }) {
+  const bare = name.trim().replace(/^[#@]+\s*/, "") || "Untitled";
   return (
-    <span className="ctx" style={{ ["--ctx" as string]: ctx.color }}>
-      {ctx.name}
+    <span className="named">
+      <span className="named-tile" style={color ? { ["--tile" as string]: color } : undefined}>
+        {mark}
+      </span>
+      <span className="named-text">{bare}</span>
     </span>
   );
 }
 
-/** An area as "#Work": plain text, its colour only in the # (a context's colour is its underline instead). */
+export function ContextCode({ ctx }: { ctx?: Context }) {
+  if (!ctx) return <span className="dash" aria-hidden="true">–</span>;
+  return <Named mark="@" name={ctx.name} color={ctx.color} />;
+}
+
+/** An area as "#Work": its # in a small tile of the area's colour, the name in plain ink (a context's colour is its underline instead). */
 export function AreaName({ name, color }: { name: string; color?: string | null }) {
-  const bare = name.trim().replace(/^#+\s*/, "") || "Untitled";
-  return (
-    <span className="area-name">
-      <span className="area-hash" style={color ? { ["--area" as string]: color } : undefined}>#</span>
-      {bare}
-    </span>
-  );
+  return <Named mark="#" name={name} color={color} />;
 }
 
 export function DateCell({ date, kind = "due" }: { date: string | null; kind?: "due" | "defer" | "plain" }) {
@@ -192,13 +198,17 @@ export function KeyChoices({ choices, autoFocus = true }: { choices: { k: string
 }
 
 /** One quiet line naming the few keys that matter in a rarely used mode (Clarify, Weekly Review). */
+/**
+ * The keys a screen offers. Each hint is also a button that does what its key does, so the screen works by touch
+ * (where the line becomes a row of tap targets and the key caps hide) and by mouse.
+ */
 export function KeyHints({ hints }: { hints: { k: string; label: string }[] }) {
   return (
     <p className="key-hints" aria-label="Keyboard shortcuts">
-      {hints.map((h, i) => (
-        <span key={h.k + h.label}>
+      {hints.map((h) => (
+        <button key={h.k + h.label} type="button" className="kh" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey(h.k)}>
           <Kbd k={h.k} /> {h.label}
-        </span>
+        </button>
       ))}
     </p>
   );

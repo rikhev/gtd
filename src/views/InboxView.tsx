@@ -202,6 +202,8 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
         showHeaders={false}
         rowClass={(st) => [striking.has(st.id) ? `is-striking ${showDone ? "" : "is-leaving"}` : "", st.status === "done" ? "is-done" : ""].join(" ")}
         onOpen={(k) => ui.openDetail({ kind: "stuff", id: k }, true)}
+        // Touch: swipe right for done already (the two-minute rule), left to trash.
+        swipe={{ right: { label: "Done", run: (id) => toggleDone([id]) }, left: { label: "Trash", run: (id) => trashNow([id]) } }}
         empty={
           <EmptyState
             title="Inbox zero"

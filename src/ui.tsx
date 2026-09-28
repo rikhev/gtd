@@ -13,7 +13,7 @@ export type ViewId =
   | "settings"
   | "search"
   | "clarify"
-  | "deleted"
+  | "trash"
   | "calendar";
 
 export type Region = "rail" | "list" | "detail";
@@ -116,6 +116,6 @@ export const VIEW_TITLES: Record<ViewId, string> = {
   settings: "Settings",
   search: "Search",
   clarify: "Clarify",
-  deleted: "Recently deleted",
+  trash: "Trash",
   calendar: "Calendar",
 };
