@@ -698,7 +698,16 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                   </label>
                   <label className="field">
                     <span className="field-label">Notes</span>
-                    <textarea className="field-text" rows={3} value={draft.reference?.notes ?? ""} onChange={(e) => update((d) => (d.reference = { title: d.reference?.title ?? "", notes: e.target.value }))} />
+                    <textarea
+                      className="field-text"
+                      rows={3}
+                      ref={fitHeight}
+                      value={draft.reference?.notes ?? ""}
+                      onChange={(e) => {
+                        fitHeight(e.currentTarget);
+                        update((d) => (d.reference = { title: d.reference?.title ?? "", notes: e.target.value }));
+                      }}
+                    />
                   </label>
                 </div>
               )}

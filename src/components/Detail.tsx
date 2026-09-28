@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, useLayoutEffect } from "react";
 import { X, Paperclip, Pin } from "lucide-react";
 import { mutate, newAction, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
@@ -40,6 +40,17 @@ function TextField({
   const active = useContext(DetailActive);
   const area = useRef<HTMLTextAreaElement>(null);
   const k = autoFocus ? "F2" : multiline ? "N" : undefined;
+  // Notes grow with their text: the box is as tall as what is in it (at least its rows, at most the cap set in CSS,
+  // then it scrolls), so a long note is read whole and a short one takes little room.
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const cap = parseFloat(getComputedStyle(el).maxHeight) || Infinity;
+    const full = el.scrollHeight + (el.offsetHeight - el.clientHeight);
+    el.style.height = `${Math.min(full, cap)}px`;
+    el.style.overflowY = full > cap ? "auto" : "hidden";
+  }, [v]);
   useCommands(
     `detail-notes:${label}`,
     multiline ? [{ id: `detail.notes.${label}`, label: `${label}…`, group: "Details", keys: ["n"], run: () => area.current?.focus() }] : [],
@@ -314,7 +325,7 @@ function ActionDetail({ a }: { a: Action }) {
           {nextFields}
         </div>
       )}
-      <TextField label="Notes" value={a.notes} multiline rows={8} onCommit={(v) => patch("actions", a.id, { notes: v })} placeholder="Details, links, phone numbers…" />
+      <TextField label="Notes" value={a.notes} multiline rows={4} onCommit={(v) => patch("actions", a.id, { notes: v })} placeholder="Details, links, phone numbers…" />
       <Files owner={{ kind: "action", id: a.id }} />
       <p className="detail-meta">
         Created {formatLong(a.created_at.slice(0, 10))}
@@ -433,7 +444,7 @@ function ProjectDetail({ p }: { p: Project }) {
           </>
         )}
       </section>
-      <TextField label="Support notes" value={p.notes} multiline rows={8} onCommit={(v) => patch("projects", p.id, { notes: v })} placeholder="Plans, meeting notes, phone numbers, links…" />
+      <TextField label="Support notes" value={p.notes} multiline rows={4} onCommit={(v) => patch("projects", p.id, { notes: v })} placeholder="Plans, meeting notes, phone numbers, links…" />
       <Files owner={{ kind: "project", id: p.id }} />
     </>
   );
@@ -454,7 +465,7 @@ function StuffDetail({ st }: { st: Stuff }) {
           patch("stuff", st.id, { text: joinStuff(v, parts.rest, parts.prefix) }, "Edited");
         }}
       />
-      <TextField label="Notes" value={parts.rest} multiline rows={8} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("stuff", st.id, { text: joinStuff(parts.title, v, parts.prefix) }, "Edited")} />
+      <TextField label="Notes" value={parts.rest} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("stuff", st.id, { text: joinStuff(parts.title, v, parts.prefix) }, "Edited")} />
       <Files owner={{ kind: "stuff", id: st.id }} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
     </>
@@ -483,7 +494,7 @@ function RefDetail({ r }: { r: Ref }) {
       >
         {proj ? proj.title : none}
       </PickField>
-      <TextField label="Notes" value={r.notes} multiline rows={8} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("refs", r.id, { notes: v })} />
+      <TextField label="Notes" value={r.notes} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("refs", r.id, { notes: v })} />
       <Files owner={{ kind: "ref", id: r.id }} />
       <p className="detail-meta">
         Created {formatLong(r.created_at.slice(0, 10))}

@@ -1609,6 +1609,11 @@ input.field-text {
   height: 28px;
   padding-block: 0;
 }
+/* Notes size themselves to their text (Detail's TextField): no drag handle, and a generous cap before they scroll. */
+textarea.field-text {
+  resize: none;
+  max-height: min(60vh, 640px);
+}
 .field-text:focus {
   outline: none;
   border-color: var(--ink);
