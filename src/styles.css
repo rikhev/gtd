@@ -1957,6 +1957,10 @@ input.field-text {
   padding: 18px 22px 22px;
   animation: pop 160ms var(--ease) both;
 }
+.help-title {
+  margin: 0;
+  font: inherit;
+}
 .help-head {
   display: flex;
   align-items: center;

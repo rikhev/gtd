@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { archiveDone, mutate, reopenActions, upload, useStore } from "../store.ts";
+import { archiveDone, mutate, reopenActions, upload, useTables } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
@@ -45,7 +45,7 @@ export function joinStuff(title: string, rest: string, prefix = "") {
 
 export function InboxView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
-  const s = useStore((x) => x);
+  const s = useTables("stuff", "files");
   const [editing, setEditing] = useState<ID | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 

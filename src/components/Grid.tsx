@@ -1042,6 +1042,9 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   }, [active, listId]);
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   const multi = showHeaders ?? groups.length > 1;
+  // An empty list (Inbox zero, a search with no hits) is not a grid of nothing: it is a plain group that still takes
+  // focus, and its empty state is announced.
+  const isEmpty = total === 0 && !groups.some((g) => multi && g.label);
   const showHead = head && (total > 0 || (multi && groups.some((g) => g.label)));
   return (
     <div
@@ -1062,12 +1065,12 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       }}
       data-list={listId}
       // A treegrid, so a group heading can say whether it is open (aria-expanded is only valid on a row there).
-      role="treegrid"
+      role={isEmpty ? "group" : "treegrid"}
       aria-labelledby={label ? undefined : "view-title"}
       aria-label={label}
-      aria-multiselectable="true"
-      aria-rowcount={total + (multi ? groups.filter((g) => g.label).length : 0) + (showHead ? 1 : 0)}
-      aria-activedescendant={nav.focus ? rowDomId(listId, nav.focus) : undefined}
+      aria-multiselectable={isEmpty ? undefined : "true"}
+      aria-rowcount={isEmpty ? undefined : total + (multi ? groups.filter((g) => g.label).length : 0) + (showHead ? 1 : 0)}
+      aria-activedescendant={!isEmpty && nav.focus ? rowDomId(listId, nav.focus) : undefined}
       tabIndex={active ? 0 : -1}
       style={{ ["--cols" as string]: template }}
     >
@@ -1158,8 +1161,10 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
           })}
         </div>
       )}
-      {total === 0 && !groups.some((g) => multi && g.label) ? (
-        <div className="grid-empty">{empty}</div>
+      {isEmpty ? (
+        <div className="grid-empty" role="status">
+          {empty}
+        </div>
       ) : (
         groups.map((g) => {
           const gk = groupKey(g.key);

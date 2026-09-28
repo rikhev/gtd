@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, Check } from "lucide-react";
-import { capture, daysSinceReview, notify, useMeta, useNotice, useStore, isStalled, isChase } from "../store.ts";
+import { capture, daysSinceReview, notify, useMeta, useNotice, useTables, isStalled, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { allCommandsForPalette, activeCommands, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
 import { Kbd, Tag } from "./bits.tsx";
@@ -45,7 +45,7 @@ type Entry = { key: string; view: ViewId; label: string; name: string; start?: b
 export function Rail({ active }: { active: boolean }) {
   useHeldModifier();
   const ui = useUI();
-  const s = useStore((x) => x);
+  const s = useTables("stuff", "actions", "projects", "reviews");
   const { stallWeeks } = useMeta(); // recount stalled projects when the threshold changes
   const [cursor, setCursor] = useState(0);
   const t = today();
@@ -292,7 +292,7 @@ function RailKey({ k }: { k?: string }) {
 /** On a phone the rail becomes a bottom tab bar: the Inbox, Next, Waiting, and More for the rest. */
 export function TabBar() {
   const ui = useUI();
-  const s = useStore((x) => x);
+  const s = useTables("stuff", "actions", "projects", "reviews");
   const [more, setMore] = useState(false);
   const inboxItems = s.stuff.filter((x) => x.status === "inbox");
   const inbox = inboxItems.length;
@@ -654,7 +654,9 @@ export function HelpOverlay({ close }: { close: () => void }) {
     <div className="overlay" onMouseDown={close}>
       <div ref={box} className="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts on this screen" tabIndex={-1} onMouseDown={(e) => e.stopPropagation()}>
         <div className="help-head">
-          <Tag size="md">Keys on this screen</Tag>
+          <h2 className="help-title">
+            <Tag size="md">Keys on this screen</Tag>
+          </h2>
           <span className="muted-text small">
             <Kbd k="mod+k" /> finds every command
           </span>

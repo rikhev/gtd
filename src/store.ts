@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import type { Action, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
 import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
 
@@ -54,6 +54,18 @@ export function useMeta() {
   );
 }
 export const getState = () => state;
+
+/**
+ * Subscribes to named tables only: the component re-renders when one of them changes, not on every change anywhere
+ * (tables that didn't change keep their identity). Returns a State whose other tables are the snapshot at render.
+ */
+export function useTables<K extends keyof State>(...keys: K[]): State {
+  // The keys are fixed per call site, so the hooks below run in the same order every render.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const vals = keys.map((k) => useStore((s) => s[k]));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => ({ ...state, ...Object.fromEntries(keys.map((k, i) => [k, vals[i]])) }) as State, vals);
+}
 export const getMeta = () => meta;
 
 /** Called when any API request comes back 401: the session expired or was revoked. */

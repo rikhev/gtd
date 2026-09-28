@@ -453,7 +453,12 @@ export default function App() {
             {counts[view] && <span className="viewcount">{counts[view]}</span>}
           </div>
           <div className="work">
-            <section className={`list-region ${region === "list" ? "is-active" : ""}`} aria-label={VIEW_TITLES[view]}>
+            {/* On a phone the details sheet covers most of the list; the list stays reachable by keyboard behind it. */}
+            <section
+              className={`list-region ${region === "list" ? "is-active" : ""}`}
+              aria-label={VIEW_TITLES[view]}
+              tabIndex={(detail || detailPinned) && region !== "list" && window.matchMedia("(max-width: 820px)").matches ? 0 : undefined}
+            >
               {meta.loaded ? <Suspense fallback={<div className="loading" aria-busy="true" />}>{body}</Suspense> : <div className="loading" aria-busy="true" />}
             </section>
             {(detail || detailPinned) && <Detail target={detail} active={region === "detail" && !picker && !palette && !help} />}

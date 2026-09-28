@@ -227,7 +227,7 @@ export function Picker({ spec, close }: Props) {
         spellCheck={false}
         autoComplete="off"
       />
-      <ul className="picker-list" id="picker-list" role="listbox">
+      <ul className="picker-list" id="picker-list" role="listbox" aria-label={title}>
         {options.map((o, i) => [
           i > 0 && o.section !== options[i - 1].section && <li key={`sep-${i}`} className="picker-sep" role="separator" aria-hidden="true" />,
           <li
