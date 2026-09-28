@@ -515,7 +515,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     body = (
       <>
         {weekdayHead}
-        <div className="cal-month" style={{ gridTemplateRows: weeks.map((w) => `minmax(${w.min}px, 1fr)`).join(" ") }}>
+        <div className="cal-month" tabIndex={0} aria-label={`Weeks of ${title}`} style={{ gridTemplateRows: weeks.map((w) => `minmax(${w.min}px, 1fr)`).join(" ") }}>
           {weeks.map(({ days, ahead, row }) => {
             return (
               <div key={days[0]} className={`cal-row ${ahead ? "is-ahead" : ""} ${days[0] <= t && t <= days[6] ? "is-this-week" : ""}`}>

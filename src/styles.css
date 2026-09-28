@@ -75,6 +75,8 @@
   --alert: #b3301c;
   --mark: #2a3139;
   --shadow: 0 10px 28px rgb(18 24 32 / 0.14), 0 2px 5px rgb(18 24 32 / 0.07);
+  --scrim: rgb(18 24 32 / 0.3);
+  --shadow-soft: 0 2px 8px -4px rgb(18 24 32 / 0.12);
   /* The same face on every device (owner's request). "Stiltje Keys" only holds the key symbols, so it only ever
      draws those; the labels are the same family condensed (see font-stretch where --font-label is used). */
   --font-ui: "Stiltje Keys", "Instrument Sans Variable", "Instrument Sans fallback", system-ui, sans-serif;
@@ -119,6 +121,8 @@
     --alert: #ec6d57;
     --mark: #d5dae0;
     --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+    --scrim: rgb(0 0 0 / 0.45);
+    --shadow-soft: 0 2px 8px -4px rgb(0 0 0 / 0.4);
   }
 }
 :root[data-theme="dark"] {
@@ -155,6 +159,8 @@
   --alert: #ec6d57;
   --mark: #d5dae0;
   --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+  --scrim: rgb(0 0 0 / 0.45);
+  --shadow-soft: 0 2px 8px -4px rgb(0 0 0 / 0.4);
 }
 :root[data-theme="light"] {
   color-scheme: light;
@@ -587,6 +593,10 @@ body.keys-held .rail .rail-meta .num {
 .rail-meta .is-quiet {
   color: var(--ink-3);
 }
+/* On the open list's row a quiet count steps up to ink-2, so it keeps AA on the lifted surface in dark. */
+.rail-item.is-current .rail-meta .is-quiet {
+  color: var(--ink-2);
+}
 .rail-meta .kbd {
   font-size: 11px;
   line-height: 14px;
@@ -594,7 +604,10 @@ body.keys-held .rail .rail-meta .num {
   min-width: 16px;
   color: var(--ink-2);
 }
-/* On a hovered row the alert red darkens (lightens in dark) so small red text keeps AA on rail-2. */
+/* On a hovered row, and on the open list's lifted row, the alert red darkens (lightens in dark) so small red text
+   keeps AA there (dark: 5.2:1 on the current row, where plain alert gave 3.95:1). */
+.rail-item.is-current .is-due,
+.rail-item.is-current .badge,
 .rail-item:hover .is-due,
 .rail-item:hover .badge {
   color: var(--alert-on-rail);
@@ -1083,6 +1096,9 @@ body.is-col-resizing * {
   /* Plain heads (contexts, waiting on, dates…) are Label Caps over a rule in every list. */
   border-bottom: 1px solid var(--rule-strong);
   cursor: default;
+}
+.group-cell {
+  display: contents;
 }
 .group-label {
   font-family: var(--font-label);
@@ -1883,7 +1899,7 @@ input.field-text {
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: rgb(18 24 32 / 0.3);
+  background: var(--scrim);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -2172,7 +2188,7 @@ input.field-text {
   border: 1px solid var(--rule);
   border-radius: 3px;
   padding: 18px 20px;
-  box-shadow: 0 2px 8px -4px rgb(18 24 32 / 0.12);
+  box-shadow: var(--shadow-soft);
   max-height: calc(100dvh - 260px);
   overflow: auto;
 }
@@ -2925,13 +2941,17 @@ input.field-text {
   cursor: progress;
 }
 
+/* Reduced motion keeps the feedback and drops the movement: nothing slides, grows or springs, but changes of state
+   still fade in 120ms (a row marked done greys out, a picker appears), so what happened stays readable. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
-    transition-duration: 1ms !important;
+    transition-property: opacity, color, background-color, border-color, box-shadow !important;
+    transition-duration: 120ms !important;
+    transition-delay: 0ms !important;
   }
 }
 
@@ -4050,6 +4070,28 @@ body.is-cal-dragging {
   input.field-text {
     height: 44px;
   }
+  /* Every control a thumb uses reaches 44px: the capture field (the phone's most used control), the search button,
+     the calendar's arrows and views, and the step and tab strips. Column headings keep their drawn size and get a
+     taller invisible hit area instead. */
+  .capture-input {
+    min-height: 44px;
+    padding-block: 11px;
+  }
+  .search {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .cal-nav .icon-btn {
+    min-width: 44px;
+  }
+  .gh-sort {
+    position: relative;
+  }
+  .gh-sort::after {
+    content: "";
+    position: absolute;
+    inset: -14px -6px;
+  }
   /* Keys mean nothing without a keyboard: the caps hide, the hint lines become buttons to tap. */
   .rail-key,
   .field-key,
@@ -4123,7 +4165,7 @@ body.is-cal-dragging {
   .cal-modes button,
   .cal-nav .icon-btn,
   .cal-today {
-    min-height: 40px;
+    min-height: 44px;
   }
   .row:hover {
     background: none;

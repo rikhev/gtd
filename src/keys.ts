@@ -74,7 +74,7 @@ export const pressedByTouch = () => lastPointer === "touch" || lastPointer === "
 export const isTouchDevice = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 
 /** Run a command as soon as it becomes available, e.g. right after switching to its view. */
-export function runWhenReady(id: string, frames = 30) {
+export function runWhenReady(id: string, frames = 120) {
   const c = activeCommands().find((x) => x.id === id);
   if (c) c.run();
   else if (frames > 0) requestAnimationFrame(() => runWhenReady(id, frames - 1));

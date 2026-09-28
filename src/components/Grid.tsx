@@ -19,6 +19,8 @@ export interface Column<T> {
 
 /** On a phone the list keeps one column after the subject: the first of these it has. */
 const COMPACT_HIDE = ["done", "kind"];
+/** Names for the unlabelled lead columns, for screen readers. */
+const LEAD_NAME: Record<string, string> = { mark: "Flag or status", done: "Done", kind: "Kind" };
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
 
 /** Smallest width a column can take: a fixed px width, or the minimum of a minmax(). */
@@ -1059,7 +1061,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
         }
       }}
       data-list={listId}
-      role="grid"
+      // A treegrid, so a group heading can say whether it is open (aria-expanded is only valid on a row there).
+      role="treegrid"
       aria-labelledby={label ? undefined : "view-title"}
       aria-label={label}
       aria-multiselectable="true"
@@ -1131,8 +1134,11 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                       <path d={on === -1 ? "M2 3.5l3 3 3-3" : "M2 6.5l3-3 3 3"} />
                     </svg>
                   </button>
-                ) : (
+                ) : c.label ? (
                   c.label
+                ) : (
+                  // The unlabelled lead columns still name themselves to screen readers.
+                  <span className="visually-hidden">{LEAD_NAME[c.key] ?? c.key}</span>
                 )}
                 {edgeTarget(i) && (
                   <span
@@ -1174,6 +1180,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                     nav.toggleGroup(g.key);
                   }}
                 >
+                  {/* One cell spanning the row, so the heading is a proper row with a cell (display: contents keeps the look). */}
+                  <div role="gridcell" aria-colspan={columns.length} className="group-cell">
                   <span className={`chev ${collapsed ? "" : "open"}`} aria-hidden />
                   {/* One look for every list's group heads (owner's decision): Label Caps over a rule, then the count. */}
                   <span className={`group-label ${g.color ? "is-ctx" : ""} ${g.areaColor !== undefined ? "is-area" : ""}`}>
@@ -1193,6 +1201,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                   </span>
                   {!g.hideCount && <span className="group-count">{g.rows.length}</span>}
                   {g.meta && <span className="group-meta">{g.meta}</span>}
+                  </div>
                 </div>
               )}
               {(!collapsed || !multi) &&

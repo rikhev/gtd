@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
 import { TrashView } from "./views/TrashView.tsx";
-import { CalendarView } from "./views/CalendarView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { ActionsView } from "./views/ActionsView.tsx";
@@ -13,8 +12,11 @@ import { InboxView } from "./views/InboxView.tsx";
 import { ProjectsView } from "./views/ProjectsView.tsx";
 import { SomedayView, ReferenceView } from "./views/SimpleViews.tsx";
 import { ClarifyView } from "./views/ClarifyView.tsx";
-import { ReviewView } from "./views/ReviewView.tsx";
-import { SearchView, SettingsView } from "./views/SearchSettings.tsx";
+// Views opened now and then load when first opened, so the lists come up faster on a cold phone.
+const CalendarView = lazy(() => import("./views/CalendarView.tsx").then((m) => ({ default: m.CalendarView })));
+const ReviewView = lazy(() => import("./views/ReviewView.tsx").then((m) => ({ default: m.ReviewView })));
+const SearchView = lazy(() => import("./views/SearchSettings.tsx").then((m) => ({ default: m.SearchView })));
+const SettingsView = lazy(() => import("./views/SearchSettings.tsx").then((m) => ({ default: m.SettingsView })));
 import { isEditable } from "./keys.ts";
 import { isDark, setTheme, useTheme } from "./theme.ts";
 import { promptApiKey } from "./apiKey.ts";
@@ -419,7 +421,7 @@ export default function App() {
       <div className={`app ${detail || detailPinned ? "has-detail" : ""}`} data-region={region}>
         <Rail active={region === "rail" && !picker && !palette && !help} />
         <TabBar />
-        <div className="main">
+        <main className="main">
           <header className="topbar">
             <CaptureBar ref={captureRef} onDone={() => ui.setRegion("list")} />
             <SearchBox
@@ -452,11 +454,11 @@ export default function App() {
           </div>
           <div className="work">
             <section className={`list-region ${region === "list" ? "is-active" : ""}`} aria-label={VIEW_TITLES[view]}>
-              {meta.loaded ? body : <div className="loading" aria-busy="true" />}
+              {meta.loaded ? <Suspense fallback={<div className="loading" aria-busy="true" />}>{body}</Suspense> : <div className="loading" aria-busy="true" />}
             </section>
             {(detail || detailPinned) && <Detail target={detail} active={region === "detail" && !picker && !palette && !help} />}
           </div>
-        </div>
+        </main>
         <Toast />
         <DropZone detail={detail} />
         {picker && <Picker key={pickerSeq} spec={picker} close={() => setPicker(null)} />}

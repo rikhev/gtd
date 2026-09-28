@@ -602,7 +602,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     <div className="settings">
       <ol className="review-steps settings-tabs" role="tablist" aria-label="Settings">
         {TABS.map((t, i) => (
-          <li key={t.id} className={t.id === tab ? "is-current" : ""}>
+          <li key={t.id} role="presentation" className={t.id === tab ? "is-current" : ""}>
             <button type="button" role="tab" aria-selected={t.id === tab} aria-keyshortcuts={String(i + 1)} title={`${t.title} (${i + 1})`} onClick={() => setTab(t.id)}>
               {t.title}
             </button>
