@@ -1602,61 +1602,43 @@ textarea.field-text {
   resize: none;
   max-height: min(60vh, 640px);
 }
-/* Notes with a little Markdown (NotesArea): the box keeps the caret, selection and spelling marks; its letters are
-   drawn by a copy laid exactly over it. Nothing in the copy may change a character's width, or the caret drifts. */
-.md-wrap {
+/* Notes with a little Markdown (NotesArea): an editable block drawn from its text. It grows with the note (at least
+   its rows, at most a generous cap, then it scrolls), and a list item hangs its text after the mark it was typed with. */
+.md-edit {
+  display: block;
   position: relative;
-  display: block;
-}
-.md-wrap > textarea {
-  display: block;
-  color: transparent;
-  caret-color: var(--ink);
-}
-.md-wrap > textarea::placeholder {
-  color: var(--ink-3);
-}
-/* WebKit paints selected letters in their own colour: keep them hidden too, so the copy's letters show once. */
-.md-wrap > textarea::selection {
-  color: transparent;
-}
-.md-mirror {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
+  min-height: calc(var(--rows, 3) * 1.45em + 12px);
+  max-height: min(60vh, 640px);
+  overflow-y: auto;
   resize: none;
   white-space: pre-wrap;
   overflow-wrap: break-word;
-  border-color: transparent;
-  background: transparent;
-  color: var(--ink);
+  cursor: text;
+  caret-color: var(--ink);
 }
-/* Bold by a stroke, not a weight: the same widths, so the caret stays on the letters. */
-.md-mirror b {
-  font-weight: inherit;
-  -webkit-text-stroke: 0.035em currentColor;
-}
-.md-mirror .md-mark,
-.md-mirror .md-num {
+.md-edit[data-empty]::before {
+  content: attr(data-placeholder);
   color: var(--ink-3);
-  -webkit-text-stroke: 0;
-}
-/* A list item's dash is drawn as a round bullet in its place. */
-.md-bullet {
-  position: relative;
-  color: transparent;
-}
-.md-bullet::before {
-  content: "";
+  pointer-events: none;
   position: absolute;
-  left: 50%;
-  top: 55%;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ink-2);
-  transform: translate(-50%, -50%);
+}
+.md-edit b {
+  font-weight: 600;
+}
+.md-edit .md-mark {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+/* The mark sits in a gutter as wide as itself; the item's own lines, wrapped ones too, start after it. */
+.md-li {
+  padding-left: var(--gutter);
+}
+.md-marker {
+  display: inline-block;
+  width: var(--gutter);
+  margin-left: calc(-1 * var(--gutter));
+  white-space: pre;
+  color: var(--ink-3);
 }
 .field-text:focus {
   outline: none;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, useLayoutEffect } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip, Pin } from "lucide-react";
 import { mutate, newAction, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
@@ -39,19 +39,8 @@ function TextField({
   useEffect(() => setV(value), [value]);
   // Every pane marks its fields the same way: the heading field takes F2 (the pane's edit key) and the notes take N.
   const active = useContext(DetailActive);
-  const area = useRef<HTMLTextAreaElement>(null);
+  const area = useRef<HTMLDivElement>(null);
   const k = autoFocus ? "F2" : multiline ? "N" : undefined;
-  // Notes grow with their text: the box is as tall as what is in it (at least its rows, at most the cap set in CSS,
-  // then it scrolls), so a long note is read whole and a short one takes little room.
-  useLayoutEffect(() => {
-    const el = area.current;
-    if (!el) return;
-    el.style.height = "auto";
-    const cap = parseFloat(getComputedStyle(el).maxHeight) || Infinity;
-    const full = el.scrollHeight + (el.offsetHeight - el.clientHeight);
-    el.style.height = `${Math.min(full, cap)}px`;
-    el.style.overflowY = full > cap ? "auto" : "hidden";
-  }, [v]);
   useCommands(
     `detail-notes:${label}`,
     multiline ? [{ id: `detail.notes.${label}`, label: `${label}…`, group: "Details", keys: ["n"], run: () => area.current?.focus() }] : [],
@@ -82,7 +71,7 @@ function TextField({
         )}
       </span>
       {multiline ? (
-        <NotesArea {...common} ref={area} rows={rows} className="field-text" data-autofocus={autoFocus || undefined} aria-keyshortcuts={k} />
+        <NotesArea value={v} onValue={setV} onBlur={commit} placeholder={placeholder} aria-label={label} ref={area} rows={rows} className="field-text" aria-keyshortcuts={k} />
       ) : (
         <input
           {...common}

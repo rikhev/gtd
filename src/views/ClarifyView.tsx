@@ -551,7 +551,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
         const el = document.activeElement as HTMLElement | null;
         const rowEl = el?.closest<HTMLElement>("[data-row]");
         if (el && rowEl && el !== rowEl) rowEl.focus();
-        else if (el && card.current?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) el.blur();
+        else if (el && card.current?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) el.blur();
         else host.leave();
       },
     },
@@ -704,12 +704,9 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                     <NotesArea
                       className="field-text"
                       rows={3}
-                      ref={fitHeight}
+                      aria-label="Reference notes"
                       value={draft.reference?.notes ?? ""}
-                      onChange={(e) => {
-                        fitHeight(e.currentTarget);
-                        update((d) => (d.reference = { title: d.reference?.title ?? "", notes: e.target.value }));
-                      }}
+                      onValue={(notes) => update((d) => (d.reference = { title: d.reference?.title ?? "", notes }))}
                     />
                   </label>
                 </div>
