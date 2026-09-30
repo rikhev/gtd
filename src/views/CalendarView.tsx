@@ -135,9 +135,10 @@ function layoutRow(days: string[], items: Item[], cap: number) {
 
 type Drag = { key: string; start: string; end: string };
 
-/** The week's hour grid: pixels per hour, and the hour it opens on (the working day, not midnight). */
-const HOUR_PX = 44;
-const OPEN_AT = 7;
+/** The week's hours never get shorter than this; below it (a very small window) the hours scroll. */
+const MIN_HOUR_PX = 20;
+/** The all-day band shows this many rows a day before "+N more". */
+const BAND_ROWS = 3;
 const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
 /** Timed, one-day appointments: placed in the hours. Everything else (deadlines, starts, all-day) sits in the band above. */
 const isTimed = (i: Item) => i.kind === "event" && Boolean(i.time) && i.start === i.end;
@@ -151,7 +152,7 @@ interface Block {
   of: number;
 }
 /** One day's timed appointments as blocks; overlapping ones share the width, as in any calendar. */
-function layoutDay(list: Item[]): Block[] {
+function layoutDay(list: Item[], px: number, h0: number): Block[] {
   const sorted = [...list].sort((a, b) => (a.time ?? "").localeCompare(b.time ?? "") || (b.endTime ?? "").localeCompare(a.endTime ?? ""));
   const out: Block[] = [];
   let cluster: Block[] = [];
@@ -166,10 +167,11 @@ function layoutDay(list: Item[]): Block[] {
     // An appointment without an end, or one ending past midnight, runs its hour (or to the end of the day).
     const end = item.endTime && minutesOf(item.endTime) > start ? minutesOf(item.endTime) : Math.min(24 * 60, start + 60);
     if (start >= clusterEnd) flush();
-    const taken = new Set(cluster.filter((b) => b.top + b.height > (start / 60) * HOUR_PX).map((b) => b.slot));
+    const top = (start / 60 - h0) * px;
+    const taken = new Set(cluster.filter((b) => b.top + b.height > top).map((b) => b.slot));
     let slot = 0;
     while (taken.has(slot)) slot++;
-    const b: Block = { item, top: (start / 60) * HOUR_PX, height: Math.max(20, ((end - start) / 60) * HOUR_PX - 2), slot, of: 1 };
+    const b: Block = { item, top, height: Math.max(18, ((end - start) / 60) * px - 2), slot, of: 1 };
     cluster.push(b);
     out.push(b);
     clusterEnd = Math.max(clusterEnd, end);
@@ -595,7 +597,9 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           onMouseDown={(e) => e.stopPropagation()}
           onClick={() => {
             setCursor(d);
-            setMode("week");
+            // In the week, "+N more" opens the all-day band; in the month, it goes to that week.
+            if (mode === "week") setBandOpen(true);
+            else setMode("week");
           }}
         >
           +{opts.hidden} more
@@ -613,15 +617,18 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     </div>
   );
 
-  const weekKey = mode === "week" && !phone ? weekDays[0] : "";
+  // The week fits its window (owner's request: no scrolling): the hours fill what is left under the all-day band.
+  const [hoursHeight, setHoursHeight] = useState(0);
   useEffect(() => {
     const el = hoursRef.current;
-    if (!el || !weekKey) return;
-    const first = items.filter((i) => isTimed(i) && weekDays.includes(i.start)).map((i) => minutesOf(i.time!) / 60);
-    el.scrollTop = Math.max(0, Math.min(OPEN_AT, ...first.map((h) => Math.floor(h) - 1))) * HOUR_PX;
-    // Only when a week is opened: moving within it keeps the scroll where you left it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekKey]);
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHoursHeight(el.clientHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mode, phone]);
+  const [bandOpen, setBandOpen] = useState(false);
+  const { dayHours } = useMeta();
+  useEffect(() => setBandOpen(false), [weekDays[0]]);
 
   let body;
   if (mode === "year") body = <YearGrid year={year} ws={ws} items={all} cursor={cursor} t={t} onPick={(d) => (setCursor(d), setMode("month"))} onCursor={setCursor} />;
@@ -682,23 +689,29 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     // The week with its hours, like any calendar: what has no time of day (deadlines, starts, follow-ups, projects,
     // all-day appointments) in a band across the top; timed appointments where they fall in the day below.
     const banded = items.filter((i) => !isTimed(i));
-    const row = layoutRow(weekDays, banded, WEEK_LANES);
+    // The band is one line per item and three rows a day; "+N more" opens it for this week.
+    const row = layoutRow(weekDays, banded, bandOpen ? WEEK_LANES : BAND_ROWS);
     const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    // The hours set in Settings, stretched to take in any of this week's appointments that fall outside them.
+    const timed = items.filter((i) => isTimed(i) && weekDays.includes(i.start));
+    const h0 = Math.min(dayHours[0], ...timed.map((i) => Math.floor(minutesOf(i.time!) / 60)));
+    const h1 = Math.max(dayHours[1], ...timed.map((i) => Math.ceil((i.endTime && minutesOf(i.endTime) > minutesOf(i.time!) ? minutesOf(i.endTime) : minutesOf(i.time!) + 60) / 60)));
+    const px = Math.max(MIN_HOUR_PX, hoursHeight ? Math.floor((hoursHeight - 8) / (h1 - h0)) : 40);
     body = (
       <div className="cal-week is-hours">
-        <div className="cal-row is-week is-band" style={{ minHeight: 60 + Math.max(1, row.lanes) * 43 }}>
+        <div className="cal-row is-week is-band" style={{ minHeight: 38 + Math.max(1, row.lanes) * 24 + (row.hidden.some(Boolean) ? 24 : 6) }}>
           <span className="cal-gutter-label">All day</span>
-          <div className="cal-cells">{weekDays.map((d) => dayCell(d, { head: true }))}</div>
-          <div className="cal-bars" style={{ gridTemplateRows: `repeat(${Math.max(1, row.lanes)}, 40px)` }}>
-            {row.placed.map((p) => bar(p, true))}
+          <div className="cal-cells">{weekDays.map((d, i) => dayCell(d, { head: true, hidden: row.hidden[i] }))}</div>
+          <div className="cal-bars" style={{ gridTemplateRows: `repeat(${Math.max(1, row.lanes)}, 22px)` }}>
+            {row.placed.map((p) => bar(p, false))}
           </div>
         </div>
         <div className="cal-hours" ref={hoursRef} aria-label="Hours of the week">
-          <div className="cal-hours-grid" style={{ height: 24 * HOUR_PX }}>
+          <div className="cal-hours-grid" style={{ height: (h1 - h0) * px, ["--hour" as string]: `${px}px` }}>
             <div className="cal-gutter" aria-hidden="true">
-              {Array.from({ length: 24 }, (_, h) => (
-                <span key={h} style={{ top: h * HOUR_PX }}>
-                  {h ? `${String(h).padStart(2, "0")}:00` : ""}
+              {Array.from({ length: h1 - h0 }, (_, i) => h0 + i).map((h) => (
+                <span key={h} style={{ top: (h - h0) * px }}>
+                  {h > h0 ? `${String(h).padStart(2, "0")}:00` : ""}
                 </span>
               ))}
             </div>
@@ -709,7 +722,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                 className={`cal-hourcol ${d === t ? "is-today" : ""} ${d === cursor ? "is-cursor" : ""} ${dow(d) === 0 || dow(d) === 6 ? "is-weekend" : ""}`}
                 onMouseDown={() => (setItemKey(null), cursorFromMouse(d))}
               >
-                {layoutDay(items.filter((i) => isTimed(i) && i.start === d)).map((b) => (
+                {layoutDay(items.filter((i) => isTimed(i) && i.start === d), px, h0).map((b) => (
                   <div
                     key={b.item.key}
                     className={`cal-block ${b.height < 40 ? "is-compact" : ""} ${itemKey === b.item.key ? "is-focus" : ""}`}
@@ -734,7 +747,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                     {b.item.location && b.height > 56 && <span className="cal-block-sub">{b.item.location}</span>}
                   </div>
                 ))}
-                {d === t && <div className="cal-now" style={{ top: (nowMin / 60) * HOUR_PX }} aria-hidden="true" />}
+                {d === t && nowMin >= h0 * 60 && nowMin <= h1 * 60 && <div className="cal-now" style={{ top: (nowMin / 60 - h0) * px }} aria-hidden="true" />}
               </div>
             ))}
           </div>

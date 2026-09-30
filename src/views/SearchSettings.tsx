@@ -110,7 +110,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: rules, contexts, Claude, export                            */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "lang" | "export" | "feed" | "addfeed"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "lang" | "export" | "feed" | "addfeed" | "hours"; id: ID; text: string; status?: string; color?: string };
 
 /** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–5. */
 const TABS = [
@@ -158,6 +158,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         hideCount: true,
         rows: [
           { key: "week", kind: "week" as const, id: "week", text: "Week starts on" },
+          { key: "hours", kind: "hours" as const, id: "hours", text: "Hours in the week" },
           // Subscribed calendars (the hard landscape), each named and coloured, then the way to add one.
           ...meta.calendars.map((f) => ({ key: `f:${f.id}`, kind: "feed" as const, id: f.id, text: f.name, color: f.color, status: f.error })),
           { key: "addfeed", kind: "addfeed" as const, id: "addfeed", text: "Add a calendar" },
@@ -225,7 +226,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.clarifyLang, meta.calendars],
+    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.clarifyLang, meta.calendars, meta.dayHours],
   );
   const shown = useMemo(() => groups.filter((g) => TAB_OF[g.key] === tab), [groups, tab]);
   // No group headings: the tab already says what the list is (owner's decision); each tab is one plain list.
@@ -301,6 +302,33 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           ],
           current: String(meta.weekStart),
           onPick: (v) => v !== null && void saveWeekStart(v === "0" ? 0 : 1),
+        }),
+    },
+    {
+      id: "set.hours",
+      label: "Choose the hours the week shows",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "hours",
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "The day starts at",
+          items: Array.from({ length: 13 }, (_, h) => ({ id: String(h), label: hh(h) })),
+          current: String(meta.dayHours[0]),
+          onPick: (a) => {
+            if (a === null) return;
+            const start = Number(a);
+            window.setTimeout(() =>
+              ui.openPicker({
+                type: "list",
+                title: `From ${hh(start)} until`,
+                items: Array.from({ length: 24 - start - 3 }, (_, i) => start + 4 + i).map((h) => ({ id: String(h), label: hh(h) })),
+                current: String(Math.max(meta.dayHours[1], start + 4)),
+                onPick: (b) => b !== null && void saveDayHours(start, Number(b)),
+              }),
+            );
+          },
         }),
     },
     { id: "set.addfeed", label: "Add a calendar (Outlook, iCloud…)", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
@@ -574,6 +602,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Week starts on</span>
             <span className="subject-more">The first column of the calendar's weeks and months.</span>
           </span>
+        ) : r.kind === "hours" ? (
+          <span className="subject">
+            <span className="subject-text strong">Hours in the week</span>
+            <span className="subject-more">The part of the day the Calendar's week shows, fitted to the window. A week with an appointment outside them stretches to show it.</span>
+          </span>
         ) : r.kind === "feed" ? (
           <span className="subject">
             <span className="subject-text strong">
@@ -630,6 +663,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           valueBtn(r, <span className="num">{plural(meta.trashDays, "day")}</span>)
         ) : r.kind === "week" ? (
           valueBtn(r, <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>)
+        ) : r.kind === "hours" ? (
+          valueBtn(r, <span className="num">{hh(meta.dayHours[0])}–{hh(meta.dayHours[1])}</span>)
         ) : r.kind === "feed" ? (
           valueBtn(r, <span>{r.status ? "Can't read" : "Change link"}</span>)
         ) : r.kind === "addfeed" ? (
@@ -823,5 +858,14 @@ async function removeCalendar(id: string, name: string) {
   clearEvents();
   updateMeta({ calendars: j.calendars ?? [] });
   notify(`“${name}” removed. Paste its link again to bring it back.`);
+}
+
+const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
+async function saveDayHours(start: number, end: number) {
+  const res = await fetch("/api/settings/hours", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ start, end }) });
+  const j = (await res.json()) as { dayHours?: [number, number]; error?: string };
+  if (!j.dayHours) return notify(j.error ?? "That didn't work.", { tone: "error" });
+  updateMeta({ dayHours: j.dayHours });
+  notify(`The week now shows ${hh(j.dayHours[0])}–${hh(j.dayHours[1])}.`);
 }
 

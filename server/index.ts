@@ -54,7 +54,7 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), clarifyLang: clarifyLang(), calendars: feedInfo() } });
+  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), clarifyLang: clarifyLang(), calendars: feedInfo(), dayHours: dayHours() } });
 });
 
 app.put("/api/settings/key", async (c) => {
@@ -235,6 +235,20 @@ app.put("/api/settings/stall", async (c) => {
 
 /** The calendar's first day of the week: 1 Monday (the default), 0 Sunday. */
 const weekStart = () => (getSetting("weekStart", "1") === "0" ? 0 : 1);
+
+/** The hours the Calendar's week shows (the day is stretched for any appointment outside them): 07–19 by default. */
+const dayHours = (): [number, number] => {
+  const [a, b] = getSetting("dayHours", "7-19").split("-").map(Number);
+  return Number.isInteger(a) && Number.isInteger(b) && a >= 0 && b <= 24 && b - a >= 4 ? [a, b] : [7, 19];
+};
+app.put("/api/settings/hours", async (c) => {
+  const { start, end } = (await c.req.json().catch(() => ({}))) as { start?: number; end?: number };
+  const a = Math.round(Number(start));
+  const b = Math.round(Number(end));
+  if (!(a >= 0 && b <= 24 && b - a >= 4)) return c.json({ error: "Choose at least four hours, within the day" }, 400);
+  setSetting("dayHours", `${a}-${b}`);
+  return c.json({ dayHours: [a, b] });
+});
 app.put("/api/settings/week", async (c) => {
   const { start } = (await c.req.json().catch(() => ({}))) as { start?: number };
   if (start !== 0 && start !== 1) return c.json({ error: "Choose Monday or Sunday" }, 400);

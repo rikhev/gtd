@@ -34,7 +34,9 @@ let meta: {
   clarifyLang: "en" | "sv";
   /** Subscribed calendars (Outlook, iCloud…): names, colours and hosts; their links stay on the server. */
   calendars: FeedInfo[];
-} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, clarifyLang: "en", calendars: [] };
+  /** The hours the Calendar's week shows, [from, to), e.g. [7, 19]. */
+  dayHours: [number, number];
+} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, clarifyLang: "en", calendars: [], dayHours: [7, 19] };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 

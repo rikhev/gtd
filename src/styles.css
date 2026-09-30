@@ -4556,8 +4556,38 @@ body.is-cal-dragging {
 /* The week with its hours (desktop): an all-day band on top (deadlines, starts, follow-ups, projects, all-day
    appointments), then the day's hours, 44px each, with timed appointments where they fall. A 52px gutter carries the
    hours and lines the two up. */
+/* The desktop week fits its window (owner's request: no scrolling): the calendar takes the list's height, the band
+   what it needs, and the hours the rest. */
+/* A fitted week needs no room kept for toasts below the last row: they pass over it. */
+.list-region:has(> .calendar.is-week:not(.is-phone)) {
+  padding-bottom: 16px;
+}
+.calendar.is-week:not(.is-phone) {
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 12px;
+  box-sizing: border-box;
+}
 .cal-week.is-hours {
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* The all-day band: one line an item (the month's bars), three rows a day, then "+N more". */
+.cal-row.is-week.is-band .cal-bars {
+  top: 38px;
+  grid-auto-rows: 22px;
+  row-gap: 2px;
+}
+.cal-row.is-week.is-band .cal-bar {
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  font-size: 12px;
+}
+.cal-row.is-week.is-band .cal-bar.has-due-end {
+  padding-right: 20px;
 }
 .cal-row.is-week.is-band {
   flex: none;
@@ -4582,7 +4612,8 @@ body.is-cal-dragging {
   color: var(--ink-3);
 }
 .cal-hours {
-  height: clamp(360px, calc(100vh - 330px), 1400px);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   border-bottom: 1px solid var(--rule);
 }
@@ -4591,7 +4622,7 @@ body.is-cal-dragging {
   display: grid;
   grid-template-columns: 52px repeat(7, 1fr);
   box-sizing: content-box;
-  padding: 8px 0;
+  padding: 0 0 6px;
 }
 .cal-gutter {
   position: relative;
@@ -4609,7 +4640,7 @@ body.is-cal-dragging {
   min-width: 0;
   border-left: 1px solid var(--rule);
   background-image: linear-gradient(to bottom, var(--rule) 1px, transparent 1px);
-  background-size: 100% 44px;
+  background-size: 100% var(--hour, 44px);
 }
 .cal-hourcol.is-weekend {
   background-color: color-mix(in srgb, var(--rail) 38%, transparent);
