@@ -79,6 +79,12 @@ export async function signOut(everywhere = false) {
   await fetch(everywhere ? "/api/auth/logout-all" : "/api/auth/logout", { method: "POST" });
   state = empty;
   meta = { ...meta, signedIn: false };
+  // The appointments kept in this browser (calendarFeed.ts) leave with the session.
+  try {
+    localStorage.removeItem("gtd:calendar:known");
+  } catch {
+    /* no storage */
+  }
   emit();
 }
 

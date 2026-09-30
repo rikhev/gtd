@@ -1030,7 +1030,14 @@ body.is-col-resizing * {
 .grid:not(.is-active) .row.is-focus {
   background: var(--rail-2);
 }
-.grid.is-active .row.is-focus.is-ticked {
+/* A picker opened from the list takes the keys, but you are still in the list: its cursor row stays blue. */
+.list-region.is-active .grid .row.is-focus {
+  background: var(--select);
+  color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.grid.is-active .row.is-focus.is-ticked,
+.list-region.is-active .grid .row.is-focus.is-ticked {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
@@ -1574,27 +1581,21 @@ body.is-col-resizing * {
 }
 /*
  * Where you are (the One Blue Rule): the active region's cursor takes Selection Blue, as the focused row does in the
- * active list. The pane has no cursor row of its own, so its header bar is its cursor: blue while keys go to the pane,
- * plain otherwise, like a window's title bar when it is in front. Its lower edge takes the row's 45% accent hairline.
+ * active list. The pane has no cursor row of its own, so its header bar is its cursor, like a window's title bar when
+ * it is in front. It takes only a faint wash of the blue (22% into the sheet), so the top edge still steps lighter
+ * from the rail to the top bar to the pane (owner's request: the full blue band read dark, light, dark again), with
+ * the title in full ink. It keys off the app's region, not the pane's key handling, so it stays lit while a picker
+ * opened from the pane is up. Its lower edge keeps the pane's own rule.
  */
 .detail-bar {
   transition: background-color 120ms var(--ease), border-color 120ms var(--ease);
 }
-.detail.is-active .detail-bar {
-  background: var(--select);
-  border-bottom-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
+.app[data-region="detail"] .detail-bar {
+  background: color-mix(in srgb, var(--select) 22%, var(--sheet));
 }
-.detail.is-active .detail-title,
-.detail.is-active .detail-back {
-  color: var(--select-ink);
-}
-.detail.is-active .detail-bar .icon-btn {
-  color: color-mix(in srgb, var(--select-ink) 75%, transparent);
-}
-.detail.is-active .detail-bar .icon-btn:hover,
-.detail.is-active .detail-back:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--select-ink);
+.app[data-region="detail"] .detail-title,
+.app[data-region="detail"] .detail-back {
+  color: var(--ink);
 }
 .detail-title {
   margin: 0;

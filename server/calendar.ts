@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { db, deleteRow, getSetting, insertRow, patchRow, setSetting } from "./db.ts";
+import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { DATA_DIR, db, deleteRow, getSetting, insertRow, patchRow, setSetting } from "./db.ts";
 import { addDays, formatLong } from "../shared/dates.ts";
 
 /**
@@ -102,18 +103,7 @@ export const feedInfo = (): FeedInfo[] =>
 
 /** Sync now (owner's request): read every calendar again, whatever the cache says. A failure keeps the last good copy. */
 export async function syncAll(): Promise<FeedInfo[]> {
-  await Promise.all(
-    load().map(async (f) => {
-      try {
-        const { events } = await fetchIcs(f.url);
-        cache.set(f.id, { at: Date.now(), events });
-        errors.delete(f.id);
-        reconcile(f.id, events, lastZone);
-      } catch (e) {
-        errors.set(f.id, (e as Error).message);
-      }
-    }),
-  );
+  await Promise.all(load().map(refresh));
   return feedInfo();
 }
 
@@ -212,10 +202,11 @@ export async function addFeed(input: { name?: string; color?: string; url?: stri
   const feeds = load();
   if (feeds.some((f) => f.url === url)) return { ok: false, error: "That calendar is already subscribed." };
   try {
-    const { events } = await fetchIcs(url);
+    const { events, text } = await fetchIcs(url);
     const feed: Feed = { id: randomUUID(), name: String(input.name ?? "").trim().slice(0, 60) || "Calendar", color: validColor(input.color), url };
     save([...feeds, feed]);
     cache.set(feed.id, { at: Date.now(), events });
+    saveCopy(feed.id, text);
     return { ok: true, feed: feedInfo().find((f) => f.id === feed.id) };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -231,9 +222,10 @@ export async function updateFeed(id: string, patch: { name?: string; color?: str
   if (patch.url !== undefined) {
     try {
       const url = normalise(patch.url);
-      const { events } = await fetchIcs(url);
+      const { events, text } = await fetchIcs(url);
       f.url = url;
       cache.set(f.id, { at: Date.now(), events });
+      saveCopy(f.id, text);
       errors.delete(f.id);
       reconcile(f.id, events, lastZone);
     } catch (e) {
@@ -248,11 +240,16 @@ export function removeFeed(id: string) {
   save(load().filter((f) => f.id !== id));
   cache.delete(id);
   errors.delete(id);
+  try {
+    unlinkSync(copyPath(id));
+  } catch {
+    /* no copy kept */
+  }
 }
 
 const validColor = (c: unknown) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : "#2f6fb5");
 
-async function fetchIcs(url: string): Promise<{ events: RawEvent[]; name: string | null }> {
+async function fetchIcs(url: string): Promise<{ events: RawEvent[]; name: string | null; text: string }> {
   // Network trouble is said in words, not as the runtime's "fetch failed".
   const res = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: "follow" }).catch((e: Error) => {
     throw new Error(e.name === "TimeoutError" ? "The calendar didn't answer in time." : "Couldn't reach the calendar. Check the link, or try again later.");
@@ -262,7 +259,54 @@ async function fetchIcs(url: string): Promise<{ events: RawEvent[]; name: string
   if (!text.includes("BEGIN:VCALENDAR")) throw new Error("That link isn't a calendar (no ICS data). Use the calendar's subscribe (webcal) or ICS link.");
   if (text.length > 20_000_000) throw new Error("That calendar is too large to read.");
   const name = /^X-WR-CALNAME:(.*)$/m.exec(text.replace(/\r\n/g, "\n"))?.[1]?.trim() || null;
-  return { events: markDeclined(parse(text)), name };
+  return { events: markDeclined(parse(text)), name, text };
+}
+
+/*
+ * The last good copy of each calendar is kept on disk (owner's request: the calendar was empty every time the app was
+ * opened). A request answers at once from the copy in hand; one older than CACHE_MS is read again behind it, so nothing
+ * waits on the network except a calendar never read before. A restart (a deploy) starts from the copies on disk.
+ */
+const COPY_DIR = `${DATA_DIR}/calendars`;
+const copyPath = (id: string) => `${COPY_DIR}/${id}.ics`;
+function saveCopy(id: string, text: string) {
+  try {
+    mkdirSync(COPY_DIR, { recursive: true });
+    writeFileSync(copyPath(id), text);
+  } catch {
+    /* no disk copy: the memory cache still serves */
+  }
+}
+/** The copy on disk, as the cache, dated when it was read. False when there is none. */
+function fromDisk(id: string): boolean {
+  try {
+    const at = statSync(copyPath(id)).mtimeMs;
+    cache.set(id, { at, events: markDeclined(parse(readFileSync(copyPath(id), "utf8"))) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const reading = new Map<string, Promise<void>>();
+/** Read a calendar again now (one read at a time per calendar); a failure keeps the last good copy and says so. */
+function refresh(f: Feed): Promise<void> {
+  const running = reading.get(f.id);
+  if (running) return running;
+  const p = (async () => {
+    try {
+      const { events, text } = await fetchIcs(f.url);
+      cache.set(f.id, { at: Date.now(), events });
+      errors.delete(f.id);
+      saveCopy(f.id, text);
+      reconcile(f.id, events, lastZone);
+    } catch (e) {
+      errors.set(f.id, (e as Error).message);
+    } finally {
+      reading.delete(f.id);
+    }
+  })();
+  reading.set(f.id, p);
+  return p;
 }
 
 /**
@@ -297,18 +341,11 @@ export async function eventsBetween(from: string, to: string, zone: string = SER
   const out: CalEvent[] = [];
   await Promise.all(
     feeds.map(async (f) => {
+      if (!cache.has(f.id)) fromDisk(f.id);
       const c = cache.get(f.id);
-      if (!c || Date.now() - c.at > CACHE_MS) {
-        try {
-          const { events } = await fetchIcs(f.url);
-          cache.set(f.id, { at: Date.now(), events });
-          errors.delete(f.id);
-          reconcile(f.id, events, zone);
-        } catch (e) {
-          // A failed refresh keeps the last good copy, and says so in Settings.
-          errors.set(f.id, (e as Error).message);
-        }
-      }
+      // Never read: wait for the first copy. Stale: answer from the copy in hand and read it again behind.
+      if (!c) await refresh(f);
+      else if (Date.now() - c.at > CACHE_MS) void refresh(f);
       const got = cache.get(f.id);
       if (got) out.push(...expand(got.events, from, to, zone).map((e) => ({ ...e, feed: f.id, key: `${f.id}:${e.key}` })));
     }),

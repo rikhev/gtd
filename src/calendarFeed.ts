@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { load, notify, plural, updateMeta, useMeta } from "./store.ts";
 
 /** One appointment from a subscribed calendar, in local time (server/calendar.ts). Read-only. */
@@ -30,9 +30,56 @@ export interface FeedInfo {
   syncedAt?: string;
 }
 
-// Fetched per range and kept for a few minutes, so moving between weeks and views doesn't ask again.
-const cache = new Map<string, { at: number; events: CalEvent[] }>();
+/*
+ * Every appointment the calendars have given, kept in this browser (owner's request: the calendar was empty each time
+ * the app opened, and emptied when a click moved it into a month not yet fetched). Any view shows what is known for its
+ * days at once; each range is asked for again when it hasn't been for a few minutes, and the answer replaces what was
+ * known on those days, so a deleted or moved appointment goes. Only the weeks around today are saved.
+ */
+const STORE_KEY = "gtd:calendar:known";
 const FRESH_MS = 5 * 60_000;
+const byKey = new Map<string, CalEvent>(
+  (() => {
+    try {
+      return (JSON.parse(localStorage.getItem(STORE_KEY) ?? "[]") as CalEvent[]).map((e) => [e.key, e] as [string, CalEvent]);
+    } catch {
+      return [];
+    }
+  })(),
+);
+/** When each range (calendars, days, version) was last asked for. */
+const askedAt = new Map<string, number>();
+const indexListeners = new Set<() => void>();
+const subscribeKnown = (l: () => void) => {
+  indexListeners.add(l);
+  return () => indexListeners.delete(l);
+};
+let knownVersion = 0;
+const overlaps = (e: CalEvent, from: string, to: string) => e.endDate >= from && e.date <= to;
+
+let saveTimer: number | undefined;
+function saveKnown() {
+  window.clearTimeout(saveTimer);
+  saveTimer = window.setTimeout(() => {
+    const d = new Date();
+    const iso = (n: number) => new Date(d.getTime() + n * 86_400_000).toISOString().slice(0, 10);
+    const [lo, hi] = [iso(-45), iso(120)];
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify([...byKey.values()].filter((e) => overlaps(e, lo, hi))));
+    } catch {
+      /* no storage, or full: the calendar still works, it only starts empty next time */
+    }
+  }, 400);
+}
+
+/** A fresh answer for days from..to: it replaces everything known on those days. */
+function absorb(from: string, to: string, events: CalEvent[]) {
+  for (const [k, e] of byKey) if (overlaps(e, from, to)) byKey.delete(k);
+  for (const e of events) byKey.set(e.key, e);
+  knownVersion++;
+  indexListeners.forEach((l) => l());
+  saveKnown();
+}
 
 /** The appointments on days from..to from every subscribed calendar that isn't hidden here. */
 export function useEvents(from: string, to: string): { events: CalEvent[]; feeds: FeedInfo[] } {
@@ -40,45 +87,39 @@ export function useEvents(from: string, to: string): { events: CalEvent[]; feeds
   const hidden = useHiddenFeeds();
   // A sync (or a changed calendar) bumps the version, so every open view asks again.
   const version = useSyncExternalStore(subscribeVersion, () => version_);
+  const known = useSyncExternalStore(subscribeKnown, () => knownVersion);
   const ids = calendars.map((c) => c.id).join(",");
   const key = `${ids}|${from}|${to}|${version}`;
-  const hit = cache.get(key);
-  const [, bump] = useState(0);
   useEffect(() => {
     if (!ids) return;
-    const c = cache.get(key);
-    if (c && Date.now() - c.at < FRESH_MS) return;
-    let live = true;
+    const at = askedAt.get(key);
+    if (at && Date.now() - at < FRESH_MS) return;
+    askedAt.set(key, Date.now());
     // The server converts every appointment to this browser's time zone (it may itself run on UTC).
     fetch(`/api/calendar/events?from=${from}&to=${to}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
       .then((r) => r.json())
       .then((j: { events?: CalEvent[]; linkNotes?: string[] }) => {
         linksFollowed(j.linkNotes);
-        cache.set(key, { at: Date.now(), events: j.events ?? [] });
-        for (const e of j.events ?? []) byKey.set(e.key, e);
-        indexListeners.forEach((l) => l());
-        if (live) bump((n) => n + 1);
+        if (j.events) absorb(from, to, j.events);
       })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
+      .catch(() => askedAt.delete(key));
   }, [key, ids, from, to]);
-  if (!ids) return { events: [], feeds: [] };
-  return { events: (hit?.events ?? []).filter((e) => !hidden.has(e.feed) && calendars.some((c) => c.id === e.feed)), feeds: calendars };
+  const events = useMemo(
+    () =>
+      ids
+        ? [...byKey.values()]
+            .filter((e) => overlaps(e, from, to) && !hidden.has(e.feed) && calendars.some((c) => c.id === e.feed))
+            .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""))
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [known, ids, from, to, hidden],
+  );
+  return { events, feeds: ids ? calendars : [] };
 }
 
-/** Every appointment seen, by key, for the details pane (appointments aren't kept in the store). */
-const byKey = new Map<string, CalEvent>();
-const indexListeners = new Set<() => void>();
+/** One appointment, by key, for the details pane (appointments aren't kept in the store). */
 export function useEvent(key: string | null): CalEvent | undefined {
-  return useSyncExternalStore(
-    (l) => {
-      indexListeners.add(l);
-      return () => indexListeners.delete(l);
-    },
-    () => (key ? byKey.get(key) : undefined),
-  );
+  return useSyncExternalStore(subscribeKnown, () => (key ? byKey.get(key) : undefined));
 }
 
 /**
@@ -99,7 +140,8 @@ const subscribeVersion = (l: () => void) => {
 };
 /** Forget what was fetched (a calendar added, changed or removed, or synced): open views fetch again. */
 export const clearEvents = () => {
-  cache.clear();
+  // What is known stays on screen until the fresh answers replace it: nothing empties while a sync runs.
+  askedAt.clear();
   version_++;
   versionListeners.forEach((l) => l());
 };
