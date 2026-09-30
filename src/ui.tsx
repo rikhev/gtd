@@ -45,6 +45,8 @@ export type PickerSpec =
       /** Nothing is pre-highlighted: Enter does nothing until you type or arrow to a choice. */
       mustChoose?: boolean;
       placeholder?: string;
+      /** Opened by the mouse (a right-click): the menu appears at this point instead of under the focused row. */
+      at?: { x: number; y: number };
       onPick: (id: string | null) => void;
     }
   | { type: "date"; title: string; current: string | null; onPick: (d: string | null) => void }

@@ -59,9 +59,11 @@ export function Picker({ spec, close }: Props) {
     const r = anchor?.getBoundingClientRect();
     const w = box.current?.offsetWidth ?? 320;
     const h = box.current?.offsetHeight ?? 280;
-    let top = r ? r.bottom + 4 : 120;
-    let left = r ? Math.max(anchor === valueEl ? r.left : r.left + 40, 12) : 320;
-    if (top + h > window.innerHeight - 12) top = Math.max(12, (r ? r.top : top) - h - 4);
+    // A menu opened with the mouse opens at the pointer; one opened from the keyboard, under the focused row.
+    const at = spec.type === "list" ? spec.at : undefined;
+    let top = at ? at.y + 2 : r ? r.bottom + 4 : 120;
+    let left = at ? at.x + 2 : r ? Math.max(anchor === valueEl ? r.left : r.left + 40, 12) : 320;
+    if (top + h > window.innerHeight - 12) top = Math.max(12, (at ? at.y : r ? r.top : top) - h - 4);
     if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;
     setPos({ top, left });
     input.current?.focus();

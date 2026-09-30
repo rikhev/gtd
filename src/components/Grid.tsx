@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { isEditable, IS_MAC, isTouchDevice, pressedByTouch, useCommands, type Command } from "../keys.ts";
+import { activeCommands, isEditable, IS_MAC, isTouchDevice, pressedByTouch, runKey, useCommands, type Command } from "../keys.ts";
 import { useUI } from "../ui.tsx";
 import { KeyHints } from "./bits.tsx";
 
@@ -12,6 +12,9 @@ export interface Column<T> {
   drop?: number;
   /** Offered but hidden until the owner shows it (Show or hide columns…). */
   optional?: boolean;
+  /** An unlabelled column that still sorts (the project lamp): what it sorts by, and the small glyph its heading shows. */
+  sortName?: string;
+  headIcon?: ReactNode;
   /** Whether a row has nothing in this column. When no row in the list has anything, the column steps aside. */
   blank?: (row: T) => boolean;
   render: (row: T) => ReactNode;
@@ -22,6 +25,40 @@ const COMPACT_HIDE = ["done", "kind"];
 /** Names for the unlabelled lead columns, for screen readers. */
 const LEAD_NAME: Record<string, string> = { mark: "Flag or status", done: "Done", kind: "Kind" };
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
+
+/** Whether a point is over a glyph of text (not merely inside an element that holds text): where a press selects text. */
+function overText(x: number, y: number): boolean {
+  type CaretDoc = Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const doc = document as CaretDoc;
+  let node: Node | null = null;
+  let offset = 0;
+  const pos = doc.caretPositionFromPoint?.(x, y);
+  if (pos) {
+    node = pos.offsetNode;
+    offset = pos.offset;
+  } else {
+    const r = doc.caretRangeFromPoint?.(x, y);
+    if (r) {
+      node = r.startContainer;
+      offset = r.startOffset;
+    }
+  }
+  if (!node || node.nodeType !== Node.TEXT_NODE || !node.textContent?.trim()) return false;
+  // The caret lands beside the nearest character even past the end of a line: check the characters on either side.
+  const len = node.textContent.length;
+  for (const i of [offset - 1, offset]) {
+    if (i < 0 || i >= len) continue;
+    const range = document.createRange();
+    range.setStart(node, i);
+    range.setEnd(node, i + 1);
+    const b = range.getBoundingClientRect();
+    if (x >= b.left - 1 && x <= b.right + 1 && y >= b.top - 1 && y <= b.bottom + 1) return true;
+  }
+  return false;
+}
 
 /** Smallest width a column can take: a fixed px width, or the minimum of a minmax(). */
 const minWidth = (w: string) => Number((/^minmax\((\d+)px/.exec(w) ?? /^(\d+)px/.exec(w))?.[1] ?? 0);
@@ -443,10 +480,11 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     return [...fixed, ...movable];
   }, [allColumns, colOrder, lead]);
   const toggleable = ordered.slice(lead).filter((c) => c.key !== lockedKey);
-  const chooseColumns = (current?: string) =>
+  const chooseColumns = (current?: string, at?: { x: number; y: number }) =>
     ui.openPicker({
       type: "list",
       title: "Show columns",
+      at,
       items: toggleable.map((c) => ({ id: c.key, label: c.label, hint: !isShown(c) ? "Hidden" : blankKeys.has(c.key) ? "Shown when filled" : "Shown", section: "columns" })),
       current: current ?? null,
       onPick: (key) => {
@@ -455,7 +493,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
         if (!c) return;
         setColShow((m) => ({ ...m, [key]: !isShown(c) }));
         // The picker comes back on the same column, so several can be switched in a row.
-        window.setTimeout(() => chooseColumns(key), 0);
+        window.setTimeout(() => chooseColumns(key, at), 0);
       },
     });
   // A column no row has anything in (Files in an Inbox of notes, Follow up when nothing needs chasing) steps aside
@@ -963,6 +1001,9 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       if (isEditable(t) || t.closest("button, a, input, textarea, select, label, [role=button], .chev")) return;
       const mod = IS_MAC ? e.metaKey : e.ctrlKey;
       const onRow = Boolean(t.closest(".row, .group-head"));
+      // A press on text outside the rows (the view title, its count, an empty state's words) selects that text, as
+      // anywhere else; the band starts from empty space. Rows stay items: they drag or draw the band.
+      if (!onRow && !mod && !e.shiftKey && overText(e.clientX, e.clientY)) return;
       // ⇧-click and ⌘/Ctrl-click select rows, as in Finder; the browser would otherwise select the text between the clicks.
       if ((e.shiftKey || mod) && onRow) {
         e.preventDefault();
@@ -1085,7 +1126,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
           onContextMenu={(e) => {
             if (!toggleable.length) return;
             e.preventDefault();
-            chooseColumns();
+            chooseColumns(undefined, { x: e.clientX, y: e.clientY });
           }}
         >
           {colDrop !== null && <span className="col-drop" style={{ left: colDrop }} aria-hidden />}
@@ -1108,7 +1149,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
             </div>
           )}
           {columns.map((c, i) => {
-            const sortable = Boolean(sort && c.label && sort.keys.includes(c.key));
+            const name = c.label || c.sortName || "";
+            const sortable = Boolean(sort && name && sort.keys.includes(c.key));
             const on = sortable && sort!.state?.key === c.key ? sort!.state!.dir : 0;
             return (
               <div
@@ -1124,15 +1166,16 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                   <button
                     type="button"
                     tabIndex={-1}
-                    className="gh-sort"
-                    title={on === 1 ? `Sorted by ${c.label.toLowerCase()}, A–Z: click for Z–A` : on === -1 ? `Sorted by ${c.label.toLowerCase()}, Z–A: click for the list's own order` : `Sort by ${c.label.toLowerCase()}`}
+                    className={`gh-sort ${c.label ? "" : "is-icon"}`}
+                    aria-label={c.label ? undefined : `Sort by ${name.toLowerCase()}`}
+                    title={on === 1 ? `Sorted by ${name.toLowerCase()}, A–Z: click for Z–A` : on === -1 ? `Sorted by ${name.toLowerCase()}, Z–A: click for the list's own order` : `Sort by ${name.toLowerCase()}`}
                     onMouseDown={(e) => {
                       e.stopPropagation();
                       startColDrag({ ...e, currentTarget: e.currentTarget.parentElement as HTMLElement, stopPropagation: () => {}, preventDefault: () => {} }, c.key);
                     }}
                     onClick={() => sort!.onSort(on === 0 ? { key: c.key, dir: 1 } : on === 1 ? { key: c.key, dir: -1 } : null)}
                   >
-                    {c.label}
+                    {c.label || c.headIcon}
                     <svg className="gh-arrow" viewBox="0 0 10 10" width="10" height="10" aria-hidden="true">
                       <path d={on === -1 ? "M2 3.5l3 3 3-3" : "M2 6.5l3-3 3 3"} />
                     </svg>
@@ -1229,7 +1272,15 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                         // A tap opens the row on a touch screen, where there is no Enter and no double-click.
                         if (pressedByTouch() && isTouchDevice()) onOpen?.(k);
                       }}
-                      onDoubleClick={() => onOpen?.(k)}
+                      // Double-click the subject to rename it in place (the list's own F2), anywhere else to open
+                      // the row's details, as in a file list. Lists without a rename open.
+                      onDoubleClick={(e) => {
+                        const onSubject = Boolean(lockedKey && (e.target as HTMLElement).closest(`.cell.c-${lockedKey}`));
+                        if (onSubject && !isEditable(e.target) && activeCommands().some((c) => c.keys?.includes("f2") && c.enabled !== false)) {
+                          window.getSelection()?.removeAllRanges();
+                          runKey("f2");
+                        } else onOpen?.(k);
+                      }}
                       onPointerDown={(e) => swipe && e.pointerType !== "mouse" && startSwipe(e, k)}
                     >
                       {columns.map((c) => (

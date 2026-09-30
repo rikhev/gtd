@@ -29,6 +29,10 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `W` | Start the Weekly Review |
 | `⌘⇧,` | Settings |
 | `⇧N` | Capture to the Inbox. Enter files the item and the line stays open. `⇧↵` adds a new line, Esc closes |
+| `⌥N` | New project from anywhere: name its outcome, pick its area, then give it a first next action (Esc skips that). On Projects, `N` adds one in place |
+| `⌥T` | New next action from anywhere: what to do, its context, then its project (`No project` first; type a new name to create one). On Projects, `T` adds one to the project under the cursor |
+| `⌥W` | New Waiting For item from anywhere: what you're waiting for, who or what you wait on, then its project. Waiting since today |
+| `⇧W` | On Projects (and the Weekly Review's Projects step): add a Waiting For item to the project under the cursor, as `T` adds a next action |
 | `K` / `⌥K` | Clarify the Inbox / clarify it with Claude |
 | `↑↓` `⌘↑↓` `fn↑↓` | Move / jump to the first or last row / page |
 | `Space` `⇧↑↓` `⌘A` | Tick a row / extend the range (`⇧Home`/`⇧End` to the ends) / select all. A plain arrow, Home/End or click clears the selection, as in Finder; `⇧`-click extends, `⌘`-click ticks, and dragging from anywhere beside the rail draws a selection rectangle (`⌘`-drag adds to the selection; a click on empty space clears it) |

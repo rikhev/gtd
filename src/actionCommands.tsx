@@ -103,6 +103,78 @@ export function destinationItems(prefix = "") {
   ];
 }
 
+/**
+ * The last step of adding from anywhere: the item's project, if it has one ("No project" first; typing a new name
+ * creates the project). `make` builds the action for the chosen project.
+ */
+function askProjectThenCreate(ui: UI, title: string, extra: Op[], make: (project_id: ID | null) => Action, what: string) {
+  window.setTimeout(
+    () =>
+      ui.openPicker({
+        type: "list",
+        title: `Project for “${title}”`,
+        items: projectItems(),
+        current: null,
+        noneLabel: "No project",
+        createLabel: (q) => `Create project “${q}”`,
+        onCreate: (q) => {
+          const p = newProject({ title: q });
+          mutate(`${what} in new project “${q}”`, [...extra, { type: "create", table: "projects", row: { ...p } }, { type: "create", table: "actions", row: { ...make(p.id) } }]);
+        },
+        onPick: (project_id) => {
+          const name = project_id ? getState().projects.find((p) => p.id === project_id)?.title : null;
+          mutate(name ? `${what} added to “${name}”` : `${what} added: “${title}”`, [...extra, { type: "create", table: "actions", row: { ...make(project_id) } }]);
+        },
+      }),
+    0,
+  );
+}
+
+/**
+ * A next action from anywhere (⌥T): what to do, where (a context, required as everywhere), then its project if it
+ * has one. It lands on Next Actions; the view stays put.
+ */
+export function quickAddNextAction(ui: UI) {
+  ui.openPicker({
+    type: "text",
+    title: "New next action",
+    current: "",
+    placeholder: "What's the next physical step, verb first",
+    onPick: (v) => {
+      const title = (v ?? "").trim();
+      if (!title) return;
+      askContext(ui, `Context for “${title}”`, (context_id, extra) =>
+        askProjectThenCreate(ui, title, extra, (project_id) => newAction({ title, context_id, project_id, status: "next" }), "Next action"),
+      );
+    },
+  });
+}
+
+/**
+ * A Waiting For item from anywhere (⌥W): what you're waiting for, who or what you wait on (required, as everywhere
+ * in Waiting For), then its project if it has one. Waiting since today; a follow-up date can be set on the item.
+ */
+export function quickAddWaiting(ui: UI) {
+  ui.openPicker({
+    type: "text",
+    title: "New waiting for",
+    current: "",
+    placeholder: "What are you waiting for?",
+    onPick: (v) => {
+      const title = (v ?? "").trim();
+      if (!title) return;
+      window.setTimeout(
+        () =>
+          askWaitingOn(ui, null, (who) =>
+            askProjectThenCreate(ui, title, [], (project_id) => newAction({ title, project_id, status: "waiting", waiting_who: who, waiting_since: today() }), `Waiting on ${who}`),
+            `Waiting on, for “${title}”`,
+          ),
+        0,
+      );
+    },
+  });
+}
+
 export function projectItems() {
   const s = getState();
   return s.projects

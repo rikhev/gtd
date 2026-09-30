@@ -266,6 +266,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       enabled: step.id === "projects" && focusRow?.kind === "project",
       run: () => focusRow && addNextAction(focusRow.id),
     },
+    {
+      id: "rv.addwaiting",
+      label: "Add a waiting for to this project",
+      group: "Review",
+      keys: ["shift+w"],
+      enabled: step.id === "projects" && focusRow?.kind === "project",
+      run: () => focusRow && projectEditors(ui).addWaiting(focusRow.id),
+    },
     ...STEPS.slice(0, -1).map((st, i) => ({
       id: `rv.jump${i + 1}`,
       label: `Go to step: ${st.title}`,
@@ -432,7 +440,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             // On touch the step bar is right above: moving between steps is a tap there, not a button here.
             ...(step.id !== "finish" ? [{ k: "mod+.", label: "Next step", touch: "hide" as const }] : []),
             { k: "mod+,", label: "Previous", touch: "hide" as const },
-            ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "n", label: "Add next action" }] : []),
+            ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "n", label: "Add next action" }, { k: "shift+w", label: "Add waiting for" }] : []),
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id !== "finish" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),

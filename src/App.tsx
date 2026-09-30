@@ -4,12 +4,13 @@ import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, type C
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
+import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView } from "./views/TrashView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { ActionsView } from "./views/ActionsView.tsx";
 import { InboxView } from "./views/InboxView.tsx";
-import { ProjectsView } from "./views/ProjectsView.tsx";
+import { ProjectsView, projectEditors } from "./views/ProjectsView.tsx";
 import { SomedayView, ReferenceView } from "./views/SimpleViews.tsx";
 import { ClarifyView } from "./views/ClarifyView.tsx";
 // Views opened now and then load when first opened, so the lists come up faster on a cold phone.
@@ -303,6 +304,12 @@ export default function App() {
     { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
     { id: "g.clarifyclaude", label: `Clarify with Claude${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["alt+k"], run: () => ui.startClarify(undefined, true) },
     { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["w"], run: ui.startReview },
+    // A project from anywhere: its outcome, its area, its first next action (on Projects, N adds one in place).
+    { id: "g.newproject", label: "New project", group: "Projects", keys: ["alt+n"], run: () => projectEditors(ui).create() },
+    // A next action from anywhere: what, where (context), and its project if any (T on Projects adds to one).
+    { id: "g.newaction", label: "New next action", group: "Actions", keys: ["alt+t"], run: () => quickAddNextAction(ui) },
+    // Something you're waiting for, from anywhere: what, who or what you wait on, and its project if any.
+    { id: "g.newwaiting", label: "New waiting for", group: "Actions", keys: ["alt+w"], run: () => quickAddWaiting(ui) },
     { id: "g.region", label: "Next region (lists → items → details)", group: "Move", keys: ["alt+tab", "mod+f6"], inInput: true, run: () => cycleRegion(1) },
     { id: "g.regionback", label: "Previous region", group: "Move", keys: ["alt+shift+tab", "mod+shift+f6"], inInput: true, run: () => cycleRegion(-1) },
     // Light, dark, or follow the system: the switch goes to the other theme from whatever is showing now.

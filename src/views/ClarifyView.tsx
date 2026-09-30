@@ -7,7 +7,7 @@ import { RAIL } from "../components/Chrome.tsx";
 import { promptApiKey } from "../apiKey.ts";
 import { suggestRules } from "../rules.ts";
 import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
-import { stuffTitle } from "./InboxView.tsx";
+import { splitStuff, stuffTitle } from "./InboxView.tsx";
 import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
 import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
@@ -363,11 +363,13 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       }
       if (newProjectId) moveFiles("project", newProjectId);
       else if (created[0]) moveFiles("action", created[0]);
-      // Clarifying by hand keeps the original capture text with the first action so nothing is lost; Claude's
-      // clarifications leave the notes alone (owner's decision): its proposal already carries what matters.
-      if (byHand && created[0] && current.text.trim() && current.text.trim() !== d.actions[0]?.title) {
+      // Clarifying by hand carries the item's own notes (everything under its first line, as the Inbox pane shows
+      // them) over to the first action, as they are: no "Captured:" copy of the whole capture (owner's decision).
+      // Claude's clarifications leave the notes alone: its proposal already carries what matters.
+      const carried = byHand ? splitStuff(current).rest.trim() : "";
+      if (carried && created[0]) {
         const i = ops.findIndex((o) => o.type === "create" && o.table === "actions" && (o.row as { id: string }).id === created[0]);
-        if (i >= 0) (ops[i] as { row: Record<string, unknown> }).row.notes = `Captured: ${current.text.trim()}`;
+        if (i >= 0) (ops[i] as { row: Record<string, unknown> }).row.notes = carried;
       }
       const doneCount = d.actions.filter((a) => a.done).length;
       label = [

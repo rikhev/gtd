@@ -6,8 +6,8 @@ import { Grid, bakeDrop, useListNav, usePersisted, useSort, sortGroups, isGroupK
 import { AreaName, DateCell, DoneBox, Lamp } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { areaItems, areaName, askContext, createAreaOp } from "../actionCommands.tsx";
-import { formatLong } from "../../shared/dates.ts";
+import { areaItems, areaName, askContext, askWaitingOn, createAreaOp } from "../actionCommands.tsx";
+import { formatLong, today } from "../../shared/dates.ts";
 import type { ID, Op, Project } from "../../shared/types.ts";
 
 type Filter = "active" | "all";
@@ -15,6 +15,71 @@ type Filter = "active" | "all";
 export function projectEditors(ui: ReturnType<typeof useUI>) {
   const n = (ids: ID[]) => named("projects", ids, "project");
   const api = {
+    /**
+     * A new project from anywhere (⌥N): its outcome, verb first; its area (or none); then its first next action, as
+     * GTD asks of every project. Esc at the last step keeps the project without one (it then shows as stalled).
+     */
+    create() {
+      ui.openPicker({
+        type: "text",
+        title: "New project",
+        current: "",
+        placeholder: "The outcome, verb first",
+        onPick: (v) => {
+          const title = (v ?? "").trim();
+          if (!title) return;
+          const make = (area_id: ID | null, extra: Op[] = []) => {
+            const p = newProject({ title, area_id });
+            mutate(`New project “${title}”`, [...extra, { type: "create", table: "projects", row: { ...p } }]);
+            // Next tick, so the area picker has closed before the next-action prompt opens.
+            window.setTimeout(() => api.addNextAction(p.id), 0);
+          };
+          if (!getState().areas.length) return make(null);
+          ui.openPicker({
+            type: "list",
+            title: `Area for “${title}”`,
+            items: areaItems(),
+            current: null,
+            noneLabel: "No area",
+            createLabel: (q) => `Create area “${q}”`,
+            onCreate: (q) => {
+              const { id, op } = createAreaOp(q);
+              make(id, [op]);
+            },
+            onPick: (id) => make(id),
+          });
+        },
+      });
+    },
+    /** Give a project something it waits on: what, then who or what (required, as everywhere in Waiting For). */
+    addWaiting(projectId: ID) {
+      const p = getState().projects.find((x) => x.id === projectId);
+      if (!p) return;
+      const name = p.title || "Untitled project";
+      ui.openPicker({
+        type: "text",
+        title: `Waiting for, in “${name}”`,
+        current: "",
+        placeholder: "What are you waiting for?",
+        onPick: (v) => {
+          const title = (v ?? "").trim();
+          if (!title) return;
+          window.setTimeout(
+            () =>
+              askWaitingOn(
+                ui,
+                null,
+                (who) => {
+                  const a = newAction({ title, project_id: projectId, status: "waiting", waiting_who: who, waiting_since: today() });
+                  mutate(`Waiting on ${who} added to “${name}”`, [{ type: "create", table: "actions", row: { ...a } }]);
+                },
+                `Waiting on, for “${title}”`,
+              ),
+            0,
+          );
+        },
+      });
+    },
     /** Give a project a next action: what to do, then where (a context is required, as in Clarify). */
     addNextAction(projectId: ID, added?: (actionId: ID) => void) {
       const p = getState().projects.find((x) => x.id === projectId);
@@ -196,6 +261,13 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   const [sort, setSort] = useSort("projects");
   const sorters: Sorters<Project> = useMemo(
     () => ({
+      // Status, what needs you first: stalled, starting today with nothing to do, waiting, on track, not started yet
+      // (soonest first), someday, completed.
+      mark: (p) => {
+        const h = projectHealth(s, p);
+        const rank = h === "stalled" ? 0 : h === "scheduled" && !notStarted(p) ? 1 : h === "waiting" ? 2 : h === "ok" ? 3 : h === "scheduled" ? 4 : h === "someday" ? 5 : 6;
+        return `${rank}|${h === "scheduled" ? p.start ?? "" : ""}`;
+      },
       subject: (p) => p.title,
       area: (p) => (p.area_id ? areaById.get(p.area_id)?.name : undefined),
       next: (p) => firstNext.get(p.id),
@@ -205,7 +277,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       back: (p) => p.bring_back,
       created: (p) => p.created_at,
     }),
-    [areaById, firstNext, openCount],
+    [areaById, firstNext, openCount, s],
   );
   const baseGroups: GridGroup<Project>[] = useMemo(() => {
     if (!groupByArea) return [{ key: "all", label: "", rows }];
@@ -294,6 +366,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   const commands: Command[] = [
     ...nav.commands,
     { id: "proj.addnext", label: "Add a next action to the project", group: "Projects", keys: ["t"], enabled: Boolean(focusId), run: () => focusId && ed.addNextAction(focusId) },
+    { id: "proj.addwaiting", label: "Add a waiting for to the project", group: "Projects", keys: ["shift+w"], enabled: Boolean(focusId), run: () => focusId && ed.addWaiting(focusId) },
     { id: "proj.new", label: "New project", group: "Projects", keys: ["n"], run: create },
     { id: "proj.open", label: "Open project", group: "Projects", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "project", id: focusId }, true) },
     { id: "proj.jump", label: "Jump to its next action", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
@@ -321,6 +394,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           title: "View",
           items: [
             { id: "area", label: groupByArea ? "Don't group by area" : "Group by area", section: "group" },
+            { id: "s:mark", label: "Sort by status", hint: sort?.key === "mark" ? "Current" : "", section: "sort" },
+            { id: "s:due", label: "Sort by due date", hint: sort?.key === "due" ? "Current" : "", section: "sort" },
+            { id: "s:", label: "Manual order", hint: !sort ? "Current" : "", section: "sort" },
             { id: "filter", label: filter === "active" ? "Show someday and archived projects" : "Show active projects only", section: "show" },
             ...(filter === "active" ? [{ id: "showdone", label: showDone ? `Hide completed projects${doneHere.length ? ` (${doneHere.length})` : ""}` : `Show completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, section: "done" }] : []),
             ...(doneHere.length ? [{ id: "archive", label: `Archive completed projects (${doneHere.length})`, section: "done" }] : []),
@@ -329,6 +405,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             if (id === "showdone") setShowDone(!showDone);
             if (id === "archive") ed.archive(doneHere);
             if (id === "area") setGroupByArea(!groupByArea);
+            if (id?.startsWith("s:")) setSort(id === "s:" ? null : { key: id.slice(2), dir: 1 });
             if (id === "filter") setFilter(filter === "active" ? "all" : "active");
           },
         }),
@@ -341,6 +418,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       key: "mark",
       label: "",
       width: "30px",
+      // The lamp column sorts by status from its heading: a small ring stands for it.
+      sortName: "Status",
+      headIcon: <span className="gh-lamp" aria-hidden="true" />,
       render: (p) => <Lamp health={projectHealth(s, p)} start={p.start} />,
     },
     {
