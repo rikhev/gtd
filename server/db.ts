@@ -111,10 +111,15 @@ if (!(db.prepare("PRAGMA table_info(actions)").all() as { name: string }[]).some
 // Areas carry a colour, shown only in their "#". Existing areas take the palette in their order, once.
 if (!(db.prepare("PRAGMA table_info(areas)").all() as { name: string }[]).some((c) => c.name === "color")) {
   db.exec("ALTER TABLE areas ADD COLUMN color TEXT");
-  const palette = ["#2f6fb5", "#0f8a8a", "#8a5a2b", "#6b4fa0", "#a3476e", "#b7791f", "#5b6b2e", "#5b6b7e"];
+  const palette = ["#2f6fb5", "#0e8181", "#8a5a2b", "#6b4fa0", "#a3476e", "#9f691b", "#5b6b2e", "#5b6b7e"];
   const rows = db.prepare("SELECT id FROM areas ORDER BY sort").all() as { id: string }[];
   const set = db.prepare("UPDATE areas SET color = ? WHERE id = ?");
   rows.forEach((r, i) => set.run(palette[i % palette.length], r.id));
+}
+// Teal and Ochre were darkened so the white "@" or "#" on them reads (4.5:1, after the critique): contexts and areas
+// that already carry the old values take the new ones. Runs every start and changes nothing once done.
+for (const [was, now] of [["#0f8a8a", "#0e8181"], ["#b7791f", "#9f691b"]]) {
+  for (const t of ["contexts", "areas"]) db.prepare(`UPDATE ${t} SET color = ? WHERE lower(color) = ?`).run(now, was);
 }
 
 /** Owner preferences kept on the server (so every browser agrees). */
@@ -135,14 +140,14 @@ function seed() {
     ["@computer", "#2f6fb5"],
     ["@phone", "#5b6b7e"],
     ["@errands", "#8a5a2b"],
-    ["@home", "#b7791f"],
+    ["@home", "#9f691b"],
     ["@office", "#6b4fa0"],
-    ["@agenda", "#0f8a8a"],
+    ["@agenda", "#0e8181"],
   ];
   const ins = db.prepare("INSERT INTO contexts (id, name, color, sort) VALUES (?, ?, ?, ?)");
   contexts.forEach(([name, color], i) => ins.run(randomUUID(), name, color, i));
   const insA = db.prepare("INSERT INTO areas (id, name, sort, color) VALUES (?, ?, ?, ?)");
-  ([["Work", "#2f6fb5"], ["Home", "#0f8a8a"], ["Health", "#8a5a2b"], ["Finance", "#6b4fa0"]] as const).forEach(([name, color], i) => insA.run(randomUUID(), name, i, color));
+  ([["Work", "#2f6fb5"], ["Home", "#0e8181"], ["Health", "#8a5a2b"], ["Finance", "#6b4fa0"]] as const).forEach(([name, color], i) => insA.run(randomUUID(), name, i, color));
 }
 seed();
 

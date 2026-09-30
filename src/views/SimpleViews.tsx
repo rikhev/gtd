@@ -135,7 +135,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
     {
       key: "subject",
       label: "Someday / Maybe",
-      width: "minmax(240px, 1fr)",
+      width: "minmax(240px, 2fr)",
       render: (r) =>
         editing === r.key ? (
           <InlineEdit
@@ -154,7 +154,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "proj", label: "Project", width: "minmax(120px, 200px)", blank: (r) => !r.project, render: (r) => (r.project ? <span className="proj-cell">{r.project}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "proj", label: "Project", width: "minmax(120px, 1fr)", blank: (r) => !r.project, render: (r) => (r.project ? <span className="proj-cell">{r.project}</span> : <span className="dash" aria-hidden="true">–</span>) },
     { key: "back", label: "Bring back", width: "100px", blank: (r) => !r.bring_back, render: (r) => <DateCell date={r.bring_back} kind="plain" /> },
   ];
 
@@ -262,7 +262,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
     {
       key: "subject",
       label: "Reference",
-      width: "minmax(240px, 1fr)",
+      width: "minmax(240px, 2fr)",
       render: (r) =>
         editing === r.id ? (
           <InlineEdit
@@ -281,7 +281,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "proj", label: "Project", width: "minmax(120px, 200px)", blank: (r) => !r.project_id, render: (r) => <span className="proj-cell">{s.projects.find((p) => p.id === r.project_id)?.title ?? <span className="dash" aria-hidden="true">–</span>}</span> },
+    { key: "proj", label: "Project", width: "minmax(120px, 1fr)", blank: (r) => !r.project_id, render: (r) => <span className="proj-cell">{s.projects.find((p) => p.id === r.project_id)?.title ?? <span className="dash" aria-hidden="true">–</span>}</span> },
     {
       key: "files",
       label: "Files",

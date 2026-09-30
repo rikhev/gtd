@@ -3,7 +3,7 @@ import { X, Paperclip, Pin } from "lucide-react";
 import { mutate, newAction, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
-import { askContext, editors } from "../actionCommands.tsx";
+import { askContext, editors, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
@@ -243,6 +243,16 @@ function ActionDetail({ a }: { a: Action }) {
   const proj = s.projects.find((p) => p.id === a.project_id);
   const rec = a.recurrence ? parseRecurrence(a.recurrence) : null;
   const done = a.status === "done";
+  // T and W add, in every pane and list: a next action or a waiting for in this action's project (or on its own).
+  const paneActive = useContext(DetailActive);
+  useCommands(
+    "detail-action-add",
+    [
+      { id: "detail.a.addnext", label: "Add a next action (to this project)", group: "Details", keys: ["t"], run: () => (a.project_id ? projectEditors(ui).addNextAction(a.project_id) : quickAddNextAction(ui)) },
+      { id: "detail.a.addwait", label: "Add a waiting for (to this project)", group: "Details", keys: ["w"], run: () => (a.project_id ? projectEditors(ui).addWaiting(a.project_id) : quickAddWaiting(ui)) },
+    ],
+    { priority: 21, active: paneActive },
+  );
   // What kind of item this is decides its fields: a done or trashed item keeps the kind it had.
   const kind = (done ? a.done_from : a.status === "trashed" ? a.trashed_from : a.status) ?? "next";
   const waiting = kind === "waiting";
@@ -285,7 +295,7 @@ function ActionDetail({ a }: { a: Action }) {
     ],
     [
       "time",
-      <PickField key="time" label="Time" k="T" onOpen={() => ed.time([a.id])}>
+      <PickField key="time" label="Time" k="M" onOpen={() => ed.time([a.id])}>
         {a.time_min ? formatTime(a.time_min) : none}
       </PickField>,
     ],
@@ -312,7 +322,7 @@ function ActionDetail({ a }: { a: Action }) {
     [
       // Who it is for: it then shows on their agenda, beside what they owe you.
       "person",
-      <PickField key="person" label="With" k="W" onOpen={() => ed.person([a.id])}>
+      <PickField key="person" label="With" k="H" onOpen={() => ed.person([a.id])}>
         {a.person || none}
       </PickField>,
     ],

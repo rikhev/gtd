@@ -52,6 +52,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     });
   const { stepIdx } = sess;
   const visited = useMemo(() => new Set(sess.visited), [sess.visited]);
+  const markActed = (id: string) => !(sess.acted ?? []).includes(id) && update({ acted: [...(sess.acted ?? []), id] });
+  // The sweep is done once something was captured in this review, or you said your head is empty.
+  const swept = (sess.acted ?? []).includes("sweep") || s.stuff.some((x) => x.created_at >= sess.startedAt);
   const setStepIdx = (n: number) => update({ stepIdx: n });
   const step = STEPS[stepIdx];
   const t = today();
@@ -202,6 +205,16 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     ui.followDetail(focusRow ? { kind: focusRow.kind, id: focusRow.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRow?.key]);
+  // Look back is read once the cursor reaches its last row (or at once when there is nothing to read).
+  useEffect(() => {
+    if (step.id === "lookback" && (!rows.length || nav.focus === rows[rows.length - 1].key)) markActed("lookback");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step.id, rows.length, nav.focus]);
+  /** ⌘↵ on the two steps with nothing to count: say you're done here, and move on. */
+  const doneHere = () => {
+    markActed(step.id);
+    setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1));
+  };
   const targetsOf = (kind: Row["kind"]) =>
     [...new Set(nav.targets().map((k) => rows.find((r) => r.key === k)).filter((r): r is Row => Boolean(r && r.kind === kind)).map((r) => r.id))];
 
@@ -211,8 +224,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     clearSession();
     // Say what is true: only a review with nothing left open earns "your system is current".
     notify(
-      openSteps.length
-        ? `Weekly review recorded ${formatLong(t)}. ${plural(openSteps.length, "step")} left open.`
+      notClear.length
+        ? `Weekly review recorded ${formatLong(t)}. ${plural(notClear.length, "step")} not clear.`
         : `Weekly review recorded ${formatLong(t)}. Your system is current.`,
     );
     ui.go("next");
@@ -248,10 +261,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         return 0;
     }
   };
-  const clearSteps = STEPS.slice(0, -1).filter((st) => openCount(st.id) === 0).length;
-  const openSteps = STEPS.slice(0, -1)
-    .map((st, i) => ({ st, i, n: openCount(st.id) }))
-    .filter((x) => x.n > 0);
   // What this review did, counted from its start: the closing tally.
   const since = sess.startedAt;
   const tally = [
@@ -262,7 +271,17 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   ]
     .filter(([n]) => (n as number) > 0)
     .map(([n, noun, verb]) => `${plural(n as number, noun as string)} ${verb}`);
-  const isDone = (id: StepId) => (id === "finish" ? false : visited.has(id) && openCount(id) === 0);
+  // Visiting is not reviewing: a step is clear when nothing in it is open, and the two steps with nothing to count
+  // (Mind sweep, Look back) only once something was done in them (owner's decision after the critique).
+  const isDone = (id: StepId) =>
+    id === "finish" ? false : id === "sweep" ? swept : id === "lookback" ? (sess.acted ?? []).includes("lookback") : visited.has(id) && openCount(id) === 0;
+  const notClear = STEPS.slice(0, -1)
+    .map((st, i) => ({ st, i, n: openCount(st.id) }))
+    .filter((x) => !isDone(x.st.id));
+  const clearSteps = STEPS.length - 1 - notClear.length;
+  /** Why a step is not clear yet, in a few words. */
+  const whyOpen = ({ st, n }: { st: (typeof STEPS)[number]; n: number }) =>
+    n > 0 ? `${n} open` : st.id === "sweep" ? "nothing captured yet" : st.id === "lookback" ? "not read to the end" : "not visited";
 
   const commands: Command[] = [
     ...nav.commands,
@@ -323,6 +342,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.file", label: "File", group: "Review", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
+    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Looked back: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id === "sweep" || step.id === "lookback", run: doneHere },
     { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     {
       id: "rv.done",
@@ -384,7 +404,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.
       label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item" } as Record<string, string>)[step.id] ?? "",
-      width: "minmax(220px, 1fr)",
+      width: "minmax(220px, 2fr)",
       render: (r) => (
         <span className="subject">
           <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title || "Untitled"}</span>
@@ -392,7 +412,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </span>
       ),
     },
-    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
     { key: "date", label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" || step.id === "lookback" ? "plain" : "due"} /> },
   ];
@@ -401,6 +421,12 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     return p ? projectHealth(s, p) : "done";
   }
 
+  // During the Mind sweep its own capture line is the one to use: the app's capture bar steps aside on a phone.
+  useEffect(() => {
+    if (step.id !== "sweep") return;
+    document.body.dataset.sweep = "1";
+    return () => void delete document.body.dataset.sweep;
+  }, [step.id]);
   // On a phone the steps are one sideways-scrolling strip: keep the current one in view.
   useEffect(() => {
     document.querySelector(".review-steps .is-current")?.scrollIntoView({ inline: "nearest", block: "nearest" });
@@ -432,24 +458,28 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           </span>
           {step.title}
         </h2>
+        {/* On a phone the step strip scrolls out of sight: say where in the review you are. */}
+        <span className="step-of" aria-hidden="true">
+          Step {stepIdx + 1} of {STEPS.length}
+        </span>
         <p className="muted-text">{step.note}</p>
 
       </div>
       {step.id === "clear" && clarifying ? (
         <ClarifyView key={clarifying.run} regionActive={regionActive} withClaude={clarifying.withClaude} host={clarifyHost} />
       ) : step.id === "sweep" ? (
-        <MindSweep captured={s.stuff.filter((x) => x.created_at >= sess.startedAt).sort((a, b) => b.created_at.localeCompare(a.created_at))} active={regionActive} />
+        <MindSweep onDone={doneHere} captured={s.stuff.filter((x) => x.created_at >= sess.startedAt).sort((a, b) => b.created_at.localeCompare(a.created_at))} active={regionActive} />
       ) : step.id === "finish" ? (
         <div className="review-panel review-finish">
           {/* The end of the week leads with what you cleared, then what is still open. */}
-          <Tag size="md">{openSteps.length ? "Ready to record" : "Everything reviewed"}</Tag>
+          <Tag size="md">{notClear.length ? "Ready to record" : "Everything reviewed"}</Tag>
           <p className="clarify-msg">
             {clearSteps} of {STEPS.length - 1} steps clear{tally.length ? ` · ${tally.join(" · ")}` : ""}.
           </p>
-          {openSteps.length ? (
+          {notClear.length ? (
             <>
-              <p className="muted-text">Still open, if you want to go back:</p>
-              <KeyChoices choices={openSteps.map(({ st, i, n }) => ({ k: String(i + 1), label: `${st.title}: ${n} open`, run: () => setStepIdx(i) }))} />
+              <p className="muted-text">Not clear yet, if you want to go back:</p>
+              <KeyChoices choices={notClear.map((x) => ({ k: String(x.i + 1), label: `${x.st.title}: ${whyOpen(x)}`, run: () => setStepIdx(x.i) }))} />
             </>
           ) : (
             <p className="muted-text">Every list has been through the review and nothing is left open.</p>
@@ -483,6 +513,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
+            ...(step.id === "lookback" || step.id === "sweep" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Looked back" }] : []),
             ...(!["finish", "lookback", "sweep"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
           ]}
         />
@@ -533,7 +564,7 @@ const TRIGGERS: { title: string; items: [string, string][] }[] = [
  * entered (no deciding yet: Get clear, next, is where it is clarified), and what this review has captured is listed
  * under the line, newest first.
  */
-function MindSweep({ captured, active }: { captured: Stuff[]; active: boolean }) {
+function MindSweep({ captured, active, onDone }: { captured: Stuff[]; active: boolean; onDone: () => void }) {
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
   // Arriving on the step puts the cursor in the line, after the click or key that brought you here has settled.
@@ -554,6 +585,8 @@ function MindSweep({ captured, active }: { captured: Stuff[]; active: boolean })
             placeholder="One thought at a time"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
+              // ⌘↵ is "my head is empty" (the review's own key), not a capture.
+              if (e.metaKey || e.ctrlKey || e.defaultPrevented) return;
               if (e.key === "Enter" && text.trim()) {
                 e.preventDefault();
                 void capture(text);
@@ -566,6 +599,10 @@ function MindSweep({ captured, active }: { captured: Stuff[]; active: boolean })
           />
         </label>
         <p className="sweep-help">Enter puts it in the Inbox. No need to decide anything yet.</p>
+        {/* Nothing captured can still be a clear head: say so, rather than the step counting as done by being passed. */}
+        <button type="button" className="text-btn sweep-empty" onClick={onDone}>
+          {captured.length ? "That's everything: next step" : "My head is empty: next step"}
+        </button>
         {captured.length > 0 && (
           <section className="sweep-captured" aria-label="Captured in this review">
             <h3 className="detail-h">

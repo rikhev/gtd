@@ -1,7 +1,8 @@
+import { fits, openFit, useFit } from "./fit.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
-import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, type Command } from "./keys.ts";
+import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, runKey, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
@@ -30,6 +31,8 @@ import { today } from "../shared/dates.ts";
  * Views with their own address (#inbox, #projects, #reference…), so the browser's Back and Forward move between
  * them and a reload or bookmark lands on the same list. Search is a query, not a place, and gets no entry.
  */
+/** Lists with a View menu (⌥V), which touch reaches by a button in the heading. */
+const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "done", "agendas"];
 const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "done", "trash", "review", "settings", "clarify"];
 function viewFromHash(): ViewId | null {
   const h = window.location.hash.slice(1) as ViewId;
@@ -53,6 +56,17 @@ function homeOf(t: Target): ViewId {
   // Done but not archived yet: it is still on the list it was done on.
   if (a.status === "done" && !a.archived_at) return a.done_from ?? "next";
   return ({ next: "next", waiting: "waiting", someday: "someday", done: "done", trashed: "next" } as const)[a.status];
+}
+
+// On a touch screen the cursor row means nothing until you use the list: the fill waits for the first key or tap.
+if (typeof window !== "undefined") {
+  const engage = () => {
+    document.documentElement.classList.add("engaged");
+    window.removeEventListener("keydown", engage, true);
+    window.removeEventListener("pointerdown", engage, true);
+  };
+  window.addEventListener("keydown", engage, true);
+  window.addEventListener("pointerdown", engage, true);
 }
 
 export default function App() {
@@ -385,11 +399,16 @@ export default function App() {
   const listActive = region === "list" && !picker && !palette && !help;
   const t = today();
   const deferredNext = s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length;
+  const fitNow = useFit();
+  const nextShown = s.actions.filter((a) => (a.status === "next" && !isDeferred(a, t)) || isChase(a, t));
   const counts: Partial<Record<ViewId, string>> = {
     inbox: plural(inboxCount, "item"),
     // Deferred actions stay out of the count; the suffix says how many wait for their start date (⌥V shows them).
     next: [
-      plural(s.actions.filter((a) => (a.status === "next" && !isDeferred(a, t)) || isChase(a, t)).length, "action"),
+      // While What fits now is on, the count says how many of them fit.
+      fitNow
+        ? `${nextShown.filter((a) => fits(a, fitNow) === "fits").length} of ${plural(nextShown.length, "action")} fit`
+        : plural(nextShown.length, "action"),
       ...(deferredNext ? [`${deferredNext} deferred`] : []),
     ].join(" · "),
     projects: plural(s.projects.filter((p) => p.status === "active").length, "active project"),
@@ -485,6 +504,20 @@ export default function App() {
           <div className="viewhead">
             <h1 className="viewtitle" id="view-title">{VIEW_TITLES[view]}</h1>
             {counts[view] && <span className="viewcount">{counts[view]}</span>}
+            <span className="viewtools">
+              {/* What fits now, in sight where it is used; while it is on, the line above the list takes over. */}
+              {view === "next" && !fitNow && (
+                <button type="button" className="text-btn" onClick={() => openFit(ui)}>
+                  What fits now
+                </button>
+              )}
+              {/* Touch has no ⌥V: the list's View menu (group, sort, show) as a button. */}
+              {LISTS_WITH_VIEW.includes(view) && (
+                <button type="button" className="text-btn touch-only" onClick={() => runKey("alt+v")}>
+                  View
+                </button>
+              )}
+            </span>
           </div>
           <div className="work">
             {/* On a phone the details sheet covers most of the list; the list stays reachable by keyboard behind it. */}

@@ -1,3 +1,4 @@
+import { projectEditors } from "./views/ProjectsView.tsx";
 import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
 import type { UI } from "./ui.tsx";
@@ -6,10 +7,10 @@ import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { addMonths, daysBetween, formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
 /** No red (kept for trouble: overdue, stalled, errors) and no green (kept for the "on track" lamp). */
-export const CONTEXT_COLORS = ["#2f6fb5", "#5b6b7e", "#8a5a2b", "#b7791f", "#6b4fa0", "#0f8a8a", "#a3476e", "#5b6b2e"];
-export const COLOR_NAMES: Record<string, string> = { "#2f6fb5": "Blue", "#5b6b7e": "Slate", "#8a5a2b": "Sienna", "#b7791f": "Ochre", "#6b4fa0": "Violet", "#0f8a8a": "Teal", "#a3476e": "Plum", "#5b6b2e": "Olive" };
+export const CONTEXT_COLORS = ["#2f6fb5", "#5b6b7e", "#8a5a2b", "#9f691b", "#6b4fa0", "#0e8181", "#a3476e", "#5b6b2e"];
+export const COLOR_NAMES: Record<string, string> = { "#2f6fb5": "Blue", "#5b6b7e": "Slate", "#8a5a2b": "Sienna", "#9f691b": "Ochre", "#6b4fa0": "Violet", "#0e8181": "Teal", "#a3476e": "Plum", "#5b6b2e": "Olive" };
 /** Areas draw from the same palette (no red, no green), in an order that keeps neighbours apart. */
-export const AREA_COLORS = ["#2f6fb5", "#0f8a8a", "#8a5a2b", "#6b4fa0", "#a3476e", "#b7791f", "#5b6b2e", "#5b6b7e"];
+export const AREA_COLORS = ["#2f6fb5", "#0e8181", "#8a5a2b", "#6b4fa0", "#a3476e", "#9f691b", "#5b6b2e", "#5b6b7e"];
 export const nextAreaColor = () => AREA_COLORS[getState().areas.length % AREA_COLORS.length];
 
 export function createContextOp(name: string): { id: ID; op: Op } {
@@ -85,7 +86,7 @@ export function peopleNames(): string[] {
 }
 
 /** Who an action is for: someone already known, a new name, or no one. */
-export function askPerson(ui: UI, current: string | null, apply: (who: string | null) => void, title = "Who is it for?") {
+export function askPerson(ui: UI, current: string | null, apply: (who: string | null) => void, title = "Who is it with?") {
   ui.openPicker({
     type: "list",
     title,
@@ -545,10 +546,19 @@ export function useActionCommands(opts: {
     else make();
   };
 
+  const addBeside = (kind: "next" | "waiting") => {
+    const pid = opts.focusId ? getState().actions.find((a) => a.id === opts.focusId)?.project_id : null;
+    if (pid) return kind === "next" ? projectEditors(ui).addNextAction(pid) : projectEditors(ui).addWaiting(pid);
+    return kind === "next" ? quickAddNextAction(ui) : quickAddWaiting(ui);
+  };
+
   const has = () => targets().length > 0;
 
   const commands: Command[] = [
     { id: "act.new", label: "New action", group: "Actions", keys: ["n"], run: create },
+    // T and W add, as on Projects and Agendas: a next action or a waiting for in the focused row's project (or on its own).
+    { id: "act.addnext", label: "Add a next action (to this row's project)", group: "Actions", keys: ["t"], run: () => addBeside("next") },
+    { id: "act.addwait", label: "Add a waiting for (to this row's project)", group: "Actions", keys: ["w"], run: () => addBeside("waiting") },
     { id: "act.open", label: "Open details", group: "Actions", keys: ["enter"], run: () => opts.focusId && ui.openDetail({ kind: "action", id: opts.focusId }, true) },
     { id: "act.jump", label: "Jump to its project", group: "Actions", keys: ["j"], run: () => opts.focusId && ui.jumpToProject(opts.focusId) },
     { id: "act.rename", label: "Edit subject", group: "Actions", keys: ["f2"], run: () => opts.focusId && setEditing(opts.focusId) },
@@ -565,17 +575,18 @@ export function useActionCommands(opts: {
       : { id: "act.due", label: "Due date", group: "Fields", keys: ["d"], run: () => ed.date(pick(), "due") },
     ...(opts.waitingView ? [{ id: "act.since", label: "Waiting since", group: "Fields", keys: ["i"], run: () => ed.date(pick(), "waiting_since") }] : []),
     { id: "act.defer", label: "Start date", group: "Fields", keys: ["s"], run: () => ed.date(pick(), "defer") },
-    { id: "act.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["t"], run: () => ed.time(pick()) },
+    // M for minutes: T and W add, everywhere (owner's decision after the critique found T editing here and adding elsewhere).
+    { id: "act.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["m"], run: () => ed.time(pick()) },
     { id: "act.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(pick()) },
     { id: "act.repeat", label: "Repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(pick()) },
     { id: "act.bringback", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], run: () => ed.date(pick(), "bring_back") },
-    { id: "act.person", label: "Who it's for (their agenda)", group: "Fields", keys: [], run: () => ed.person(pick()) },
+    { id: "act.person", label: "Who it's with (their agenda)", group: "Fields", keys: ["h"], run: () => ed.person(pick()) },
     { id: "act.delegate", label: "Delegate → Waiting For", group: "Actions", keys: ["shift+f"], run: () => ed.delegate(pick()) },
     { id: "act.trash", label: "Trash", group: "Actions", keys: ["backspace", "delete"], run: () => trash(false) },
     { id: "act.delete", label: "Delete permanently", group: "Actions", keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },
     { id: "act.up", label: "Move row up", group: "Actions", keys: ["alt+arrowup"], run: () => reorder(-1) },
     { id: "act.down", label: "Move row down", group: "Actions", keys: ["alt+arrowdown"], run: () => reorder(1) },
-  ].map((c) => (c.id === "act.new" || c.id === "act.open" ? c : { ...c, enabled: c.enabled ?? has() }));
+  ].map((c) => (["act.new", "act.open", "act.addnext", "act.addwait"].includes(c.id) ? c : { ...c, enabled: c.enabled ?? has() }));
 
   const commitTitle = (id: ID, title: string) => {
     setEditing(null);

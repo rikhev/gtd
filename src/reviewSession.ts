@@ -8,6 +8,8 @@ export interface ReviewSession {
   startedAt: string;
   stepIdx: number;
   visited: string[];
+  /** Steps with nothing to count as open (Mind sweep, Look back) are clear only once something was done in them. */
+  acted?: string[];
 }
 
 const KEY = "gtd:review";

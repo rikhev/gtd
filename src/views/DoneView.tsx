@@ -153,8 +153,8 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
       width: "30px",
       render: (r) => <span className="kind-icon">{r.kind === "project" ? <Layers size={14} strokeWidth={1.75} aria-label="Project" /> : <Circle size={12} strokeWidth={1.75} aria-label="Action" />}</span>,
     },
-    { key: "subject", label: "Item", width: "minmax(220px, 1fr)", render: (r) => <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title}</span> },
-    { key: "from", label: "Was in", width: "minmax(140px, 360px)", drop: 2, render: (r) => <span className="muted-text">{groupBy === "project" ? r.place : r.from}</span> },
+    { key: "subject", label: "Item", width: "minmax(220px, 1.3fr)", render: (r) => <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title}</span> },
+    { key: "from", label: "Was in", width: "minmax(140px, 1fr)", drop: 2, render: (r) => <span className="muted-text">{groupBy === "project" ? r.place : r.from}</span> },
     {
       key: "at",
       label: "Done",

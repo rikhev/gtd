@@ -146,8 +146,8 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
     );
   const columns: Column<Row>[] = [
     { key: "kind", label: "", width: "30px", render: (r) => <span className="kind-icon">{icon(r)}</span> },
-    { key: "subject", label: "Item", width: "minmax(220px, 1fr)", render: (r) => <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title}</span> },
-    { key: "from", label: "Was in", width: "minmax(140px, 280px)", drop: 2, render: (r) => <span className="muted-text">{r.from}</span> },
+    { key: "subject", label: "Item", width: "minmax(220px, 1.3fr)", render: (r) => <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title}</span> },
+    { key: "from", label: "Was in", width: "minmax(140px, 1fr)", drop: 2, render: (r) => <span className="muted-text">{r.from}</span> },
     { key: "at", label: "Deleted", width: "84px", drop: 1, render: (r) => <span className="date">{dayLabel(r.at) === "Today" || dayLabel(r.at) === "Yesterday" ? clock(r.at) : formatDate(r.at.slice(0, 10))}</span> },
     {
       key: "left",

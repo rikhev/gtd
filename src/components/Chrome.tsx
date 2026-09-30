@@ -396,7 +396,8 @@ export function TabBar() {
       <button type="button" className={`tab ${more || rest.includes(ui.view) ? "is-current" : ""}`} aria-expanded={more} onClick={() => setMore(!more)}>
         <span className="tab-name">{rest.includes(ui.view) && !more ? VIEW_TITLES[ui.view] : "More"}</span>
         {/* Something in the system check wants attention: a small alert dot, named for screen readers. */}
-        {checkDue && !more && <span className="tab-dot" role="img" aria-label="needs attention" />}
+        {/* The dot belongs to "More" (the system check is in there), not to a list whose name the tab is showing. */}
+        {checkDue && !more && !rest.includes(ui.view) && <span className="tab-dot" role="img" aria-label="The Weekly Review or the Inbox needs attention" />}
       </button>
     </nav>
   );

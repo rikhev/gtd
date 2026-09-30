@@ -32,7 +32,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `⌥N` | New project from anywhere: name its outcome, pick its area, then give it a first next action (Esc skips that). On Projects, `N` adds one in place |
 | `⌥T` | New next action from anywhere: what to do, its context, then its project (`No project` first; type a new name to create one). On Projects, `T` adds one to the project under the cursor |
 | `⌥W` | New Waiting For item from anywhere: what you're waiting for, who or what you wait on, then its project. Waiting since today |
-| `T` `W` | On Projects, in a project's details and in the Weekly Review's Projects step: add a next action (`T`) or a Waiting For item (`W`) to the project |
+| `T` `W` | Everywhere (action lists, Projects, Agendas, details, the Weekly Review): add a next action (`T`) or a Waiting For item (`W`) to the project |
 | `K` / `⌥K` | Clarify the Inbox / clarify it with Claude |
 | `↑↓` `⌘↑↓` `fn↑↓` | Move / jump to the first or last row / page |
 | `Space` `⇧↑↓` `⌘A` | Tick a row / extend the range (`⇧Home`/`⇧End` to the ends) / select all. A plain arrow, Home/End or click clears the selection, as in Finder; `⇧`-click extends, `⌘`-click ticks, and dragging from anywhere beside the rail draws a selection rectangle (`⌘`-drag adds to the selection; a click on empty space clears it) |
@@ -42,7 +42,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `E` | Mark done. Recurring actions schedule their next occurrence |
 | `V` `C` `P` `A` | Move to a project or list / context / project / area |
 | `D` `S` `B` `R` | Due date / start date / bring back (tickler) / repeat |
-| `T`+`1–6` `G`+`1–3` | Time estimate / energy |
+| `M`+`1–6` `G`+`1–3` `H` | Time estimate (minutes) / energy / who it's with (their agenda) |
 | `Ins` or `⌘I` | Mark as important (again to unmark) |
 | `⇧F` | Delegate to Waiting For |
 | `Del` / `⇧Del` | Trash / delete permanently |
@@ -63,7 +63,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | Column width | Drag the edge of a column heading; double-click the edge to fit the contents. Or ⌘K › Resize columns…, then `←` `→` (`⇧` for a pixel), `Tab` next column, `F` fit, `0` default, `↵` keep, `Esc` cancel. Reset column widths undoes it. Remembered per list |
 | Columns shown | Right-click a column heading, or ⌘K › Show or hide columns…: toggle any column, including extra ones such as Area, Created, Updated, Repeat. Remembered per list |
 | `⌥P` | Pin the details pane: it stays open beside every list and follows the cursor (× closes and unpins it) |
-| In the details pane | Each field shows its key while the pane has focus: `F2` the title, `N` the notes, the field letters (`P` project, `C` context, `D` due, `S` start, `I` waiting since…), `⌘O` attach a file, `T` a project's next action. `Esc` in a field leaves it (what you typed is saved) and keeps the pane; `Esc` again closes it |
+| In the details pane | While the pane has focus each field has a key (listed in `⇧?`, not printed): `F2` the title, `N` the notes, the field letters (`P` project, `C` context, `D` due, `S` start, `M` time, `G` energy, `H` with, `I` waiting since…), `⌘O` attach a file; `T`/`W` add a next action or waiting for to the item's project. `Esc` in a field leaves it (what you typed is saved) and keeps the pane; `Esc` again closes it |
 | While typing | `Backspace` and `Delete` always belong to the text field, with any modifier: `⌥⌫` / `Ctrl+⌫` delete a word, `⌘⌫` deletes to the line start. `⌘⌫` closes the details pane only when you're not in a field |
 | `⌥Q` | Search |
 | `⌘Z` | Undo (there are no confirmation dialogs) |
@@ -78,7 +78,7 @@ These keys work inside Clarify:
 | `F2` or `Enter` | Edit the action text. `Tab` moves through the fields |
 | `Esc` | Field → row, then leave Clarify. Leaving stops Claude; proposals already made are kept for next time |
 | `⇧Esc` | Stop Claude but keep reviewing the proposals that are ready (also the "Stop" link while Claude is reading) |
-| `C` `P` `D` `S` `T` `G` `V` `⇧F` | Correct a field |
+| `C` `P` `D` `S` `M` `G` `V` `⇧F` | Correct a field |
 | `⇧P` | Make the item a project (more than one step): it's named after the item, its actions go into it, and the cursor lands on the first to name the next step. Also in File as (`V`) › Whole item → New project |
 | `N` / `⌥⌫` | Add / remove an action (`⌥⌫` only on the row, not while typing, where it deletes a word) |
 | `E` | Done now (two-minute rule) |

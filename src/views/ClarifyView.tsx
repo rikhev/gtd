@@ -526,7 +526,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     { id: "cl.makeproject", label: "Make this a project (more than one step)", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
     { id: "cl.due", label: "Due date", group: "Fields", keys: ["d"], enabled: ready, run: () => pickFor(rowOfFocus(), "due") },
     { id: "cl.defer", label: "Start date", group: "Fields", keys: ["s"], enabled: ready, run: () => pickFor(rowOfFocus(), "defer") },
-    { id: "cl.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["t"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
+    { id: "cl.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["m"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
     { id: "cl.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
     { id: "cl.kind", label: "File as (list or whole item)", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
     { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready, run: () => pickFor(rowOfFocus(), "who") },

@@ -158,7 +158,7 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
           <Marker flagged={Boolean(r.a.flagged)} />
         ),
     },
-    { key: "subject", label: "Item", width: "minmax(220px, 1fr)", render: (r) => <span className="subject-text">{r.a.title || "Untitled action"}</span> },
+    { key: "subject", label: "Item", width: "minmax(220px, 2fr)", render: (r) => <span className="subject-text">{r.a.title || "Untitled action"}</span> },
     {
       key: "what",
       label: "What",
@@ -166,7 +166,7 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
       // Yours shows where you'd do it (@agenda, @phone…); theirs says it is theirs to deliver, and since when.
       render: (r) => (r.side === "theirs" ? <span className="muted-text">Waiting{r.a.waiting_since ? ` since ${formatDate(r.a.waiting_since)}` : ""}</span> : <ContextCode ctx={ctxById.get(r.a.context_id ?? "")} />),
     },
-    { key: "project", label: "Project", width: "minmax(120px, 240px)", drop: 1, blank: (r) => !r.a.project_id, render: (r) => <span className="muted-text">{projById.get(r.a.project_id ?? "")?.title ?? ""}</span> },
+    { key: "project", label: "Project", width: "minmax(120px, 1fr)", drop: 1, blank: (r) => !r.a.project_id, render: (r) => <span className="muted-text">{projById.get(r.a.project_id ?? "")?.title ?? ""}</span> },
     // Yours by its due date; theirs by when to follow up.
     { key: "date", label: "Due / follow up", width: "112px", render: (r) => <DateCell date={r.side === "theirs" ? r.a.followup : r.a.due} /> },
   ];
