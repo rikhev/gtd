@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { getSetting, setSetting } from "./db.ts";
+import { db, deleteRow, getSetting, insertRow, patchRow, setSetting } from "./db.ts";
+import { addDays, formatLong } from "../shared/dates.ts";
 
 /**
  * The hard landscape (GTD's calendar): appointments from the owner's published Outlook calendar, read-only. The
@@ -104,14 +105,83 @@ export async function syncAll(): Promise<FeedInfo[]> {
   await Promise.all(
     load().map(async (f) => {
       try {
-        cache.set(f.id, { at: Date.now(), events: (await fetchIcs(f.url)).events });
+        const { events } = await fetchIcs(f.url);
+        cache.set(f.id, { at: Date.now(), events });
         errors.delete(f.id);
+        reconcile(f.id, events, lastZone);
       } catch (e) {
         errors.set(f.id, (e as Error).message);
       }
     }),
   );
   return feedInfo();
+}
+
+/* ---------------- links to projects ---------------- */
+
+/** The owner's time zone as their browser last reported it: Sync now carries none of its own. */
+let lastZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+/** What reconciling changed since the browser last asked, said once as a toast ("“Workshop” moved to Tue 6 Oct"). */
+let linkNotes: string[] = [];
+export const takeLinkNotes = () => {
+  const out = linkNotes;
+  linkNotes = [];
+  return out;
+};
+
+interface LinkRow {
+  id: string;
+  project_id: string;
+  title: string;
+  date: string;
+  time: string | null;
+  end_time: string | null;
+  feed: string;
+  created_at: string;
+}
+
+/**
+ * Links follow their appointments (owner's decision). After every good read of a calendar, each upcoming link to it
+ * is checked against what the calendar now holds: still there, its title and time are refreshed; moved to another day
+ * (a one-off with a new date, or a repeating meeting's occurrence with its own override), the link moves with it; gone
+ * (deleted, or that occurrence cancelled), it is simply unlinked, so the project needs a next action again. Links whose
+ * day has passed are left alone: a feed may stop carrying old history. A calendar that couldn't be read is never
+ * reconciled, so a network hiccup unlinks nothing.
+ */
+function reconcile(feedId: string, raw: RawEvent[], zone: string) {
+  const links = db.prepare("SELECT * FROM appointments WHERE feed = ?").all(feedId) as unknown as LinkRow[];
+  if (!links.length) return;
+  OWNER = zone;
+  const t = local(new Date()).day;
+  const project = (id: string) => (db.prepare("SELECT title FROM projects WHERE id = ?").get(id) as { title: string } | undefined)?.title || "its project";
+  for (const l of links) {
+    if (l.date < t) continue;
+    // The key is the calendar, the UID and the day: `${feed}:${uid}:${date}`; a UID may itself hold colons.
+    const uid = l.id.slice(feedId.length + 1, -11);
+    const mine = raw.filter((e) => e.uid === uid);
+    const occ = expand(mine, t, addDays(t, 730), zone);
+    const same = occ.find((o) => o.date === l.date);
+    let found = same;
+    if (!same) {
+      // Moved: a one-off has one occurrence, wherever it now falls; a repeating meeting's moved occurrence is the
+      // override that names this day as the one it replaces.
+      const override = mine.find((e) => e.recurrenceId && localDay(e.recurrenceId) === l.date && !e.cancelled && !e.declined);
+      if (override) found = expand([override], t, addDays(t, 730), zone)[0];
+      else if (mine.length === 1 && !mine[0].rrule && occ.length === 1) found = occ[0];
+    }
+    if (!found) {
+      deleteRow("appointments", l.id);
+      linkNotes.push(`“${l.title}” is no longer in its calendar, so it's no longer linked to “${project(l.project_id)}”.`);
+      continue;
+    }
+    const key = `${feedId}:${found.key}`;
+    const data = { title: found.title, date: found.date, time: found.time, end_time: found.endTime };
+    if (key !== l.id) {
+      deleteRow("appointments", l.id);
+      insertRow("appointments", { ...l, ...data, id: key });
+      linkNotes.push(`“${found.title}” moved to ${formatLong(found.date)}${found.time ? ` ${found.time}` : ""}; its link to “${project(l.project_id)}” moved with it.`);
+    } else if (data.title !== l.title || data.time !== l.time || data.end_time !== l.end_time) patchRow("appointments", l.id, data);
+  }
 }
 
 /** A pasted link, as a fetchable https URL (webcal:// is how Outlook and iCloud offer the same address to subscribe). */
@@ -165,6 +235,7 @@ export async function updateFeed(id: string, patch: { name?: string; color?: str
       f.url = url;
       cache.set(f.id, { at: Date.now(), events });
       errors.delete(f.id);
+      reconcile(f.id, events, lastZone);
     } catch (e) {
       return { ok: false, error: (e as Error).message };
     }
@@ -221,6 +292,7 @@ const mailKey = (m: string) => m.trim().toLowerCase().replace(/@(me|mac)\.com$/,
 
 /** Appointments from every calendar on the days from..to (inclusive), expanded, in local time. */
 export async function eventsBetween(from: string, to: string, zone: string = SERVER): Promise<{ events: CalEvent[]; feeds: FeedInfo[] }> {
+  lastZone = zone;
   const feeds = load();
   const out: CalEvent[] = [];
   await Promise.all(
@@ -228,8 +300,10 @@ export async function eventsBetween(from: string, to: string, zone: string = SER
       const c = cache.get(f.id);
       if (!c || Date.now() - c.at > CACHE_MS) {
         try {
-          cache.set(f.id, { at: Date.now(), events: (await fetchIcs(f.url)).events });
+          const { events } = await fetchIcs(f.url);
+          cache.set(f.id, { at: Date.now(), events });
           errors.delete(f.id);
+          reconcile(f.id, events, zone);
         } catch (e) {
           // A failed refresh keeps the last good copy, and says so in Settings.
           errors.set(f.id, (e as Error).message);

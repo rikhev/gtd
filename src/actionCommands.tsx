@@ -1,6 +1,7 @@
 import { projectEditors } from "./views/ProjectsView.tsx";
 import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
+import type { CalEvent } from "./calendarFeed.ts";
 import type { UI } from "./ui.tsx";
 import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
@@ -216,6 +217,37 @@ export function projectItems() {
     .filter((p) => p.status === "active" || p.status === "someday")
     .sort((a, b) => a.title.localeCompare(b.title))
     .map((p) => ({ id: p.id, label: p.title || "Untitled project", hint: p.status === "someday" ? "Someday" : areaName(s.areas.find((a) => a.id === p.area_id)?.name) }));
+}
+
+/**
+ * Link an appointment to a project (P on an appointment, owner's request), or change or drop the link. The link keeps
+ * the appointment's title, day and time, so the project's health reads without the calendar.
+ */
+export function linkAppointment(ui: UI, e: Pick<CalEvent, "key" | "title" | "date" | "time" | "endTime" | "feed">) {
+  const cur = getState().appointments.find((x) => x.id === e.key);
+  const name = `“${e.title}”`;
+  const link = (project_id: ID, extra: Op[] = [], projectTitle?: string) => {
+    const row = { id: e.key, project_id, title: e.title, date: e.date, time: e.time, end_time: e.endTime, feed: e.feed, created_at: cur?.created_at ?? stamp() };
+    const title = projectTitle ?? getState().projects.find((p) => p.id === project_id)?.title ?? "project";
+    // Relinking patches, so ⌘Z puts back the project it had rather than dropping the link.
+    mutate(`${name} → ${title}`, [...extra, cur ? { type: "patch", table: "appointments", id: e.key, data: row } : { type: "create", table: "appointments", row }]);
+  };
+  ui.openPicker({
+    type: "list",
+    title: `Project for ${name}`,
+    items: projectItems(),
+    current: cur?.project_id ?? null,
+    noneLabel: "No project",
+    createLabel: (q) => `Create project “${q}”`,
+    onCreate: (q) => {
+      const p = newProject({ title: q });
+      link(p.id, [{ type: "create", table: "projects", row: { ...p } }], q);
+    },
+    onPick: (id) => {
+      if (id) return link(id);
+      if (cur) mutate(`${name} no longer linked`, [{ type: "delete", table: "appointments", id: e.key }]);
+    },
+  });
 }
 
 export const areaName = (name: string | undefined) => (name === undefined ? undefined : areaLabel(name));

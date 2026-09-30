@@ -1251,6 +1251,25 @@ body.is-col-resizing * {
 .marker.is-done .ring {
   opacity: 0.4;
 }
+/* An appointment: a calendar leaf, the ring's stroke in the calendar's colour (held towards ink so a pale colour
+   still reads), its header strip solid. */
+.event-mark .leaf-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--feed, var(--accent)) 70%, var(--ink-2));
+  stroke-width: 1.25;
+}
+/* The appointment pane's Project value: the project's lamp before its name. */
+.event-project {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.event-project .lamp {
+  margin-left: 0;
+}
+.event-mark .leaf-head {
+  fill: color-mix(in srgb, var(--feed, var(--accent)) 70%, var(--ink-2));
+}
 .marker.is-chase .ring {
   stroke: var(--alert);
   stroke-dasharray: 2 2;
@@ -1601,13 +1620,22 @@ body.is-col-resizing * {
   gap: 3px;
   min-width: 0;
 }
-/* A project's health lamp, or an action's flag or done mark, rides after its label, sized to the caps. */
-.field-label .marker {
-  margin-left: 6px;
-  vertical-align: middle;
-  /* Rides in the label without making it taller than any other field label. */
-  margin-block: -8px;
+/* An action's importance or done mark leads its subject inside the field, as the marker column leads the list row:
+   the same 22px mark, its text moved over to make room. */
+.field-lead-wrap {
+  position: relative;
+  display: block;
 }
+.field-lead {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  pointer-events: none;
+}
+input.field-text.has-lead {
+  padding-left: 27px;
+}
+/* A project's health lamp rides after its label, sized to the caps. */
 .field-label .lamp {
   width: 11px;
   height: 11px;
@@ -1840,6 +1868,15 @@ textarea.field-text {
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
+/* A linked appointment that has passed stays in the project's list as a record, faded (not struck: it wasn't done). */
+.mini-row.is-past .mini-title {
+  color: var(--ink-3);
+}
+.mini-row.is-past .event-mark {
+  opacity: 0.5;
+}
+.mini-row.is-past .mini-meta,
+.mini-row.is-past .mini-date,
 .mini-row.is-done .mini-meta,
 .mini-row.is-done .mini-date {
   color: var(--ink-3);
@@ -3490,16 +3527,10 @@ textarea.field-text {
 }
 .cal-agenda-mark {
   flex: none;
-  width: 16px;
+  width: 22px;
   display: inline-flex;
   justify-content: center;
   color: var(--ink-2);
-}
-.cal-agenda-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink-3);
 }
 .cal-agenda-title {
   flex: 1;
@@ -4494,8 +4525,7 @@ body.is-cal-dragging {
   font-variant-numeric: tabular-nums;
   flex: none;
 }
-.cal-dots i.is-event,
-.cal-agenda-dot.is-event {
+.cal-dots i.is-event {
   background: var(--accent);
 }
 
@@ -4579,6 +4609,8 @@ body.is-cal-dragging {
 .cal-row.is-week.is-band .cal-bar {
   flex-direction: row;
   align-items: center;
+  /* The week's two-line bars centre their lines vertically; in a row that would centre the text across the bar. */
+  justify-content: flex-start;
   gap: 5px;
   padding: 0 7px;
   font-size: 12px;
@@ -4687,7 +4719,9 @@ body.is-cal-dragging {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The title keeps the lines it is given; only the place below gives way. */
 .cal-block-title {
+  flex: none;
   color: var(--ink);
   font-weight: 500;
   display: -webkit-box;
@@ -4695,8 +4729,12 @@ body.is-cal-dragging {
   overflow: hidden;
 }
 .cal-block-sub {
+  min-height: 0;
   color: var(--ink-2);
   font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Now: a red line across today, a dot at its start. */
 .cal-now {

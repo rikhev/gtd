@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { capture, completeActions, isChase, isStale, isStalled, lastReview, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { capture, completeActions, isChase, isStale, isStalled, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
-import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
-import { editors, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
+import { DateCell, EventMark, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
+import { editors, linkAppointment, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
 import { stuffTitle } from "./InboxView.tsx";
@@ -116,13 +116,18 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   // The subscribed Outlook calendar, two weeks either side: Look back reads what meetings left behind, Upcoming what's ahead.
   const { events, feeds } = useEvents(addDays(t, -14), addDays(t, 14));
   const feedOf = (id: string) => feeds.find((f) => f.id === id);
+  const linkedTo = (key: string) => {
+    const x = s.appointments.find((a) => a.id === key);
+    return x ? projectTitle(x.project_id) || "Untitled project" : "";
+  };
   const eventRow = (e: (typeof events)[number]): Row => ({
     key: `e:${e.key}`,
     kind: "event",
     id: e.key,
     title: e.title,
     // Which calendar, and when: "Work · 09:30", "Private · all day".
-    info: `${feedOf(e.feed)?.name ?? "Calendar"} · ${e.time ? `${e.time}${e.endTime ? `–${e.endTime}` : ""}` : "all day"}`,
+    // A linked appointment also names its project: "Work · 09:30–10:00 · Launch the new website".
+    info: `${feedOf(e.feed)?.name ?? "Calendar"} · ${e.time ? `${e.time}${e.endTime ? `–${e.endTime}` : ""}` : "all day"}${linkedTo(e.key) ? ` · ${linkedTo(e.key)}` : ""}`,
     date: e.date,
     color: feedOf(e.feed)?.color,
   });
@@ -361,6 +366,17 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
+    {
+      id: "rv.project",
+      label: "Link the appointment to a project",
+      group: "Review",
+      keys: ["p"],
+      enabled: focusRow?.kind === "event",
+      run: () => {
+        const e = events.find((x) => x.key === focusRow?.id);
+        if (e) linkAppointment(ui, e);
+      },
+    },
     { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow) && focusRow?.kind !== "area", run: () => focusRow && focusRow.kind !== "area" && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     {
       id: "rv.done",
@@ -418,7 +434,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   };
 
   const columns: Column<Row>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "area" ? null : r.kind === "event" ? <span className="cal-agenda-dot is-event" style={r.color ? { background: r.color } : undefined} aria-label="Appointment" /> : r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "area" ? null : r.kind === "event" ? <EventMark color={r.color} /> : r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} appt={apptOf(r.id)} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
     {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.
@@ -435,6 +451,11 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     // Name the date each step shows, rather than a generic "Date".
     { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" || step.id === "lookback" ? "plain" : "due"} /> },
   ];
+  /** A project's next linked appointment, which its lamp names. */
+  function apptOf(id: ID) {
+    const p = s.projects.find((x) => x.id === id);
+    return p ? nextAppointment(s, p) : null;
+  }
   function healthOf(id: ID) {
     const p = s.projects.find((x) => x.id === id);
     return p ? projectHealth(s, p) : "done";

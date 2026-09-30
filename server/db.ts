@@ -26,6 +26,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   rules: ["id", "text", "status", "created_at"],
   corrections: ["id", "stuff_text", "field", "proposed", "chosen", "used", "created_at"],
   reviews: ["id", "completed_at"],
+  appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
 };
 
 db.exec(`
@@ -61,6 +62,10 @@ CREATE TABLE IF NOT EXISTS corrections (
   chosen TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, completed_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS appointments (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', date TEXT NOT NULL,
+  time TEXT, end_time TEXT, feed TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS proposals (stuff_id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
@@ -179,6 +184,7 @@ export function loadState(): State {
     rules: all("rules"),
     corrections: all("corrections"),
     reviews: all("reviews"),
+    appointments: all("appointments"),
   };
 }
 

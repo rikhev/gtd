@@ -126,6 +126,24 @@ export interface Correction {
   created_at: string;
 }
 
+/**
+ * An appointment from a subscribed calendar linked to a project (owner's request): an upcoming one is the project's
+ * next step, so a project without a next action shows as scheduled rather than stalled. The appointment itself stays
+ * in its calendar; this keeps what the project needs of it (title, day, time), so health never waits on a fetch.
+ */
+export interface Appointment {
+  /** The appointment's key (its calendar, its UID and its day): one occurrence of a repeating meeting. */
+  id: string;
+  project_id: ID;
+  title: string;
+  date: string;
+  time: string | null;
+  end_time: string | null;
+  /** The subscribed calendar it comes from. */
+  feed: string;
+  created_at: string;
+}
+
 export interface Review {
   id: ID;
   completed_at: string;
@@ -142,6 +160,7 @@ export interface Tables {
   rules: Rule;
   corrections: Correction;
   reviews: Review;
+  appointments: Appointment;
 }
 export type TableName = keyof Tables;
 

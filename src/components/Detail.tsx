@@ -1,14 +1,14 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip, Pin, Check, CircleHelp, CircleDashed, Video } from "lucide-react";
-import { mutate, newAction, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
+import { mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
-import { askContext, editors, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
+import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
-import { AreaName, ContextCode, Energy, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
+import { AreaName, ContextCode, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
@@ -23,10 +23,13 @@ function TextField({
   autoFocus,
   className,
   mark,
+  lead,
 }: {
   label: string;
   /** A small mark after the label, such as the project's health lamp. */
   mark?: ReactNode;
+  /** A mark inside the field, before the text, as the list row has it (an action's importance or done mark). */
+  lead?: ReactNode;
   value: string;
   /** Return false to refuse the edit; the field then snaps back to the saved value. */
   onCommit: (v: string) => void | boolean;
@@ -68,6 +71,21 @@ function TextField({
       </span>
       {multiline ? (
         <NotesArea value={v} onValue={setV} onBlur={commit} placeholder={placeholder} aria-label={label} ref={area} rows={rows} className="field-text" aria-keyshortcuts={k} />
+      ) : lead ? (
+        <span className="field-lead-wrap">
+          <span className="field-lead" aria-hidden="true">
+            {lead}
+          </span>
+          <input
+            {...common}
+            className="field-text has-lead"
+            data-autofocus={autoFocus || undefined}
+            aria-keyshortcuts={k}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+          />
+        </span>
       ) : (
         <input
           {...common}
@@ -378,8 +396,8 @@ function ActionDetail({ a }: { a: Action }) {
   for (const [f, el] of fields) if (!placed.has(f) && visible(f)) layout.push(el);
   return (
     <>
-      {/* Important or done is the one thing the fields don't say, so its mark rides after the label. */}
-      <TextField label="Subject" mark={a.flagged || done ? <Marker flagged={Boolean(a.flagged)} done={done} /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      {/* Important or done is the one thing the fields don't say, so its mark leads the subject, as on the list row. */}
+      <TextField label="Subject" lead={a.flagged || done ? <Marker flagged={Boolean(a.flagged)} done={done} /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       {/* The shared grid (see rows above): every kind's fields in the same places. */}
       <div className="field-grid">
         {layout}
@@ -427,7 +445,10 @@ const STATUS_LABEL = { accepted: "Accepted", tentative: "Tentative", none: "No a
  */
 function EventDetail({ e }: { e: CalEvent }) {
   const ui = useUI();
+  const s = useStore((x) => x);
   const { calendars } = useMeta();
+  const linked = s.appointments.find((x) => x.id === e.key);
+  const proj = linked ? s.projects.find((p) => p.id === linked.project_id) : undefined;
   const feed = calendars.find((f) => f.id === e.feed);
   const active = useContext(DetailActive);
   // T and W add, as in every pane: something to do, or to wait for, that came out of the meeting.
@@ -455,6 +476,19 @@ function EventDetail({ e }: { e: CalEvent }) {
           <span className="feed-swatch" style={{ background: feed?.color }} aria-hidden="true" />
           {feed?.name ?? "Calendar"} · read-only{e.tentative ? " · tentative" : ""}
         </span>
+      </div>
+      {/* The one thing here that can be set: the project this appointment moves forward (P). */}
+      <div className="field-grid">
+        <PickField label="Project" k="P" onOpen={() => linkAppointment(ui, e)}>
+          {proj ? (
+            <span className="event-project">
+              <Lamp health={projectHealth(s, proj)} start={proj.start} appt={nextAppointment(s, proj)} />
+              {proj.title || "Untitled project"}
+            </span>
+          ) : (
+            none
+          )}
+        </PickField>
       </div>
       <dl className="event-facts">
         <div>
@@ -554,10 +588,14 @@ function ProjectDetail({ p }: { p: Project }) {
   const timeline = s.actions.filter((a) => a.project_id === p.id && a.status !== "trashed").sort((a, b) => a.created_at.localeCompare(b.created_at));
   const open = timeline.filter((a) => ["next", "waiting", "someday"].includes(a.status));
   const doneCount = timeline.length - open.length;
+  // Its linked appointments, in the order they fall; those that have passed stay, faded, as a record.
+  const appts = s.appointments.filter((x) => x.project_id === p.id).sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));
+  const nextAppt = nextAppointment(s, p);
+  const feedColor = (id: string) => meta.calendars.find((c) => c.id === id)?.color;
   return (
     <>
       {/* Area and status live in their own fields below; the head only carries the project's health, beside its name. */}
-      <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} start={p.start} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} start={p.start} appt={nextAppt} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
           {area ? <AreaName name={area.name} color={area.color} /> : none}
@@ -597,6 +635,29 @@ function ProjectDetail({ p }: { p: Project }) {
           );
         })()}
       </div>
+      {appts.length > 0 && (
+        <section className="detail-actions">
+          <h3 className="detail-h">
+            Appointments <span className="count">{appts.filter((x) => x.date >= today()).length}</span>
+          </h3>
+          <ul className="timeline">
+            {appts.map((x) => {
+              const past = x.date < today();
+              const when = `${x.date === today() ? "Today" : formatDate(x.date)}${x.time ? ` ${x.time}` : ""}`;
+              return (
+                <li key={x.id}>
+                  <button type="button" className={`mini-row ${past ? "is-past" : ""}`} title={`${x.title}, ${formatLong(x.date)}${x.time ? ` ${x.time}${x.end_time ? `–${x.end_time}` : ""}` : ""}`} onClick={() => ui.openDetail({ kind: "event", id: x.id }, true)}>
+                    <EventMark color={feedColor(x.feed)} />
+                    <span className="mini-title">{x.title}</span>
+                    <span className="mini-meta">{meta.calendars.find((c) => c.id === x.feed)?.name ?? ""}</span>
+                    <span className="mini-date">{when}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       <section className="detail-actions">
         <h3 className="detail-h">
           Actions <span className="count">{open.length}</span>
@@ -604,6 +665,12 @@ function ProjectDetail({ p }: { p: Project }) {
         </h3>
         {p.status === "active" && !open.length && (notStarted(p) || startsToday(p)) && (
           <p className="badge-line is-quiet">{notStarted(p) ? `Starts ${formatLong(p.start!)}. No next action needed before then.` : "Starts today. Add its first next action below."}</p>
+        )}
+        {p.status === "active" && !open.some((a) => a.status === "next" || a.status === "waiting") && nextAppt && !notStarted(p) && (
+          <p className="badge-line is-quiet">
+            Next step: {nextAppt.title}, {nextAppt.date === today() ? "today" : formatLong(nextAppt.date)}
+            {nextAppt.time ? ` ${nextAppt.time}` : ""}. Add a next action when it has happened.
+          </p>
         )}
         {stallReason(s, p) && (
           <p className="badge-line">
@@ -793,7 +860,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           : target.kind === "stuff"
             ? s.stuff.find((x) => x.id === target.id)?.text.split("\n")[0]
             : target.kind === "event"
-              ? eventHere?.title
+              ? (eventHere?.title ?? s.appointments.find((x) => x.id === target.id)?.title)
               : s.refs.find((x) => x.id === target.id)?.title;
     return `${kind} details${title ? `: ${title}` : ""}`;
   })();
@@ -812,7 +879,15 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   } else if (target.kind === "ref") {
     const r = s.refs.find((x) => x.id === target.id);
     body = r ? <RefDetail key={r.id} r={r} /> : null;
-  } else if (target.kind === "event") body = eventHere ? <EventDetail key={eventHere.key} e={eventHere} /> : null;
+  } else if (target.kind === "event") {
+    // An appointment linked to a project opens from the project even when its week hasn't been fetched: what the link
+    // kept of it (title, day, time) stands in until the calendar has it.
+    const kept = s.appointments.find((x) => x.id === target.id);
+    const e: CalEvent | undefined =
+      eventHere ??
+      (kept ? { key: kept.id, feed: kept.feed, title: kept.title, location: null, date: kept.date, endDate: kept.date, time: kept.time, endTime: kept.end_time, description: null, url: null, organizer: null, attendees: [], tentative: false } : undefined);
+    body = e ? <EventDetail key={e.key} e={e} /> : null;
+  }
 
   return (
     <aside

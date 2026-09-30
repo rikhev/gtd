@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getState, isStalled, mutate, named, newAction, newProject, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
+import { getState, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -9,7 +9,7 @@ import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, areaName, askContext, askWaitingOn, createAreaOp } from "../actionCommands.tsx";
 import { formatLong, today } from "../../shared/dates.ts";
 import { areaFilterLabel, inAreas, openAreaFilter, setAreaFilter, useAreaFilter } from "../areaFilter.ts";
-import type { ID, Op, Project } from "../../shared/types.ts";
+import type { Appointment, ID, Op, Project } from "../../shared/types.ts";
 
 type Filter = "active" | "all";
 
@@ -221,6 +221,9 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
   return api;
 }
 
+/** A linked appointment as the project's next step: "Workshop with Nordplast · today 09:30". */
+const apptLine = (x: Appointment) => `${x.title} · ${x.date === today() ? "today" : formatLong(x.date)}${x.time ? ` ${x.time}` : ""}`;
+
 export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
@@ -425,7 +428,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       // The lamp column sorts by status from its heading: a small ring stands for it.
       sortName: "Status",
       headIcon: <span className="gh-lamp" aria-hidden="true" />,
-      render: (p) => <Lamp health={projectHealth(s, p)} start={p.start} />,
+      render: (p) => <Lamp health={projectHealth(s, p)} start={p.start} appt={nextAppointment(s, p)} />,
     },
     {
       key: "done",
@@ -469,6 +472,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           <span className="muted-text">{firstNext.get(p.id)}</span>
         ) : notStarted(p) ? (
           <span className="muted-text">Starts {formatLong(p.start!)}</span>
+        ) : nextAppointment(s, p) ? (
+          // With no next action, a linked appointment is the next step: what, and when.
+          <span className="muted-text">{apptLine(nextAppointment(s, p)!)}</span>
         ) : startsToday(p) && p.status === "active" ? (
           <span className="starts-today">Starts today · add a next action</span>
         ) : (

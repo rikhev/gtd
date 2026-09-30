@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { notify, plural, updateMeta, useMeta } from "./store.ts";
+import { load, notify, plural, updateMeta, useMeta } from "./store.ts";
 
 /** One appointment from a subscribed calendar, in local time (server/calendar.ts). Read-only. */
 export interface CalEvent {
@@ -52,7 +52,8 @@ export function useEvents(from: string, to: string): { events: CalEvent[]; feeds
     // The server converts every appointment to this browser's time zone (it may itself run on UTC).
     fetch(`/api/calendar/events?from=${from}&to=${to}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
       .then((r) => r.json())
-      .then((j: { events?: CalEvent[] }) => {
+      .then((j: { events?: CalEvent[]; linkNotes?: string[] }) => {
+        linksFollowed(j.linkNotes);
         cache.set(key, { at: Date.now(), events: j.events ?? [] });
         for (const e of j.events ?? []) byKey.set(e.key, e);
         indexListeners.forEach((l) => l());
@@ -80,6 +81,16 @@ export function useEvent(key: string | null): CalEvent | undefined {
   );
 }
 
+/**
+ * The server moved or unlinked links to projects to follow their appointments: say what changed and load the lists
+ * again, so the projects' health follows (a project whose appointment is gone needs a next action again).
+ */
+function linksFollowed(notes: string[] | undefined) {
+  if (!notes?.length) return;
+  notify(notes.length === 1 ? notes[0] : `${notes[0]} (and ${plural(notes.length - 1, "more link")} updated)`);
+  void load();
+}
+
 let version_ = 0;
 const versionListeners = new Set<() => void>();
 const subscribeVersion = (l: () => void) => {
@@ -102,7 +113,8 @@ export function syncCalendars(): Promise<void> {
   if (syncing) return syncing;
   syncing = (async () => {
     try {
-      const j = (await (await fetch("/api/calendars/sync", { method: "POST" })).json()) as { calendars?: FeedInfo[] };
+      const j = (await (await fetch("/api/calendars/sync", { method: "POST" })).json()) as { calendars?: FeedInfo[]; linkNotes?: string[] };
+      linksFollowed(j.linkNotes);
       const cals = j.calendars ?? [];
       updateMeta({ calendars: cals });
       clearEvents();

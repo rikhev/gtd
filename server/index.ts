@@ -8,7 +8,7 @@ import { extract, guessMime, looksLikeEmail } from "./extract.ts";
 import { cancelClarify, clarifyLang, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
 import { exportJson, exportZip } from "./export.ts";
 import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
-import { addFeed, eventsBetween, feedInfo, probe, removeFeed, syncAll, updateFeed, validZone } from "./calendar.ts";
+import { addFeed, eventsBetween, feedInfo, probe, removeFeed, syncAll, takeLinkNotes, updateFeed, validZone } from "./calendar.ts";
 import { today } from "../shared/dates.ts";
 import type { FileRow, Op } from "../shared/types.ts";
 
@@ -210,7 +210,7 @@ app.patch("/api/calendars/:id", async (c) => {
   const r = await updateFeed(c.req.param("id"), body);
   return c.json({ ...r, calendars: feedInfo() }, r.ok ? 200 : 400);
 });
-app.post("/api/calendars/sync", async (c) => c.json({ ok: true, calendars: await syncAll() }));
+app.post("/api/calendars/sync", async (c) => c.json({ ok: true, calendars: await syncAll(), linkNotes: takeLinkNotes() }));
 app.delete("/api/calendars/:id", (c) => {
   removeFeed(c.req.param("id"));
   return c.json({ ok: true, calendars: feedInfo() });
@@ -220,7 +220,9 @@ app.get("/api/calendar/events", async (c) => {
   const to = c.req.query("to") ?? "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) return c.json({ error: "from and to must be days, from first" }, 400);
   // Times are given in the owner's time zone (their browser's), never the server's.
-  return c.json(await eventsBetween(from, to, validZone(c.req.query("tz")) ?? undefined));
+  // Links to projects that followed their appointments (moved, or unlinked when gone) are said once, here.
+  const got = await eventsBetween(from, to, validZone(c.req.query("tz")) ?? undefined);
+  return c.json({ ...got, linkNotes: takeLinkNotes() });
 });
 
 /** Weeks without progress before a project counts as stalled (the owner can change it in Settings). */

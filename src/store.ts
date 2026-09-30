@@ -1,6 +1,6 @@
 import type { FeedInfo } from "./calendarFeed.ts";
 import { useMemo, useSyncExternalStore } from "react";
-import type { Action, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
+import type { Action, Appointment, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
 import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
 
 const empty: State = {
@@ -14,6 +14,7 @@ const empty: State = {
   rules: [],
   corrections: [],
   reviews: [],
+  appointments: [],
 };
 
 let state: State = empty;
@@ -472,12 +473,25 @@ export function startsToday(p: Project, t = today()): boolean {
   return p.start === t;
 }
 
+/**
+ * The project's next linked appointment (today or later), soonest first. It is the project's next step: a project
+ * with one and no next action is scheduled, not stalled (owner's request). Once it has passed, the project needs a
+ * next action again.
+ */
+export function nextAppointment(s: State, p: Project, t = today()): Appointment | null {
+  return (
+    (s.appointments ?? [])
+      .filter((x) => x.project_id === p.id && x.date >= t)
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""))[0] ?? null
+  );
+}
+
 export function stallReason(s: State, p: Project): "no-next" | "idle" | null {
   if (p.status !== "active") return null;
   const t = today();
   if (p.start && p.start >= t) return null; // not begun, or begins today: nothing to be stalled yet
   const mine = s.actions.filter((a) => a.project_id === p.id);
-  if (!mine.some((a) => a.status === "next" || a.status === "waiting")) return "no-next";
+  if (!mine.some((a) => a.status === "next" || a.status === "waiting")) return nextAppointment(s, p, t) ? null : "no-next";
   const limit = Date.now() - meta.stallWeeks * 7 * 86_400_000;
   // The idle clock runs from when the project began: its creation, or its start date if that came later.
   const began = Math.max(Date.parse(p.created_at) || 0, p.start ? Date.parse(`${p.start}T23:59:59`) || 0 : 0);
@@ -512,7 +526,7 @@ export function projectHealth(s: State, p: Project): ProjectHealth {
   const open = s.actions.filter((a) => a.project_id === p.id);
   if (open.some((a) => a.status === "next")) return "ok";
   if (open.some((a) => a.status === "waiting")) return "waiting";
-  return startsToday(p) ? "scheduled" : "stalled";
+  return startsToday(p) || nextAppointment(s, p) ? "scheduled" : "stalled";
 }
 
 export function lastReview(s: State): string | null {

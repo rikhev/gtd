@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { formatDate, formatLong, formatTime, daysBetween, today } from "../../shared/dates.ts";
-import type { Action, Context } from "../../shared/types.ts";
+import type { Action, Appointment, Context } from "../../shared/types.ts";
 import { keyLabel, runKey } from "../keys.ts";
 
 /** A disposition or section name as a quiet chip; md is a state's title in plain caps. */
@@ -121,9 +121,37 @@ const HEALTH_LABEL = {
   scheduled: "Not started yet",
 } as const;
 
-/** Traffic-light lamp for a project's health. A scheduled project's lamp names its start day. */
-export function Lamp({ health, start }: { health: keyof typeof HEALTH_LABEL; start?: string | null }) {
-  const label = health === "scheduled" && start ? (start === today() ? "Starts today: give it a next action" : `Not started yet: starts ${formatLong(start)}`) : HEALTH_LABEL[health];
+/**
+ * An appointment from a subscribed calendar, in the marker column: a calendar leaf drawn on the marker's 22px grid,
+ * the ring's size and stroke. Square where actions are round and projects are lights, since an appointment is fixed
+ * in time (the hard landscape) rather than something to do; its header strip carries the calendar's colour.
+ */
+export function EventMark({ color, label = "Appointment" }: { color?: string | null; label?: string }) {
+  return (
+    <span className="marker event-mark" role="img" aria-label={label} title={label} style={color ? { ["--feed" as string]: color } : undefined}>
+      <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden>
+        <rect className="leaf-edge" x="6.625" y="6.625" width="8.75" height="8.75" rx="1.5" />
+        <path className="leaf-head" d="M6 8.1a2.1 2.1 0 0 1 2.1-2.1h5.8a2.1 2.1 0 0 1 2.1 2.1v1.4H6z" />
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * Traffic-light lamp for a project's health. A scheduled project's lamp names why: its start day, or the linked
+ * appointment that is its next step.
+ */
+export function Lamp({ health, start, appt }: { health: keyof typeof HEALTH_LABEL; start?: string | null; appt?: Pick<Appointment, "title" | "date" | "time"> | null }) {
+  const label =
+    health !== "scheduled"
+      ? HEALTH_LABEL[health]
+      : start && start > today()
+        ? `Not started yet: starts ${formatLong(start)}`
+        : appt
+          ? `Next: ${appt.title}, ${appt.date === today() ? "today" : formatLong(appt.date)}${appt.time ? ` ${appt.time}` : ""}`
+          : start === today()
+            ? "Starts today: give it a next action"
+            : HEALTH_LABEL.scheduled;
   return (
     <svg className={`lamp ${health}`} viewBox="0 0 12 12" role="img" aria-label={label}>
       <title>{label}</title>

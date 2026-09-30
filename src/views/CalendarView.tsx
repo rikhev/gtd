@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight, Hourglass, RefreshCw } from "lucide-react";
-import { completeActions, isStalled, mutate, newAction, plural, projectHealth, useMeta, useStore } from "../store.ts";
+import { completeActions, isStalled, mutate, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
 import { syncCalendars, toggleFeed, useEvents, useHiddenFeeds, useSyncing } from "../calendarFeed.ts";
-import { ImportantGlyph, Lamp } from "../components/bits.tsx";
-import { askContext, editors } from "../actionCommands.tsx";
+import { EventMark, ImportantGlyph, Lamp, Marker } from "../components/bits.tsx";
+import { askContext, editors, linkAppointment } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { addDays, addMonths, daysBetween, formatLong, fromIso, today } from "../../shared/dates.ts";
-import type { ID, State } from "../../shared/types.ts";
+import type { Appointment, ID, State } from "../../shared/types.ts";
 
 /*
  * The calendar is GTD's hard landscape: what has to happen on a given day, and what spans days. It shows the dates
@@ -43,6 +43,10 @@ interface Item {
   sub?: string;
   health?: ReturnType<typeof projectHealth>;
   projectStart?: string | null;
+  /** A project's next linked appointment, which its lamp names. */
+  projectAppt?: Appointment | null;
+  /** An appointment's subscribed calendar (its id). */
+  feed?: string;
   stalled?: boolean;
 }
 
@@ -64,6 +68,11 @@ function isoWeek(d: string): number {
   const firstThu = new Date(thu.getFullYear(), 0, 4);
   return 1 + Math.round(((thu.getTime() - firstThu.getTime()) / 86400000 - 3 + ((firstThu.getDay() + 6) % 7)) / 7);
 }
+/** Where an appointment is, short enough for its block: a meeting link reads as its site ("freshworks.zoom.us"). */
+const placeName = (loc: string) => {
+  const m = /^https?:\/\/([^/?#\s]+)\S*$/i.exec(loc.trim());
+  return m ? m[1].replace(/^www\./, "") : loc;
+};
 const range = (a: string, n: number) => Array.from({ length: n }, (_, i) => addDays(a, i));
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
@@ -88,7 +97,7 @@ function itemsOf(s: State, t: string): Item[] {
   }
   for (const p of s.projects) {
     if (p.status === "active") {
-      const base = { kind: "project" as const, id: p.id, title: p.title || "Untitled project", health: projectHealth(s, p), projectStart: p.start, stalled: isStalled(s, p) };
+      const base = { kind: "project" as const, id: p.id, title: p.title || "Untitled project", health: projectHealth(s, p), projectStart: p.start, projectAppt: nextAppointment(s, p), stalled: isStalled(s, p) };
       if (p.start && p.due && p.start <= p.due) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.due, role: "span", startField: "start", endField: "due", overdue: p.due < t });
       else if (p.due) out.push({ ...base, key: `p:${p.id}`, start: p.due, end: p.due, role: "due", startField: null, endField: "due", overdue: p.due < t });
       else if (p.start) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.start, role: "start", startField: "start", endField: null });
@@ -225,7 +234,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const lastSync = oldest ? new Date(oldest).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
   const all = useMemo(
     () => [
-      ...events.map((e): Item => ({ key: `e:${e.key}`, kind: "event", id: e.key, title: e.title, start: e.date, end: e.endDate, role: "event", startField: null, endField: null, time: e.time, endTime: e.endTime, location: e.location, color: feedById.get(e.feed)?.color, feedName: feedById.get(e.feed)?.name })),
+      ...events.map((e): Item => ({ key: `e:${e.key}`, kind: "event", id: e.key, title: e.title, start: e.date, end: e.endDate, role: "event", startField: null, endField: null, time: e.time, endTime: e.endTime, location: e.location, feed: e.feed, color: feedById.get(e.feed)?.color, feedName: feedById.get(e.feed)?.name })),
       ...itemsOf(s, t),
     ],
     [s, t, events, feedById],
@@ -444,6 +453,16 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       enabled: editable,
       run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], "defer") : ped.date([focusItem.id], "start")),
     },
+    {
+      id: "cal.project",
+      label: "Link the appointment to a project",
+      group: "Calendar",
+      keys: ["p"],
+      enabled: focusItem?.kind === "event",
+      run: () =>
+        focusItem?.kind === "event" &&
+        linkAppointment(ui, { key: focusItem.id, title: focusItem.title, date: focusItem.start, time: focusItem.time ?? null, endTime: focusItem.endTime ?? null, feed: focusItem.feed ?? "" }),
+    },
   ];
   useCommands("list:calendar", commands, { priority: 10, active: regionActive });
 
@@ -509,7 +528,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       >
         {canStart && <span className="cal-grip is-start" onMouseDown={(e) => startDrag(e, i, "start")} aria-hidden="true" />}
         <span className="cal-line">
-          {i.kind === "project" && i.health && <Lamp health={i.health} start={i.projectStart} />}
+          {i.kind === "project" && i.health && <Lamp health={i.health} start={i.projectStart} appt={i.projectAppt} />}
           {i.role === "followup" && <Hourglass size={11} strokeWidth={2} aria-hidden />}
           {i.role === "tickler" && <CalendarClock size={11} strokeWidth={2} aria-hidden />}
           {i.flagged && (
@@ -543,11 +562,15 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           }}
         >
           <span className="cal-agenda-mark" aria-hidden="true">
-            {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? (
+            {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} appt={i.projectAppt} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? (
               <svg className="cal-flag" viewBox="0 0 22 22" width="16" height="16" aria-hidden="true">
                 <ImportantGlyph />
               </svg>
-            ) : <span className={`cal-agenda-dot ${i.kind === "event" ? "is-event" : ""}`} style={i.color ? { background: i.color } : undefined} />}
+            ) : i.kind === "event" ? (
+              <EventMark color={i.color} />
+            ) : (
+              <Marker flagged={false} />
+            )}
           </span>
           <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>
           <span className="cal-agenda-when">{what}</span>
@@ -740,11 +763,12 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                       {b.item.time}
                       {b.item.endTime && b.height >= 40 ? `–${b.item.endTime}` : ""}
                     </span>
-                    {/* The title takes the lines the block has room for, then an ellipsis: never a half-cut line. */}
-                    <span className="cal-block-title" style={b.height >= 40 ? { WebkitLineClamp: Math.max(1, Math.floor((b.height - 24) / 15)) } : undefined}>
+                    {/* The title takes the lines the block has room for, less one for the place when it shows, then an
+                        ellipsis: never a half-cut line, and the place never runs over it. */}
+                    <span className="cal-block-title" style={b.height >= 40 ? { WebkitLineClamp: Math.max(1, Math.floor((b.height - 24) / 15) - (b.item.location && b.height > 56 ? 1 : 0)) } : undefined}>
                       {b.item.title}
                     </span>
-                    {b.item.location && b.height > 56 && <span className="cal-block-sub">{b.item.location}</span>}
+                    {b.item.location && b.height > 56 && <span className="cal-block-sub">{placeName(b.item.location)}</span>}
                   </div>
                 ))}
                 {d === t && nowMin >= h0 * 60 && nowMin <= h1 * 60 && <div className="cal-now" style={{ top: (nowMin / 60 - h0) * px }} aria-hidden="true" />}
