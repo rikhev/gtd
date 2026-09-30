@@ -191,8 +191,33 @@ async function fetchIcs(url: string): Promise<{ events: RawEvent[]; name: string
   if (!text.includes("BEGIN:VCALENDAR")) throw new Error("That link isn't a calendar (no ICS data). Use the calendar's subscribe (webcal) or ICS link.");
   if (text.length > 20_000_000) throw new Error("That calendar is too large to read.");
   const name = /^X-WR-CALNAME:(.*)$/m.exec(text.replace(/\r\n/g, "\n"))?.[1]?.trim() || null;
-  return { events: parse(text), name };
+  return { events: markDeclined(parse(text)), name };
 }
+
+/**
+ * Meetings the owner declined stay out (owner's bug report: a declined invitation showed as an appointment). Outlook
+ * and iCloud can both keep a declined meeting in the published calendar, with the owner's own reply on their attendee
+ * line. The feed doesn't say which attendee is the owner, so the owner is taken to be the address on the most
+ * meetings: in their own calendar they are on every one, invited or organising. Two equally frequent addresses both
+ * count (a calendar with a single invitation names the organiser as often as the owner). An organiser can't decline
+ * their own meeting, so a decline counts only from an attendee who isn't the meeting's organiser.
+ */
+function markDeclined(events: RawEvent[]): RawEvent[] {
+  const seen = new Map<string, number>();
+  for (const e of events) {
+    const on = new Set([...e.attendees.map((a) => a.email), e.organizer?.email].filter((m): m is string => Boolean(m)).map(mailKey));
+    on.forEach((m) => seen.set(m, (seen.get(m) ?? 0) + 1));
+  }
+  const most = Math.max(0, ...seen.values());
+  const me = new Set([...seen].filter(([, n]) => n === most).map(([m]) => m));
+  for (const e of events) {
+    const organiser = e.organizer?.email ? mailKey(e.organizer.email) : null;
+    e.declined = e.attendees.some((a) => a.status === "declined" && a.email && mailKey(a.email) !== organiser && me.has(mailKey(a.email)));
+  }
+  return events;
+}
+/** One key per mailbox: case aside, and an Apple ID's @icloud.com, @me.com and @mac.com aliases are the same one. */
+const mailKey = (m: string) => m.trim().toLowerCase().replace(/@(me|mac)\.com$/, "@icloud.com");
 
 /** Appointments from every calendar on the days from..to (inclusive), expanded, in local time. */
 export async function eventsBetween(from: string, to: string, zone: string = SERVER): Promise<{ events: CalEvent[]; feeds: FeedInfo[] }> {
@@ -241,6 +266,8 @@ interface RawEvent {
   exdates: Stamp[];
   recurrenceId: Stamp | null;
   cancelled: boolean;
+  /** The owner declined it (see markDeclined). */
+  declined?: boolean;
   description: string | null;
   url: string | null;
   organizer: Person | null;
@@ -289,7 +316,8 @@ function splitLine(line: string): { name: string; params: Record<string, string>
 }
 
 const person = (params: Record<string, string>, value: string): Person => {
-  const email = /^mailto:/i.test(value.trim()) ? value.trim().slice(7) : null;
+  // iCloud may name an attendee by an internal id (urn:uuid:…) and give the address in EMAIL= instead.
+  const email = /^mailto:/i.test(value.trim()) ? value.trim().slice(7) : params.EMAIL?.trim() || null;
   return { name: params.CN?.trim() || null, email };
 };
 
@@ -518,7 +546,7 @@ function expand(raw: RawEvent[], from: string, to: string, zone: string): Omit<C
   for (const e of raw) if (e.recurrenceId) overrides.set(e.uid, (overrides.get(e.uid) ?? new Set()).add(localDay(e.recurrenceId)));
   const out: Omit<CalEvent, "feed">[] = [];
   for (const e of raw) {
-    if (e.cancelled) continue;
+    if (e.cancelled || e.declined) continue;
     const lengthMs = e.end ? instant(e.end).getTime() - instant(e.start).getTime() : e.start.allDay ? 86_400_000 : 0;
     const skipped = new Set(e.exdates.map(localDay));
     for (const s of e.recurrenceId ? [e.start] : occurrences(e, to)) {

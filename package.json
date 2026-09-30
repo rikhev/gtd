@@ -14,7 +14,8 @@
     "demo:seed": "GTD_DATA_DIR=data-demo node tests/seed-demo.mjs",
     "test:firefox": "node tests/firefox-keys.mjs",
     "auth:setup": "tsx --env-file-if-exists=.env server/auth-setup.ts",
-    "backup": "node scripts/backup.mjs"
+    "backup": "node scripts/backup.mjs",
+    "calendar:find": "tsx --env-file-if-exists=.env scripts/calendar-find.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

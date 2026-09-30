@@ -4311,8 +4311,8 @@ body.is-cal-dragging {
   }
 }
 
-/* What fits now: while Next Actions is narrowed to the time and energy you have, one quiet line above the list says
-   so, how much it hides, and how to see everything again. */
+/* What fits now and the Projects area filter: while a list is narrowed, one quiet line above it says so and how to
+   see everything again. */
 .fit-bar {
   display: flex;
   align-items: center;
@@ -4326,9 +4326,6 @@ body.is-cal-dragging {
 .fit-bar strong {
   color: var(--ink);
   font-weight: 600;
-}
-.fit-bar .fit-count {
-  color: var(--ink-3);
 }
 .fit-bar .text-btn:first-of-type {
   margin-left: auto;

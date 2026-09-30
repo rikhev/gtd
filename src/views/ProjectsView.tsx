@@ -8,6 +8,7 @@ import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, areaName, askContext, askWaitingOn, createAreaOp } from "../actionCommands.tsx";
 import { formatLong, today } from "../../shared/dates.ts";
+import { areaFilterLabel, inAreas, openAreaFilter, setAreaFilter, useAreaFilter } from "../areaFilter.ts";
 import type { ID, Op, Project } from "../../shared/types.ts";
 
 type Filter = "active" | "all";
@@ -227,6 +228,8 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   const [filter, setFilter] = usePersisted<Filter>("projects:filter", "active");
   const [editing, setEditing] = useState<ID | null>(null);
   const ed = projectEditors(ui);
+  // F narrows the list to one or more areas of focus; the rest step aside until the filter is cleared.
+  const areas = useAreaFilter();
 
   // Completed projects stay on the list, struck through at the bottom of their area, until archived (⇧E), as on every list.
   const [showDone, setShowDone] = usePersisted("showdone:projects", true);
@@ -236,8 +239,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     () =>
       s.projects
         .filter((p) => (filter === "active" ? p.status === "active" || (showDone && p.status === "done" && !p.archived_at) : p.status !== "trashed"))
+        .filter((p) => !areas || inAreas(p.area_id, areas))
         .sort((a, b) => a.sort - b.sort),
-    [s.projects, filter, showDone],
+    [s.projects, filter, showDone, areas],
   );
   const openCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -343,6 +347,8 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       const g = isGroupKey(nav.focus) ? nav.focus.slice(6) : groups.find((x) => x.rows.some((r) => r.id === nav.focus))?.key;
       if (g && areaById.has(g)) area = g;
     }
+    // Narrowed to areas, a new project takes the first of them, so it doesn't vanish as it is named.
+    if (!area && areas && !areas.includes("none")) area = areas[0];
     const p = newProject({ area_id: area });
     mutate("New project", [{ type: "create", table: "projects", row: { ...p } }], { silent: true });
     nav.setFocus(p.id);
@@ -391,6 +397,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             { id: "s:mark", label: "Sort by status", hint: sort?.key === "mark" ? "Current" : "", section: "sort" },
             { id: "s:due", label: "Sort by due date", hint: sort?.key === "due" ? "Current" : "", section: "sort" },
             { id: "s:", label: "Manual order", hint: !sort ? "Current" : "", section: "sort" },
+            { id: "areas", label: areas ? `Areas: ${areaFilterLabel(areas)}` : "Filter by area…", hint: areas ? "On" : "", section: "show" },
             { id: "filter", label: filter === "active" ? "Show someday and archived projects" : "Show active projects only", section: "show" },
             ...(filter === "active" ? [{ id: "showdone", label: showDone ? `Hide completed projects${doneHere.length ? ` (${doneHere.length})` : ""}` : `Show completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, section: "done" }] : []),
             ...(doneHere.length ? [{ id: "archive", label: `Archive completed projects (${doneHere.length})`, section: "done" }] : []),
@@ -401,9 +408,12 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             if (id === "area") setGroupByArea(!groupByArea);
             if (id?.startsWith("s:")) setSort(id === "s:" ? null : { key: id.slice(2), dir: 1 });
             if (id === "filter") setFilter(filter === "active" ? "all" : "active");
+            if (id === "areas") window.setTimeout(() => openAreaFilter(ui));
           },
         }),
     },
+    { id: "proj.areas", label: areas ? "Filter by area (change or clear)" : "Filter by area: show only some areas", group: "View", keys: ["f"], run: () => openAreaFilter(ui) },
+    ...(areas ? [{ id: "proj.areasoff", label: "Show every area", group: "View", run: () => setAreaFilter([]) }] : []),
   ];
   useCommands("list:projects", commands, { priority: 10, active: regionActive });
 
@@ -473,7 +483,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { key: "created", label: "Created", width: "84px", optional: true, render: (p) => <DateCell date={p.created_at.slice(0, 10)} kind="plain" /> },
   ];
 
-  return (
+  const grid = (
     <Grid
       listId="projects"
       sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
@@ -526,7 +536,31 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       onOpen={(k) => ui.openDetail({ kind: "project", id: k }, true)}
       // Touch: swipe right to complete the project (or reopen it), left to trash it with its actions.
       swipe={{ right: { label: "Done", run: (id) => toggleDone([id]) }, left: { label: "Trash", run: (id) => ed.trash([id], false) } }}
-      empty={<EmptyState title="No projects yet" lines={["Start one here, or let Claude propose projects when it clarifies your Inbox."]} />}
+      empty={
+        areas ? (
+          <EmptyState title={`No projects in ${areaFilterLabel(areas)}`} lines={["Press F to choose other areas, or show every area."]} />
+        ) : (
+          <EmptyState title="No projects yet" lines={["Start one here, or let Claude propose projects when it clarifies your Inbox."]} />
+        )
+      }
     />
+  );
+  if (!areas) return grid;
+  // While the list is narrowed, a quiet line above it names the areas and how to see everything again (as What fits now).
+  return (
+    <>
+      <div className="fit-bar" role="status">
+        <span>
+          Showing <strong>{areaFilterLabel(areas)}</strong>
+        </span>
+        <button type="button" className="text-btn" onClick={() => openAreaFilter(ui)}>
+          Change
+        </button>
+        <button type="button" className="text-btn" onClick={() => setAreaFilter([])}>
+          Show all
+        </button>
+      </div>
+      {grid}
+    </>
   );
 }

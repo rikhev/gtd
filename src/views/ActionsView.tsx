@@ -110,9 +110,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   // Done actions stay on their list (struck through, at the bottom of their group) unless hidden; ⇧E archives them to Done.
   const [showDone, setShowDone] = usePersisted(`showdone:${mode}`, true);
   const doneCount = useMemo(() => (mode === "done" ? 0 : s.actions.filter((a) => doneHere(a, mode)).length), [s.actions, mode]);
-  // What fits now (GTD's engage step: context, then time available, then energy): Next Actions narrowed to what can be
-  // done with the time and energy you have. Unestimated actions stay in (they might fit); done rows step aside. The
-  // filter is for the moment: it lapses at the end of the day, so a stale one never hides tomorrow's list.
+  // What fits now (GTD's engage step: where you are decides what can be done): Next Actions narrowed to the contexts
+  // you are in; done rows step aside. The filter is for the moment: it lapses at the end of the day, so a stale one
+  // never hides tomorrow's list.
   const fitNow = useFit();
   const fit = mode === "next" ? fitNow : null;
   const allRows = useMemo(() => rowsFor(s, mode, showDeferred, showDone), [s, mode, showDeferred, showDone]);
@@ -120,8 +120,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     () => (fit ? allRows.filter((a) => a.status !== "done" && fits(a, fit) === "fits") : allRows),
     [allRows, fit],
   );
-  // Actions without the estimate the filter asks about can't be judged: they are listed apart, folded, below what fits.
-  const unknownRows = useMemo(() => (fit ? allRows.filter((a) => a.status !== "done" && fits(a, fit) === "unknown") : []), [allRows, fit]);
   // Next actions for other places wait, folded, below: you are not there now.
   const elsewhereRows = useMemo(() => (fit ? allRows.filter((a) => a.status !== "done" && fits(a, fit) === "elsewhere") : []), [allRows, fit]);
   const deferredCount = useMemo(() => (mode === "next" ? s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length : 0), [s, mode, t]);
@@ -226,10 +224,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         // Done rows sink to the bottom of their group, whatever the sort.
         mode === "done" ? g : { ...g, rows: [...g.rows.filter((a) => a.status !== "done"), ...g.rows.filter((a) => a.status === "done")] },
       ),
-      ...(unknownRows.length ? [{ key: "noest", label: "No estimate yet", rows: unknownRows, meta: <span className="muted-text">might fit</span> }] : []),
       ...(elsewhereRows.length ? [{ key: "elsewhere", label: "Elsewhere", rows: elsewhereRows, meta: <span className="muted-text">other places</span> }] : []),
     ],
-    [baseGroups, sorters, sort, mode, unknownRows, elsewhereRows],
+    [baseGroups, sorters, sort, mode, elsewhereRows],
   );
 
   const multi = groups.length > 1 || (groupBy !== "none" && groups.length === 1 && groups[0].key !== "all");
@@ -288,13 +285,12 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     notify("Swipe a row right to mark it done, left to trash it.");
   }, [mode]);
 
-  // Setting the filter folds "No estimate yet", so what fits stands alone (open it to see what might).
+  // Setting the filter folds "Elsewhere", so what fits stands alone (open it to see the rest).
   useEffect(() => {
     if (!fit) return;
-    nav.toggleGroup("noest", false);
     nav.toggleGroup("elsewhere", false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fit?.time, fit?.energy, fit?.where?.join()]);
+  }, [fit?.where.join()]);
 
   // Keep the detail pane following the cursor when it is open.
   useEffect(() => {
@@ -411,7 +407,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     { id: "view.menu", label: "View: group and sort", group: "View", keys: ["alt+v"], run: openViewMenu },
     ...(mode === "next"
       ? [
-          { id: "view.fit", label: fit ? "What fits now (change or clear)" : "What fits now: time and energy you have", group: "View", keys: ["f"], run: () => openFit(ui) },
+          { id: "view.fit", label: fit ? "What fits now (change or clear)" : "What fits now: the contexts where you are", group: "View", keys: ["f"], run: () => openFit(ui) },
           ...(fit ? [{ id: "view.fitoff", label: "Show every next action", group: "View", run: () => setFit(null) }] : []),
         ]
       : []),
@@ -614,19 +610,12 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   );
   if (!fit) return grid;
   // While the list is narrowed, a quiet line above it says so, how much it hides, and how to see everything again.
-  // The heading carries the count (so many of so many fit); the line names the filter and what it couldn't judge.
-  const maybe = unknownRows.length;
+  // The heading carries the count (so many of so many fit); the line names where you are.
   return (
     <>
       <div className="fit-bar" role="status">
         <span>
           Fits <strong>{fitLabel(fit)}</strong>
-          {maybe > 0 && (
-            <span className="fit-count">
-              {" "}
-              · {plural(maybe, "action")} without an estimate, folded below
-            </span>
-          )}
         </span>
         <button type="button" className="text-btn" onClick={() => openFit(ui)}>
           Change

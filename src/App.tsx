@@ -1,5 +1,6 @@
 import { syncCalendars } from "./calendarFeed.ts";
 import { fits, openFit, useFit } from "./fit.ts";
+import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
@@ -403,6 +404,8 @@ export default function App() {
   const t = today();
   const deferredNext = s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length;
   const fitNow = useFit();
+  const areaFilter = useAreaFilter();
+  const activeProjects = s.projects.filter((p) => p.status === "active");
   const nextShown = s.actions.filter((a) => (a.status === "next" && !isDeferred(a, t)) || isChase(a, t));
   const counts: Partial<Record<ViewId, string>> = {
     inbox: plural(inboxCount, "item"),
@@ -414,7 +417,10 @@ export default function App() {
         : plural(nextShown.length, "action"),
       ...(deferredNext ? [`${deferredNext} deferred`] : []),
     ].join(" · "),
-    projects: plural(s.projects.filter((p) => p.status === "active").length, "active project"),
+    // While Projects is narrowed to areas, the count says how many of them are shown.
+    projects: areaFilter
+      ? `${activeProjects.filter((p) => inAreas(p.area_id, areaFilter)).length} of ${plural(activeProjects.length, "active project")}`
+      : plural(activeProjects.length, "active project"),
     waiting: plural(s.actions.filter((a) => a.status === "waiting").length, "item"),
     agendas: (() => {
       const n = new Set(s.actions.flatMap((a) => (a.status === "next" ? [a.person] : a.status === "waiting" ? [a.waiting_who] : [])).filter((w): w is string => Boolean(w?.trim())).map((w) => w.trim().toLowerCase())).size;
@@ -512,6 +518,11 @@ export default function App() {
               {view === "next" && !fitNow && (
                 <button type="button" className="text-btn" onClick={() => openFit(ui)}>
                   What fits now
+                </button>
+              )}
+              {view === "projects" && !areaFilter && s.areas.length > 0 && (
+                <button type="button" className="text-btn" onClick={() => openAreaFilter(ui)}>
+                  Filter by area
                 </button>
               )}
               {/* Touch has no ⌥V: the list's View menu (group, sort, show) as a button. */}
