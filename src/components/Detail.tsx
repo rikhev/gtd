@@ -1,6 +1,6 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip, Pin, Check, CircleHelp, CircleDashed, Video } from "lucide-react";
+import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video } from "lucide-react";
 import { mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
@@ -646,7 +646,7 @@ function ProjectDetail({ p }: { p: Project }) {
               const when = `${x.date === today() ? "Today" : formatDate(x.date)}${x.time ? ` ${x.time}` : ""}`;
               return (
                 <li key={x.id}>
-                  <button type="button" className={`mini-row ${past ? "is-past" : ""}`} title={`${x.title}, ${formatLong(x.date)}${x.time ? ` ${x.time}${x.end_time ? `–${x.end_time}` : ""}` : ""}`} onClick={() => ui.openDetail({ kind: "event", id: x.id }, true)}>
+                  <button type="button" className={`mini-row ${past ? "is-past" : ""}`} title={`${x.title}, ${formatLong(x.date)}${x.time ? ` ${x.time}${x.end_time ? `–${x.end_time}` : ""}` : ""}`} onClick={() => ui.drillDetail({ kind: "event", id: x.id })}>
                     <EventMark color={feedColor(x.feed)} />
                     <span className="mini-title">{x.title}</span>
                     <span className="mini-meta">{meta.calendars.find((c) => c.id === x.feed)?.name ?? ""}</span>
@@ -687,7 +687,7 @@ function ProjectDetail({ p }: { p: Project }) {
                   type="button"
                   className={`mini-row ${done ? "is-done" : ""}`}
                   title={done ? `Done ${when ? formatLong(when.slice(0, 10)) : ""}` : `Added ${formatLong(a.created_at.slice(0, 10))}`}
-                  onClick={() => ui.openDetail({ kind: "action", id: a.id }, true)}
+                  onClick={() => ui.drillDetail({ kind: "action", id: a.id })}
                 >
                   <Marker flagged={!done && Boolean(a.flagged)} done={done} />
                   <span className="mini-title">{a.title || "Untitled action"}</span>
@@ -779,6 +779,17 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   const ui = useUI();
   const s = useStore((x) => x);
   const root = useRef<HTMLElement>(null);
+  /** What an item is called, for the pane's name and its back link. An appointment is known by its link, if any. */
+  const titleOf = (t: Target) =>
+    t.kind === "action"
+      ? s.actions.find((x) => x.id === t.id)?.title
+      : t.kind === "project"
+        ? s.projects.find((x) => x.id === t.id)?.title
+        : t.kind === "stuff"
+          ? s.stuff.find((x) => x.id === t.id)?.text.split("\n")[0]
+          : t.kind === "event"
+            ? s.appointments.find((x) => x.id === t.id)?.title
+            : s.refs.find((x) => x.id === t.id)?.title;
 
   useCommands(
     "detail",
@@ -787,7 +798,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
         // Escape steps out one level. In a text field it only leaves the field (the edit is saved on blur) and the pane keeps
         // focus, so its field keys work again; from the pane it closes it (unless pinned) and you're back on the row.
         id: "detail.back",
-        label: ui.detailPinned ? "Back to the list" : "Close details and go back to the list",
+        label: ui.detailTrail.length ? `Back to “${titleOf(ui.detailTrail[ui.detailTrail.length - 1]) || "the previous item"}”` : ui.detailPinned ? "Back to the list" : "Close details and go back to the list",
         group: "Details",
         keys: ["escape"],
         inInput: true,
@@ -796,6 +807,12 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           if (el && root.current?.contains(el) && isEditable(el)) {
             el.blur();
             root.current.focus({ preventScroll: true });
+            return;
+          }
+          // Opened from inside the pane (a project's action or appointment): back to where it was opened from.
+          if (ui.detailTrail.length) {
+            ui.detailBack();
+            root.current?.focus({ preventScroll: true });
             return;
           }
           el?.blur?.();
@@ -852,18 +869,11 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   const paneName = (() => {
     if (!target) return "Details";
     const kind = ({ action: "Action", project: "Project", stuff: "Inbox item", ref: "Reference", event: "Appointment" } as Record<string, string>)[target.kind] ?? "Item";
-    const title =
-      target.kind === "action"
-        ? s.actions.find((x) => x.id === target.id)?.title
-        : target.kind === "project"
-          ? s.projects.find((x) => x.id === target.id)?.title
-          : target.kind === "stuff"
-            ? s.stuff.find((x) => x.id === target.id)?.text.split("\n")[0]
-            : target.kind === "event"
-              ? (eventHere?.title ?? s.appointments.find((x) => x.id === target.id)?.title)
-              : s.refs.find((x) => x.id === target.id)?.title;
+    const title = (target.kind === "event" ? eventHere?.title : undefined) ?? titleOf(target);
     return `${kind} details${title ? `: ${title}` : ""}`;
   })();
+  // Where the pane was drilled from, for its back link.
+  const from = ui.detailTrail[ui.detailTrail.length - 1];
 
   let body: ReactNode = null;
   if (!target) body = null;
@@ -900,9 +910,22 @@ export function Detail({ target, active }: { target: Target | null; active: bool
       onFocus={() => !active && ui.setRegion("detail")}
     >
       <div className="detail-bar">
-        <h2 className="detail-title" id="detail-title">
-          Details
-        </h2>
+        {/* Drilled in from a project: the way back, named, in place of the heading (Esc does the same). */}
+        {from ? (
+          <>
+            <h2 className="visually-hidden" id="detail-title">
+              Details
+            </h2>
+            <button type="button" className="detail-back" onClick={() => ui.detailBack()} aria-keyshortcuts="Escape" title={`Back to “${titleOf(from) || "the previous item"}” (Esc)`}>
+              <ChevronLeft size={14} strokeWidth={2} aria-hidden />
+              <span className="detail-back-name">{titleOf(from) || "Back"}</span>
+            </button>
+          </>
+        ) : (
+          <h2 className="detail-title" id="detail-title">
+            Details
+          </h2>
+        )}
         <span className="detail-bar-tools">
           <button
             type="button"

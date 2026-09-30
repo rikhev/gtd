@@ -4,6 +4,19 @@ import type { PickerSpec, ListItem } from "../ui.tsx";
 import { useCommands } from "../keys.ts";
 import { parseDate, formatLong, TIME_PRESETS, formatTime, parseTime, today, addDays, fromIso } from "../../shared/dates.ts";
 
+/*
+ * How the last thing was asked for (owner's rule): a picker opened with the mouse opens at the pointer; one opened
+ * from the keyboard opens at what has focus. Whichever came last, a press or a key, decides.
+ */
+let lastPointer: { x: number; y: number; at: number } | null = null;
+let lastKeyAt = 0;
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", (e) => (lastPointer = { x: e.clientX, y: e.clientY, at: performance.now() }), true);
+  window.addEventListener("keydown", () => (lastKeyAt = performance.now()), true);
+}
+/** Where the pointer was, if the picker is being opened by a press just now (not by a key, nor long after a click). */
+const pointerOpening = () => (lastPointer && lastPointer.at > lastKeyAt && performance.now() - lastPointer.at < 1500 ? lastPointer : null);
+
 interface Props {
   spec: PickerSpec;
   close: () => void;
@@ -46,7 +59,7 @@ export function Picker({ spec, close }: Props) {
     exclusive: true,
   });
 
-  // Anchor under the focused row/field, clamped to the viewport.
+  // Anchor at the pointer when opened by a press, else under the focused row, field or calendar item; clamped to the viewport.
   useLayoutEffect(() => {
     const act = opener;
     // A row whose value is its own control (a setting) opens the picker under that value, by mouse or by Enter.
@@ -60,9 +73,11 @@ export function Picker({ spec, close }: Props) {
     const w = box.current?.offsetWidth ?? 320;
     const h = box.current?.offsetHeight ?? 280;
     // A menu opened with the mouse opens at the pointer; one opened from the keyboard, under the focused row.
-    const at = spec.type === "list" ? spec.at : undefined;
+    const at = (spec.type === "list" ? spec.at : undefined) ?? pointerOpening() ?? undefined;
     let top = at ? at.y + 2 : r ? r.bottom + 4 : 120;
-    let left = at ? at.x + 2 : r ? Math.max(anchor === valueEl ? r.left : r.left + 40, 12) : 320;
+    // A list row opens past its marker column; a field, a setting's value or a calendar item at its own left edge.
+    const inset = anchor === valueEl || anchor?.closest(".calendar, .detail, .clarify") ? 0 : 40;
+    let left = at ? at.x + 2 : r ? Math.max(r.left + inset, 12) : 320;
     if (top + h > window.innerHeight - 12) top = Math.max(12, (at ? at.y : r ? r.top : top) - h - 4);
     if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;
     setPos({ top, left });

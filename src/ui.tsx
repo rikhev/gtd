@@ -76,6 +76,15 @@ export interface UI {
   setDetailPinned: (on: boolean) => void;
   /** A list reports what its cursor is on: the pane follows it when pinned, or when it is already open. */
   followDetail: (t: Target | null) => void;
+  /**
+   * Open something from inside the pane (a project's action or appointment), remembering what the pane showed, so
+   * Esc or the pane's back link returns to it. Anything opened from a list starts the trail afresh.
+   */
+  drillDetail: (t: Target) => void;
+  /** What the pane showed before each drill, the last one last. */
+  detailTrail: Target[];
+  /** Back one step along the trail. */
+  detailBack: () => void;
   openPicker: (p: PickerSpec) => void;
   pickerOpen: boolean;
   focusCapture: () => void;

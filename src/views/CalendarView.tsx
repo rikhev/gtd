@@ -520,6 +520,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       <div
         key={i.key}
         className={cls}
+        // What has focus, so a picker opened from the keyboard (P, D, S…) opens at it.
+        data-focused={itemKey === i.key || undefined}
         style={{ gridColumn: `${p.col} / span ${p.span}`, gridRow: p.lane + 1, ...(i.color ? { ["--feed" as string]: i.color } : {}) }}
         title={`${label}\n${dates}${i.overdue ? " · overdue" : ""}`}
         aria-label={`${i.kind === "project" ? "Project" : i.kind === "event" ? `Appointment${i.feedName ? `, ${i.feedName}` : ""}` : "Action"}: ${label}, ${dates}${i.overdue ? ", overdue" : ""}`}
@@ -555,6 +557,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         <button
           type="button"
           className={`cal-agenda-row ${i.overdue && i.end === d ? "is-overdue" : ""} ${itemKey === i.key ? "is-focus" : ""}`}
+          data-focused={itemKey === i.key || undefined}
           onClick={() => {
             setCursor(d);
             setItemKey(i.key);
@@ -593,6 +596,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     <div
       key={d}
       data-date={d}
+      // With no item picked, the cursor day has focus: a picker from the keyboard opens under it.
+      data-focused={(d === cursor && !itemKey) || undefined}
       className={[
         "cal-day",
         d === t ? "is-today" : "",
@@ -749,6 +754,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                   <div
                     key={b.item.key}
                     className={`cal-block ${b.height < 40 ? "is-compact" : ""} ${itemKey === b.item.key ? "is-focus" : ""}`}
+                    data-focused={itemKey === b.item.key || undefined}
                     style={{ top: b.top, height: b.height, left: `calc(${(b.slot / b.of) * 100}% + 2px)`, width: `calc(${100 / b.of}% - 4px)`, ...(b.item.color ? { ["--feed" as string]: b.item.color } : {}) }}
                     title={`${b.item.time}${b.item.endTime ? `–${b.item.endTime}` : ""} ${b.item.title}${b.item.location ? ` · ${b.item.location}` : ""}${b.item.feedName ? `\n${b.item.feedName}` : ""}`}
                     aria-label={`Appointment${b.item.feedName ? `, ${b.item.feedName}` : ""}: ${b.item.title}, ${formatLong(d)} ${b.item.time}${b.item.endTime ? ` to ${b.item.endTime}` : ""}`}

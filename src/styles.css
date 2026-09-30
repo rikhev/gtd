@@ -1766,6 +1766,33 @@ textarea.field-text {
 }
 
 /* Pin: tilted and quiet when loose; upright in accent on a selection chip when the pane is pinned. */
+/* Drilled in from a project's pane: the way back, named after where it leads, in the heading's place. */
+.detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: calc(100% - 72px);
+  height: 28px;
+  margin-left: -6px;
+  padding: 0 8px 0 4px;
+  border-radius: 3px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.detail-back:hover {
+  background: var(--rail);
+  color: var(--ink);
+}
+.detail-back svg {
+  flex: none;
+}
+.detail-back-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .detail-bar-tools {
   display: inline-flex;
   gap: 2px;

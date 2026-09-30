@@ -77,6 +77,14 @@ export default function App() {
   const [view, setView] = useState<ViewId>(() => viewFromHash() ?? "next");
   const [region, setRegion] = useState<Region>("list");
   const [detail, setDetail] = useState<Target | null>(null);
+  // What the pane showed before each drill into a related item (a project's action or appointment).
+  const [detailTrail, setDetailTrail] = useState<Target[]>([]);
+  // Set while the pane moves along the trail, so the change below doesn't clear it.
+  const alongTrail = useRef(false);
+  useEffect(() => {
+    if (alongTrail.current) alongTrail.current = false;
+    else setDetailTrail((t) => (t.length ? [] : t));
+  }, [detail]);
   const [detailPinned, setDetailPinnedState] = useState<boolean>(() => {
     try {
       return localStorage.getItem("gtd:detailPinned") === "1";
@@ -207,6 +215,21 @@ export default function App() {
           setRegion("list");
         } else if (focus) setRegion("detail");
       },
+      drillDetail: (t) => {
+        if (!detail || (detail.kind === t.kind && detail.id === t.id)) return;
+        alongTrail.current = true;
+        setDetailTrail((tr) => [...tr, detail]);
+        setDetail(t);
+        setRegion("detail");
+      },
+      detailTrail,
+      detailBack: () => {
+        const prev = detailTrail[detailTrail.length - 1];
+        if (!prev) return;
+        alongTrail.current = true;
+        setDetailTrail((tr) => tr.slice(0, -1));
+        setDetail(prev);
+      },
       detailPinned,
       setDetailPinned: (on) => {
         setDetailPinned(on);
@@ -287,7 +310,7 @@ export default function App() {
       revealTarget,
       clearReveal: () => setRevealTarget(null),
     }),
-    [view, go, region, detail, detailPinned, setDetailPinned, picker, searchQuery, revealTarget],
+    [view, go, region, detail, detailTrail, detailPinned, setDetailPinned, picker, searchQuery, revealTarget],
   );
 
   const cycleRegion = (dir: 1 | -1) => {
