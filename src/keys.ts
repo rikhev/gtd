@@ -235,6 +235,8 @@ const ARIA: Record<string, string> = { mod: IS_MAC ? "Meta" : "Control", ctrl: "
 
 /** The key string as an aria-keyshortcuts value, e.g. "Control+1". */
 export function keyAria(k: string): string {
+  // No key (a rail list without a go-to number, such as Agendas) announces nothing.
+  if (!k) return "";
   return k
     .split("+")
     .map((p) => ARIA[p] ?? (p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)))

@@ -15,7 +15,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   actions: [
     "id", "title", "notes", "project_id", "context_id", "due", "defer", "time_min", "energy", "flagged",
     "status", "waiting_who", "waiting_since", "followup", "recurrence", "bring_back", "sort", "created_at", "completed_at", "updated_at",
-    "done_from", "archived_at", "trashed_at", "trashed_from",
+    "done_from", "archived_at", "trashed_at", "trashed_from", "person",
   ],
   projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at", "trashed_at", "trashed_from", "start"],
   stuff: ["id", "text", "kind", "status", "created_at", "processed_at", "trashed_at", "trashed_from"],
@@ -102,6 +102,11 @@ if (!(db.prepare("PRAGMA table_info(refs)").all() as { name: string }[]).some((c
 // Projects can start on a date, so the calendar draws them as a bar from start to due.
 if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).some((c) => c.name === "start")) {
   db.exec("ALTER TABLE projects ADD COLUMN start TEXT");
+}
+// Agendas: an action can name the person it is for (raise it with them, call them, send them something), so each
+// person's agenda gathers it with what they owe you.
+if (!(db.prepare("PRAGMA table_info(actions)").all() as { name: string }[]).some((c) => c.name === "person")) {
+  db.exec("ALTER TABLE actions ADD COLUMN person TEXT");
 }
 // Areas carry a colour, shown only in their "#". Existing areas take the palette in their order, once.
 if (!(db.prepare("PRAGMA table_info(areas)").all() as { name: string }[]).some((c) => c.name === "color")) {

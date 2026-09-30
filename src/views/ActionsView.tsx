@@ -82,6 +82,20 @@ function rowsFor(s: State, mode: Mode, showDeferred: boolean, showDone: boolean)
   return s.actions.filter((a) => a.status === mode || (showDone && doneHere(a, mode)));
 }
 
+interface Fit {
+  /** Minutes you have, or null for any length. */
+  time: number | null;
+  /** 1 low, 2 medium, 3 high (anything goes), or null. */
+  energy: number | null;
+  day: string;
+}
+const FIT_TIMES: [number | null, string][] = [[5, "5 minutes"], [15, "15 minutes"], [30, "30 minutes"], [60, "An hour"], [120, "Two hours"], [null, "Any length of time"]];
+const FIT_ENERGY: [number, string][] = [[1, "Low: something easy"], [2, "Medium"], [3, "High: anything goes"]];
+const fitLabel = (f: Fit) =>
+  [f.time === null ? null : f.time < 60 ? `${f.time} min` : f.time === 60 ? "an hour" : `${f.time / 60} hours`, f.energy === null || f.energy === 3 ? null : `${["", "low", "medium"][f.energy]} energy`]
+    .filter(Boolean)
+    .join(" · ") || "anything";
+
 function dueBucket(a: Action): [number, string] {
   if (!a.due) return [9, "No due date"];
   const d = daysBetween(today(), a.due);
@@ -109,7 +123,16 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   // Done actions stay on their list (struck through, at the bottom of their group) unless hidden; ⇧E archives them to Done.
   const [showDone, setShowDone] = usePersisted(`showdone:${mode}`, true);
   const doneCount = useMemo(() => (mode === "done" ? 0 : s.actions.filter((a) => doneHere(a, mode)).length), [s.actions, mode]);
-  const rows = useMemo(() => rowsFor(s, mode, showDeferred, showDone), [s, mode, showDeferred, showDone]);
+  // What fits now (GTD's engage step: context, then time available, then energy): Next Actions narrowed to what can be
+  // done with the time and energy you have. Unestimated actions stay in (they might fit); done rows step aside. The
+  // filter is for the moment: it lapses at the end of the day, so a stale one never hides tomorrow's list.
+  const [fitStored, setFit] = usePersisted<Fit | null>("fit:next", null);
+  const fit = mode === "next" && fitStored && fitStored.day === t ? fitStored : null;
+  const allRows = useMemo(() => rowsFor(s, mode, showDeferred, showDone), [s, mode, showDeferred, showDone]);
+  const rows = useMemo(
+    () => (fit ? allRows.filter((a) => a.status !== "done" && (fit.time === null || a.time_min === null || a.time_min <= fit.time) && (fit.energy === null || a.energy === null || a.energy <= fit.energy)) : allRows),
+    [allRows, fit],
+  );
   const deferredCount = useMemo(() => (mode === "next" ? s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length : 0), [s, mode, t]);
 
   const ctxById = useMemo(() => new Map(s.contexts.map((c) => [c.id, c])), [s.contexts]);
@@ -276,10 +299,33 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.revealTarget, rows]);
 
+  /** F: how much time, then how much energy; the list narrows to what fits. On again, it also offers to show everything. */
+  const openFit = () =>
+    ui.openPicker({
+      type: "list",
+      title: "How much time do you have?",
+      items: [
+        ...(fit ? [{ id: "off", label: "Show every next action", hint: "Clear" }] : []),
+        ...FIT_TIMES.map(([m, label]) => ({ id: m === null ? "any" : String(m), label, hint: fit && fit.time === m ? "Current" : "" })),
+      ],
+      onPick: (id) => {
+        if (!id) return;
+        if (id === "off") return setFit(null);
+        const time = id === "any" ? null : Number(id);
+        ui.openPicker({
+          type: "list",
+          title: "And how much energy?",
+          items: FIT_ENERGY.map(([e, label]) => ({ id: String(e), label, hint: fit && fit.energy === e ? "Current" : "" })),
+          onPick: (e) => e && setFit({ time, energy: Number(e), day: t }),
+        });
+      },
+    });
+
   const openViewMenu = () => {
     const items = [
       ...(mode === "done" ? [] : groupOptions(mode).map((g) => ({ id: `g:${g}`, label: g === "none" ? "No grouping" : `Group by ${GROUPS[g].toLowerCase()}`, hint: groupBy === g ? "Current" : "", section: "group" }))),
       ...(mode === "done" ? [] : SORTS.map(([k, name]) => ({ id: `s:${k ?? ""}`, label: `Sort by ${name.toLowerCase()}`, hint: (sort?.key ?? null) === k ? "Current" : "", section: "sort" }))),
+      ...(mode === "next" ? [{ id: "fit", label: fit ? `What fits now: ${fitLabel(fit)}` : "What fits now…", hint: fit ? "On" : "", section: "show" }] : []),
       ...(mode === "next" ? [{ id: "deferred", label: showDeferred ? "Hide deferred actions" : `Show deferred actions (${deferredCount})`, section: "show" }] : []),
       ...(mode === "done" ? [] : [{ id: "showdone", label: showDone ? `Hide done actions${doneCount ? ` (${doneCount})` : ""}` : `Show done actions${doneCount ? ` (${doneCount})` : ""}`, section: "done" }]),
       ...(mode === "done" || !doneCount ? [] : [{ id: "archive", label: `Archive done actions to Done (${doneCount})`, section: "done" }]),
@@ -294,6 +340,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         if (id.startsWith("g:")) setGroupBy(id.slice(2) as GroupBy);
         else if (id.startsWith("s:")) setSort(id.slice(2) ? { key: id.slice(2), dir: 1 } : null);
         else if (id === "deferred") setShowDeferred(!showDeferred);
+        else if (id === "fit") openFit();
         else if (id === "showdone") setShowDone(!showDone);
         else if (id === "archive") archiveHere();
       },
@@ -370,6 +417,12 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   const archiveHere = () => archiveDone(s.actions.filter((a) => doneHere(a, mode)).map((a) => a.id), VIEW_TITLES[mode]);
   const viewCommands: Command[] = [
     { id: "view.menu", label: "View: group and sort", group: "View", keys: ["alt+v"], run: openViewMenu },
+    ...(mode === "next"
+      ? [
+          { id: "view.fit", label: fit ? "What fits now (change or clear)" : "What fits now: time and energy you have", group: "View", keys: ["f"], run: openFit },
+          ...(fit ? [{ id: "view.fitoff", label: "Show every next action", group: "View", run: () => setFit(null) }] : []),
+        ]
+      : []),
     ...(mode === "done"
       ? []
       : [
@@ -413,6 +466,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
             // Under "To chase" the group already says it: the row names only who.
             <span className="chase-label">{groupBy === "context" ? a.waiting_who ?? "Chase" : `Chase ${a.waiting_who ?? ""}`}</span>
           )}
+          {/* Who a next action is for rides before it, as a chase names who: an @agenda group reads as people and points. */}
+          {a.status === "next" && a.person && <span className="person-label">{a.person}</span>}
           <span className="subject-text">{titleOr(a)}</span>
           <span className="subject-icons">
             {a.recurrence && <Repeat size={12} strokeWidth={2} aria-label="Repeats" />}
@@ -527,7 +582,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       <EmptyState title="Nothing done yet" lines={["Completed actions are logged here by day."]} />
     );
 
-  return (
+  const grid = (
     <Grid
       listId={mode}
       sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
@@ -564,5 +619,28 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       onOpen={(k) => ui.openDetail({ kind: "action", id: k }, true)}
       empty={empty}
     />
+  );
+  if (!fit) return grid;
+  // While the list is narrowed, a quiet line above it says so, how much it hides, and how to see everything again.
+  const open = allRows.filter((a) => a.status !== "done").length;
+  return (
+    <>
+      <div className="fit-bar" role="status">
+        <span>
+          Fits <strong>{fitLabel(fit)}</strong>
+          <span className="fit-count">
+            {" "}
+            · {rows.length} of {plural(open, "action")}
+          </span>
+        </span>
+        <button type="button" className="text-btn" onClick={openFit}>
+          Change
+        </button>
+        <button type="button" className="text-btn" onClick={() => setFit(null)}>
+          Show all
+        </button>
+      </div>
+      {grid}
+    </>
   );
 }

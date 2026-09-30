@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { completeActions, isChase, isStale, isStalled, lastReview, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { capture, completeActions, isChase, isStale, isStalled, lastReview, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
 import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
-import { editors } from "../actionCommands.tsx";
+import { editors, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
 import { stuffTitle } from "./InboxView.tsx";
@@ -15,11 +15,13 @@ import { addDays, formatLong, today, daysBetween } from "../../shared/dates.ts";
 import type { Action, ID, Stuff } from "../../shared/types.ts";
 
 const STEPS = [
+  { id: "sweep", title: "Mind sweep", note: "Empty your head: read down the list and capture whatever it brings to mind. It all lands in the Inbox." },
   { id: "clear", title: "Get clear", note: "Empty the Inbox so nothing is floating around." },
   { id: "projects", title: "Projects", note: "Every active project needs a next action. Complete, defer or drop the rest." },
   { id: "next", title: "Next actions", note: "Mark what's done. Rewrite anything vague." },
   { id: "waiting", title: "Waiting for", note: "Chase what's overdue. Close what arrived." },
   { id: "someday", title: "Someday / Maybe", note: "Activate anything whose time has come. Drop what no longer matters." },
+  { id: "lookback", title: "Look back", note: "What the last two weeks finished. Anything it left behind? Add the follow-up now." },
   { id: "upcoming", title: "Upcoming", note: "Due, starting, follow-ups and tickler dates in the next two weeks." },
   { id: "finish", title: "Finish", note: "Record the review." },
 ] as const;
@@ -155,6 +157,16 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           ...s.projects.filter((p) => p.status === "someday").map((p) => ({ key: p.id, kind: "project" as const, id: p.id, title: p.title, info: "Project", date: p.bring_back, note: p.bring_back && p.bring_back <= t ? "Due back" : undefined })),
           ...s.actions.filter((a) => a.status === "someday").map((a) => ({ key: a.id, kind: "action" as const, id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.bring_back, note: a.bring_back && a.bring_back <= t ? "Due back" : undefined })),
         ];
+      case "lookback": {
+        // GTD's "review the previous calendar": everything finished in the last two weeks, newest first, since a
+        // finished action or project is where a follow-up most often hides.
+        const from = addDays(t, -14);
+        const recent = (d: string | null) => Boolean(d && d.slice(0, 10) >= from);
+        return [
+          ...s.projects.filter((p) => p.status === "done" && recent(p.completed_at)).map((p) => ({ key: p.id, kind: "project" as const, id: p.id, title: p.title, info: "Project completed", date: p.completed_at!.slice(0, 10) })),
+          ...s.actions.filter((a) => a.status === "done" && recent(a.completed_at)).map((a) => ({ key: a.id, kind: "action" as const, id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.completed_at!.slice(0, 10) })),
+        ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+      }
       case "upcoming": {
         const end = addDays(t, 14);
         const within = (d: string | null) => Boolean(d && d <= end);
@@ -274,6 +286,31 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       enabled: step.id === "projects" && focusRow?.kind === "project",
       run: () => focusRow && projectEditors(ui).addWaiting(focusRow.id),
     },
+    // Look back: a finished item's loose end becomes a next action or a waiting for, in the same project.
+    {
+      id: "rv.followup",
+      label: "Add a follow-up next action",
+      group: "Review",
+      keys: ["t"],
+      enabled: step.id === "lookback",
+      run: () => {
+        const pid = focusRow ? (focusRow.kind === "project" ? focusRow.id : s.actions.find((a) => a.id === focusRow.id)?.project_id) : null;
+        if (pid) addNextAction(pid);
+        else quickAddNextAction(ui);
+      },
+    },
+    {
+      id: "rv.followwait",
+      label: "Add a follow-up waiting for",
+      group: "Review",
+      keys: ["w"],
+      enabled: step.id === "lookback",
+      run: () => {
+        const pid = focusRow ? (focusRow.kind === "project" ? focusRow.id : s.actions.find((a) => a.id === focusRow.id)?.project_id) : null;
+        if (pid) projectEditors(ui).addWaiting(pid);
+        else quickAddWaiting(ui);
+      },
+    },
     ...STEPS.slice(0, -1).map((st, i) => ({
       id: `rv.jump${i + 1}`,
       label: `Go to step: ${st.title}`,
@@ -292,7 +329,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       label: step.id === "someday" ? "Activate" : "Mark done",
       group: "Review",
       keys: ["e"],
-      enabled: Boolean(focusRow),
+      enabled: Boolean(focusRow) && step.id !== "lookback",
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
@@ -306,15 +343,15 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         }
       },
     },
-    { id: "rv.move", label: "Move", group: "Review", keys: ["v"], enabled: targetsOf("action").length > 0, run: () => ed.move(targetsOf("action")) },
-    { id: "rv.due", label: "Due date", group: "Fields", keys: ["d"], enabled: targetsOf("action").length > 0, run: () => ed.date(targetsOf("action"), step.id === "waiting" ? "followup" : "due") },
-    { id: "rv.back", label: "Bring back on", group: "Fields", keys: ["b"], enabled: targetsOf("action").length > 0, run: () => ed.date(targetsOf("action"), "bring_back") },
+    { id: "rv.move", label: "Move", group: "Review", keys: ["v"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.move(targetsOf("action")) },
+    { id: "rv.due", label: "Due date", group: "Fields", keys: ["d"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), step.id === "waiting" ? "followup" : "due") },
+    { id: "rv.back", label: "Bring back on", group: "Fields", keys: ["b"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), "bring_back") },
     {
       id: "rv.trash",
       label: "Trash",
       group: "Review",
       keys: ["backspace", "delete"],
-      enabled: Boolean(focusRow),
+      enabled: Boolean(focusRow) && step.id !== "lookback",
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
@@ -346,7 +383,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.
-      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", upcoming: "Item" } as Record<string, string>)[step.id] ?? "",
+      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item" } as Record<string, string>)[step.id] ?? "",
       width: "minmax(220px, 1fr)",
       render: (r) => (
         <span className="subject">
@@ -355,9 +392,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </span>
       ),
     },
-    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 260px)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
-    { key: "date", label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" ? "plain" : "due"} /> },
+    { key: "date", label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" || step.id === "lookback" ? "plain" : "due"} /> },
   ];
   function healthOf(id: ID) {
     const p = s.projects.find((x) => x.id === id);
@@ -400,6 +437,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       </div>
       {step.id === "clear" && clarifying ? (
         <ClarifyView key={clarifying.run} regionActive={regionActive} withClaude={clarifying.withClaude} host={clarifyHost} />
+      ) : step.id === "sweep" ? (
+        <MindSweep captured={s.stuff.filter((x) => x.created_at >= sess.startedAt).sort((a, b) => b.created_at.localeCompare(a.created_at))} active={regionActive} />
       ) : step.id === "finish" ? (
         <div className="review-panel review-finish">
           {/* The end of the week leads with what you cleared, then what is still open. */}
@@ -431,7 +470,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           active={regionActive}
           showHeaders={false}
           rowClass={(r) => (r.note ? "is-flagged-row" : "")}
-          empty={<p className="muted-text">{step.id === "clear" ? "The Inbox is empty. Move on to the next step." : "Nothing here. Move on to the next step."}</p>}
+          empty={<p className="muted-text">{step.id === "clear" ? "The Inbox is empty. Move on to the next step." : step.id === "lookback" ? "Nothing was finished in the last two weeks. Move on to the next step." : "Nothing here. Move on to the next step."}</p>}
         />
       )}
       {!clarifying && (
@@ -443,10 +482,118 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "t", label: "Add next action" }, { k: "w", label: "Add waiting for" }] : []),
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
-            ...(step.id !== "finish" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
+            ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
+            ...(!["finish", "lookback", "sweep"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
           ]}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * GTD's incompletion triggers, condensed: prompts to read down during a mind sweep, each with a few examples to jog
+ * the memory. Nothing here is a list to tick; it is only there to bring open loops to mind.
+ */
+const TRIGGERS: { title: string; items: [string, string][] }[] = [
+  {
+    title: "Work",
+    items: [
+      ["Projects started, not finished", "anything begun and left hanging"],
+      ["Projects to start", "ideas, improvements, things you mean to set up"],
+      ["Promises to others", "your manager, colleagues, customers, suppliers"],
+      ["Calls and emails", "to make, to answer, to follow up"],
+      ["Meetings", "coming up, to arrange, to prepare, to follow up"],
+      ["Waiting on others", "replies, decisions, deliveries, approvals"],
+      ["Documents", "to write, finish, review or sign"],
+      ["Money", "invoices, expenses, budgets, orders"],
+      ["People", "hiring, feedback, one-to-ones, thanks owed"],
+      ["Systems", "computer, software, files, the workplace"],
+      ["Learning", "courses, reading, skills to build"],
+    ],
+  },
+  {
+    title: "Home",
+    items: [
+      ["Promises to family and friends", "visits, favours, things you said you'd do"],
+      ["The home", "repairs, improvements, garden, car"],
+      ["Errands", "shopping, returns, things to pick up"],
+      ["Health", "appointments, check-ups, exercise"],
+      ["Money", "bills, taxes, insurance, subscriptions"],
+      ["Paperwork", "contracts, renewals, passports, forms"],
+      ["Occasions", "birthdays, holidays, travel, celebrations"],
+      ["Hobbies and rest", "things you want to do, see or learn"],
+      ["Anything else", "whatever is on your mind right now"],
+    ],
+  },
+];
+
+/**
+ * The review's first step: a capture line beside the trigger list. Each line is captured to the Inbox as it is
+ * entered (no deciding yet: Get clear, next, is where it is clarified), and what this review has captured is listed
+ * under the line, newest first.
+ */
+function MindSweep({ captured, active }: { captured: Stuff[]; active: boolean }) {
+  const [text, setText] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  // Arriving on the step puts the cursor in the line, after the click or key that brought you here has settled.
+  useEffect(() => {
+    if (!active) return;
+    const f = requestAnimationFrame(() => input.current?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(f);
+  }, [active]);
+  return (
+    <div className="sweep">
+      <div className="sweep-capture">
+        <label className="field">
+          <span className="field-label">What does this bring to mind?</span>
+          <input
+            ref={input}
+            className="field-text"
+            value={text}
+            placeholder="One thought at a time"
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && text.trim()) {
+                e.preventDefault();
+                void capture(text);
+                setText("");
+              } else if (e.key === "Escape") {
+                e.currentTarget.blur();
+                document.querySelector<HTMLElement>(".review-title")?.focus({ preventScroll: true });
+              }
+            }}
+          />
+        </label>
+        <p className="sweep-help">Enter puts it in the Inbox. No need to decide anything yet.</p>
+        {captured.length > 0 && (
+          <section className="sweep-captured" aria-label="Captured in this review">
+            <h3 className="detail-h">
+              Captured in this review <span className="count">{captured.length}</span>
+            </h3>
+            <ul>
+              {captured.map((x) => (
+                <li key={x.id}>{stuffTitle(x) || "Untitled"}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+      <div className="sweep-triggers">
+        {TRIGGERS.map((g) => (
+          <section key={g.title} aria-label={g.title}>
+            <h3 className="sweep-h">{g.title}</h3>
+            <ul>
+              {g.items.map(([what, ex]) => (
+                <li key={what}>
+                  <span className="sweep-what">{what}</span>
+                  <span className="sweep-ex">{ex}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }

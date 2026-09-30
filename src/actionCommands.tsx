@@ -66,6 +66,40 @@ export function askWaitingOn(ui: UI, current: string | null, apply: (who: string
 }
 
 /**
+ * Everyone the system knows: who you wait on and who actions are for, one spelling each (the latest), the most
+ * recently used first. Trashed items don't count.
+ */
+export function peopleNames(): string[] {
+  const seen = new Map<string, { name: string; when: string }>();
+  for (const a of getState().actions) {
+    if (a.status === "trashed") continue;
+    for (const raw of [a.waiting_who, a.person]) {
+      const name = raw?.trim();
+      if (!name) continue;
+      const when = a.updated_at ?? a.created_at;
+      const key = name.toLowerCase();
+      if (!seen.has(key) || seen.get(key)!.when < when) seen.set(key, { name, when });
+    }
+  }
+  return [...seen.values()].sort((x, y) => y.when.localeCompare(x.when)).map((x) => x.name);
+}
+
+/** Who an action is for: someone already known, a new name, or no one. */
+export function askPerson(ui: UI, current: string | null, apply: (who: string | null) => void, title = "Who is it for?") {
+  ui.openPicker({
+    type: "list",
+    title,
+    items: peopleNames().map((w) => ({ id: w, label: w })),
+    current,
+    noneLabel: "No one",
+    placeholder: "A person to raise it with, call or write to",
+    createLabel: (q) => `For “${q}”`,
+    onCreate: (q) => apply(q.trim()),
+    onPick: (who) => apply(who ?? null),
+  });
+}
+
+/**
  * A next action always gets a context when it's clarified. Asks for one (existing, or type a new
  * name); `apply` receives the context id and any op that creates it. Esc applies nothing.
  */
@@ -297,6 +331,11 @@ export function editors(ui: UI) {
           patchMany("actions", ids, { recurrence: r ? s.trim() : null }, r ? `${n(ids)}: ${recurrenceLabel(r).toLowerCase()}` : `${n(ids)}: no longer repeats`);
         },
       });
+    },
+    /** Who the actions are for: they then show on that person's agenda. */
+    person(ids: ID[]) {
+      if (!ids.length) return;
+      askPerson(ui, one(ids)?.person ?? null, (who) => patchMany("actions", ids, { person: who }, who ? `${n(ids)} → ${who}'s agenda` : `${n(ids)}: no one`));
     },
     delegate(ids: ID[]) {
       if (!ids.length) return;
@@ -530,6 +569,7 @@ export function useActionCommands(opts: {
     { id: "act.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(pick()) },
     { id: "act.repeat", label: "Repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(pick()) },
     { id: "act.bringback", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], run: () => ed.date(pick(), "bring_back") },
+    { id: "act.person", label: "Who it's for (their agenda)", group: "Fields", keys: [], run: () => ed.person(pick()) },
     { id: "act.delegate", label: "Delegate → Waiting For", group: "Actions", keys: ["shift+f"], run: () => ed.delegate(pick()) },
     { id: "act.trash", label: "Trash", group: "Actions", keys: ["backspace", "delete"], run: () => trash(false) },
     { id: "act.delete", label: "Delete permanently", group: "Actions", keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },

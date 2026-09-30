@@ -1,3 +1,4 @@
+import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, type Command } from "./keys.ts";
@@ -7,6 +8,7 @@ import { DropZone } from "./components/DropZone.tsx";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView } from "./views/TrashView.tsx";
 import { DoneView } from "./views/DoneView.tsx";
+import { AgendasView } from "./views/AgendasView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { ActionsView } from "./views/ActionsView.tsx";
@@ -28,7 +30,7 @@ import { today } from "../shared/dates.ts";
  * Views with their own address (#inbox, #projects, #reference…), so the browser's Back and Forward move between
  * them and a reload or bookmark lands on the same list. Search is a query, not a place, and gets no entry.
  */
-const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "projects", "someday", "reference", "done", "trash", "review", "settings", "clarify"];
+const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "done", "trash", "review", "settings", "clarify"];
 function viewFromHash(): ViewId | null {
   const h = window.location.hash.slice(1) as ViewId;
   // Clarify can't be rebuilt from an address (it needs the run that opened it): it lands on the Inbox it clarifies.
@@ -295,7 +297,8 @@ export default function App() {
       keys: r.key ? [r.key] : [],
       inInput: true,
       run: () => (r.id === "review" ? ui.startReview() : go(r.id)),
-      hidden: i > 8,
+      // The review has its own entry (Start the Weekly Review); every list is offered.
+      hidden: r.id === "review",
     })),
     { id: "go.settings", label: "Go to Settings (rules, contexts, export)", group: "Go to", keys: ["mod+shift+,"], inInput: true, run: () => go("settings") },
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
@@ -309,6 +312,17 @@ export default function App() {
     // ⇧E archives what is done everywhere, not just on the list in view (owner's request); each list's View menu still
     // archives that list alone.
     { id: "g.archive", label: `Archive all done items to Done${archivable ? ` (${archivable})` : ""}`, group: "Actions", keys: ["shift+e"], run: archiveAllDone },
+    // A mind sweep on its own: the Weekly Review opened at its first step.
+    {
+      id: "g.sweep",
+      label: "Mind sweep: empty your head into the Inbox",
+      group: "Review",
+      enabled: view !== "review",
+      run: () => {
+        saveSession({ ...loadSession(), stepIdx: 0 });
+        ui.startReview();
+      },
+    },
     { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["shift+r"], run: ui.startReview },
     // A project from anywhere: its outcome, its area, its first next action (on Projects, N adds one in place).
     { id: "g.newproject", label: "New project", group: "Projects", keys: ["alt+n"], run: () => projectEditors(ui).create() },
@@ -380,6 +394,10 @@ export default function App() {
     ].join(" · "),
     projects: plural(s.projects.filter((p) => p.status === "active").length, "active project"),
     waiting: plural(s.actions.filter((a) => a.status === "waiting").length, "item"),
+    agendas: (() => {
+      const n = new Set(s.actions.flatMap((a) => (a.status === "next" ? [a.person] : a.status === "waiting" ? [a.waiting_who] : [])).filter((w): w is string => Boolean(w?.trim())).map((w) => w.trim().toLowerCase())).size;
+      return `${n} ${n === 1 ? "person" : "people"}`;
+    })(),
     someday: plural(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
     reference: plural(s.refs.filter((r) => r.status === "active").length, "reference"),
     done: plural(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done" && p.archived_at).length, "item"),
@@ -399,6 +417,9 @@ export default function App() {
       break;
     case "done":
       body = <DoneView regionActive={listActive} />;
+      break;
+    case "agendas":
+      body = <AgendasView regionActive={listActive} />;
       break;
     case "someday":
       body = <SomedayView regionActive={listActive} />;

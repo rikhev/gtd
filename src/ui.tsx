@@ -6,6 +6,7 @@ export type ViewId =
   | "next"
   | "projects"
   | "waiting"
+  | "agendas"
   | "someday"
   | "reference"
   | "review"
@@ -111,6 +112,7 @@ export const VIEW_TITLES: Record<ViewId, string> = {
   next: "Next Actions",
   projects: "Projects",
   waiting: "Waiting For",
+  agendas: "Agendas",
   someday: "Someday / Maybe",
   reference: "Reference",
   review: "Weekly Review",

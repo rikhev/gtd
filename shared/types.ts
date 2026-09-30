@@ -16,6 +16,8 @@ export interface Action {
   flagged: 0 | 1;
   status: ActionStatus;
   waiting_who: string | null;
+  /** Who this action is for or with (an agenda item to raise, a call to make): it shows on that person's agenda. */
+  person?: string | null;
   waiting_since: string | null;
   followup: string | null;
   recurrence: string | null;

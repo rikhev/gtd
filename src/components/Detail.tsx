@@ -251,12 +251,12 @@ function ActionDetail({ a }: { a: Action }) {
   // look at it again). Done, nothing is planned any more, so start, repeat and bring back go. A field a kind doesn't
   // need still shows while it holds something, so nothing set is hidden.
   const NEEDS: Record<string, string[]> = {
-    next: ["context", "due", "start", "time", "energy", "repeat"],
+    next: ["context", "due", "start", "time", "energy", "repeat", "person"],
     waiting: ["who", "followup", "since", "due"],
     someday: ["context", "back"],
   };
   const needs = new Set((NEEDS[kind] ?? NEEDS.next).filter((f) => !(done && ["start", "repeat", "back"].includes(f))));
-  const has: Record<string, unknown> = { context: a.context_id, due: a.due, start: a.defer, time: a.time_min, energy: a.energy, repeat: a.recurrence, back: a.bring_back, who: a.waiting_who, followup: a.followup, since: a.waiting_since };
+  const has: Record<string, unknown> = { context: a.context_id, due: a.due, start: a.defer, time: a.time_min, energy: a.energy, repeat: a.recurrence, back: a.bring_back, person: a.person, who: a.waiting_who, followup: a.followup, since: a.waiting_since };
   const shown = (f: string) => needs.has(f) || Boolean(has[f]);
   const fields: [string, ReactNode][] = [
     [
@@ -310,6 +310,13 @@ function ActionDetail({ a }: { a: Action }) {
   ];
   fields.push(
     [
+      // Who it is for: it then shows on their agenda, beside what they owe you.
+      "person",
+      <PickField key="person" label="With" k="W" onOpen={() => ed.person([a.id])}>
+        {a.person || none}
+      </PickField>,
+    ],
+    [
       "who",
       <TextField
         key="who"
@@ -340,13 +347,13 @@ function ActionDetail({ a }: { a: Action }) {
   );
   // One grid for every kind (owner's request): a field keeps its place whatever the item is. Row by row: what it
   // belongs to and who or where; when it comes up for you (start, follow up, or bring back) beside when it is due;
-  // time and energy; how it recurs (or, waiting, since when). A row keeps an empty cell rather than letting a field
+  // time and energy; how it recurs (or, waiting, since when) beside who it is with. A row keeps an empty cell rather than letting a field
   // slide across, so Due is always on the right. Fields this kind doesn't need but that hold a value follow.
   const rows: [string, string | null][] = [
     ["project", waiting ? "who" : "context"],
     [waiting ? "followup" : kind === "someday" ? "back" : "start", "due"],
     ["time", "energy"],
-    [waiting ? "since" : "repeat", null],
+    [waiting ? "since" : "repeat", waiting ? null : "person"],
   ];
   const byKey = new Map(fields);
   const visible = (f: string | null): f is string => f !== null && (f === "project" || shown(f));

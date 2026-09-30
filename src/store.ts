@@ -285,6 +285,7 @@ export function newAction(data: Partial<Action>): Action {
     flagged: 0,
     status: "next",
     waiting_who: null,
+    person: null,
     waiting_since: null,
     followup: null,
     recurrence: null,

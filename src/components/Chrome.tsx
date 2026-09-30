@@ -22,6 +22,8 @@ export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "calendar", key: go(2) },
   { id: "next", key: go(3) },
   { id: "waiting", key: go(4) },
+  // Agendas follow Waiting For (they gather it by person) and take no number, so the go-to keys stay as they were.
+  { id: "agendas" },
   { id: "projects", key: go(5) },
   { id: "someday", key: go(6) },
   { id: "reference", key: go(7) },
@@ -36,7 +38,7 @@ export const RAIL: { id: ViewId; key?: string }[] = [
  */
 // The calendar follows the Inbox: in GTD it is the hard landscape, checked before the lists are worked.
 const LISTS: ViewId[][] = [
-  ["inbox", "calendar", "next", "waiting", "projects"],
+  ["inbox", "calendar", "next", "waiting", "agendas", "projects"],
   ["someday", "reference", "done"],
 ];
 
@@ -307,7 +309,7 @@ export function TabBar() {
   const [more, setMore] = useState(false);
   const inboxItems = s.stuff.filter((x) => x.status === "inbox");
   const inbox = inboxItems.length;
-  const rest: ViewId[] = ["calendar", "projects", "someday", "reference", "done", "trash", "settings"];
+  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "done", "trash", "settings"];
   // The phone's system check, as in the rail: is the review due, and how old is the oldest thing in the Inbox?
   const t = today();
   const reviewAge = daysSinceReview(s);

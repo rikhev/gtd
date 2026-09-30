@@ -1062,6 +1062,20 @@ body.is-col-resizing * {
   flex: none;
   align-self: center;
 }
+/* Who a next action is for: the chase label's form, in ink-2 (a name, not an alarm). */
+.person-label {
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-2);
+  flex: none;
+}
+.is-focus .person-label {
+  color: var(--select-ink);
+}
 .chase-label {
   font-family: var(--font-label);
   font-stretch: 75%;
@@ -4280,5 +4294,109 @@ body.is-cal-dragging {
   }
   .row:hover {
     background: none;
+  }
+}
+
+/* What fits now: while Next Actions is narrowed to the time and energy you have, one quiet line above the list says
+   so, how much it hides, and how to see everything again. */
+.fit-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 34px;
+  padding: 0 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+.fit-bar strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.fit-bar .fit-count {
+  color: var(--ink-3);
+}
+.fit-bar .text-btn:first-of-type {
+  margin-left: auto;
+}
+
+/* Weekly Review, Mind sweep: the capture line on the left, where it stays while you read down the trigger list on
+   the right. What this review has captured gathers under the line. */
+.sweep {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 32px;
+  align-items: start;
+  padding: 4px 8px 24px;
+}
+.sweep-capture {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sweep-help {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.sweep-captured {
+  margin-top: 10px;
+}
+.sweep-captured ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.sweep-captured li {
+  padding: 5px 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.sweep-triggers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 32px;
+}
+.sweep-h {
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin: 0 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+}
+.sweep-triggers ul {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+.sweep-triggers li {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+}
+.sweep-what {
+  color: var(--ink);
+}
+.sweep-ex {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+@media (max-width: 820px) {
+  .sweep {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .sweep-capture {
+    position: static;
   }
 }

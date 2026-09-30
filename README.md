@@ -47,6 +47,8 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `⇧F` | Delegate to Waiting For |
 | `Del` / `⇧Del` | Trash / delete permanently |
 | `⌥↑↓` `⌥V` | Move the selected rows up or down one place (within their group) / group and sort the view |
+| `T` `W` `E` `⌥V` | On Agendas: take something up with the person under the cursor / add something you're waiting on from them / done / one person's agenda. In an action's details, `W` sets who it's with (it then shows on their agenda) |
+| `F` | On Next Actions: what fits now. Say how much time and energy you have and the list narrows to what fits (again to change or show all) |
 | `⌥Tab` or `⌘F6` | Cycle rail → list → details |
 | `⌘K` › "Switch to the dark theme" | Light or dark theme (or Settings › Appearance › Theme, which can also follow the system) |
 | Drag a row | Reorder it (Next Actions, Waiting For, Projects) while the list is in its own order, not sorted by a column. Dropped into another group it takes that group's value: context, waiting on, project, its importance, area or due date. The keyboard way to reorder is `⌥↑` `⌥↓` |
