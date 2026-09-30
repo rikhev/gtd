@@ -8,27 +8,32 @@ import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
 
 /**
- * Control+1–8 on every system follow the rail from the top: the Inbox, the calendar, then the lists in rail order.
- * On the Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs.
- * Elsewhere the page takes Ctrl+1–9 over the browser's tab switching (Chrome and Firefox allow it).
- * Trash, at the foot, is Control+9. The Weekly Review has no number (⇧R starts it); Settings is ⌘⇧,
- * (Ctrl+Shift+, elsewhere).
+ * The go-to keys follow the rail from the top, counted per group so every key sits under one hand (owner's request:
+ * ⌃7–9 needed a second hand). The first group is Control+1–6 (Inbox, Calendar, Next Actions, Waiting For, Agendas,
+ * Projects); the second group and the Trash below it are Control+Shift+1–4 (Someday, Reference, Done, Trash): Shift
+ * means "the second group", counted from 1 again. Digits are read by their key, so it works on every layout. On the
+ * Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs. Elsewhere the page takes
+ * Ctrl+1–6 over the browser's tab switching (Chrome and Firefox allow it); Ctrl+Shift+digits are free. Control with a
+ * letter was ruled out: on the Mac those edit text (⌃A, ⌃E…), elsewhere the browser owns many (Ctrl+W, Ctrl+R).
+ * The Weekly Review has no go-to key (⇧R starts it); Settings is ⌘⇧, (Ctrl+Shift+, elsewhere).
  */
 // Control on every system: on the Mac that is "ctrl" (⌘ is "mod"), elsewhere Ctrl is "mod".
 const go = (n: number) => (IS_MAC ? `ctrl+${n}` : `mod+${n}`);
+/** The second group: Control+Shift and a digit. */
+const go2 = (n: number) => (IS_MAC ? `ctrl+shift+${n}` : `mod+shift+${n}`);
 
 export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "inbox", key: go(1) },
   { id: "calendar", key: go(2) },
   { id: "next", key: go(3) },
   { id: "waiting", key: go(4) },
-  // Agendas follow Waiting For (they gather it by person) and take no number, so the go-to keys stay as they were.
-  { id: "agendas" },
-  { id: "projects", key: go(5) },
-  { id: "someday", key: go(6) },
-  { id: "reference", key: go(7) },
-  { id: "done", key: go(8) },
-  { id: "trash", key: go(9) },
+  // Agendas follow Waiting For (they gather it by person).
+  { id: "agendas", key: go(5) },
+  { id: "projects", key: go(6) },
+  { id: "someday", key: go2(1) },
+  { id: "reference", key: go2(2) },
+  { id: "done", key: go2(3) },
+  { id: "trash", key: go2(4) },
   { id: "review" },
 ];
 
@@ -95,7 +100,7 @@ export function Rail({ active }: { active: boolean }) {
       start: true,
       label: `Weekly Review, ${reviewAge === null ? "not done yet" : reviewAge === 0 ? "done today" : `last done ${reviewAge} days ago`}${reviewDue ? ", due" : ""}`,
     },
-    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} days`}` }] : []),
+    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} days`}${sig.oldestDays >= 7 ? ", due" : ""}. Clarify` }] : []),
   ];
   const entries: Entry[] = [
     ...LISTS.flat().map((id) => {
@@ -109,6 +114,8 @@ export function Rail({ active }: { active: boolean }) {
   const idx = (key: string) => entries.findIndex((e) => e.key === key);
   const open = (e: Entry) => {
     if (e.start) ui.startReview();
+    // The oldest item is waiting to be clarified: the row does what its key (K) does, not the Inbox row's job.
+    else if (e.key === "h-oldest") ui.startClarify();
     else ui.go(e.view);
     ui.setRegion("list");
   };
@@ -202,9 +209,15 @@ export function Rail({ active }: { active: boolean }) {
         <ul className="rail-list">
           {health.map((e) => (
             <li key={e.key}>
-              <button type="button" {...stop(e, "rail-item rail-check")}>
+              <button
+                type="button"
+                {...stop(e, "rail-item rail-check")}
+                // Check rows do something (list rows only go somewhere): the tooltip says what, and its key.
+                title={e.key === "h-review" ? `Start the Weekly Review (${keyLabel("shift+r")})` : `Clarify the Inbox, oldest first (${keyLabel("k")})`}
+              >
                 {e.key === "h-review" && (
                   <>
+                    <Gauge due={reviewDue} />
                     <span className="rail-name">Weekly Review</span>
                     <span className="rail-meta">
                       <span className={`num ${reviewDue ? "is-due" : ""}`}>{reviewAge === null ? (reviewDue ? "due" : "not yet") : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
@@ -214,6 +227,7 @@ export function Rail({ active }: { active: boolean }) {
                 )}
                 {e.key === "h-oldest" && (
                   <>
+                    <Gauge due={sig.oldestDays !== null && sig.oldestDays >= 7} />
                     <span className="rail-name">Oldest in Inbox</span>
                     <span className="rail-meta">
                       <span className={`num ${sig.oldestDays !== null && sig.oldestDays >= 7 ? "is-due" : ""}`}>{sig.oldestDays === 0 ? "today" : `${sig.oldestDays}d`}</span>
@@ -233,7 +247,7 @@ export function Rail({ active }: { active: boolean }) {
           <button type="button" {...stop(entries[entries.length - 2], "rail-item")}>
             <span className="rail-name">Trash</span>
             <span className="rail-meta">
-              <RailKey k={go(9)} />
+              <RailKey k={keyOf("trash")} />
             </span>
           </button>
         </li>
@@ -261,6 +275,26 @@ export function Rail({ active }: { active: boolean }) {
 }
 
 const keyOf = (v: ViewId) => RAIL.find((r) => r.id === v)?.key;
+
+/**
+ * The system check's rows are gauges, not places (rail critique: they looked like two more lists). Each leads with a
+ * small light: a quiet filled dot while all is well, an alert-red ring with a dot in it when due, so it reads by shape
+ * as well as colour. Visual only: the row's name says "due".
+ */
+function Gauge({ due }: { due: boolean }) {
+  return (
+    <svg className={`rail-gauge ${due ? "is-due" : ""}`} viewBox="0 0 10 10" aria-hidden="true">
+      {due ? (
+        <>
+          <circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+          <circle cx="5" cy="5" r="1.75" />
+        </>
+      ) : (
+        <circle cx="5" cy="5" r="3.5" />
+      )}
+    </svg>
+  );
+}
 
 /**
  * The rail's key caps rest hidden and come up while a modifier is held, as the shortcuts in macOS menus do (owner's

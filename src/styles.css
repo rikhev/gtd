@@ -566,8 +566,6 @@ a:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Rail key caps keep their place but rest invisible: they come up while ⌃ or ⌘ is held, while the rail has the
-   keyboard, or after the pointer has rested on the rail a moment. */
 /* Key caps never move anything (owner's decision): they take no room, and while ⌃ or ⌘ is held they fade in over the
    right end of the row, where the count is, and the count fades out underneath until the key is let go. */
 .rail-item {
@@ -607,8 +605,10 @@ body.keys-held .rail .rail-meta .num {
 .rail-meta .is-quiet {
   color: var(--ink-3);
 }
-/* On the open list's row a quiet count steps up to ink-2, so it keeps AA on the lifted surface in dark. */
-.rail-item.is-current .rail-meta .is-quiet {
+/* On the open list's row, and on a hovered row, a quiet count steps up to ink-2, so it keeps AA on the lifted surface
+   in dark and on the hover fill in light (ink-3 there measured 4.39:1). */
+.rail-item.is-current .rail-meta .is-quiet,
+.rail-item:hover .rail-meta .is-quiet {
   color: var(--ink-2);
 }
 .rail-meta .kbd {
@@ -618,10 +618,13 @@ body.keys-held .rail .rail-meta .num {
   min-width: 16px;
   color: var(--ink-2);
 }
-/* On a hovered row, and on the open list's lifted row, the alert red darkens (lightens in dark) so small red text
-   keeps AA there (dark: 5.2:1 on the current row, where plain alert gave 3.95:1). */
+/* On a hovered row, the open list's lifted row and the cursor's blue row, the alert red darkens (lightens in dark)
+   so small red text keeps AA there (dark: 5.2:1 on the current row and 5.3:1 on the cursor, where plain alert gave
+   3.95:1 and 4.01:1). */
 .rail-item.is-current .is-due,
 .rail-item.is-current .badge,
+.rail-item.is-cursor .is-due,
+.rail-item.is-cursor .badge,
 .rail-item:hover .is-due,
 .rail-item:hover .badge {
   color: var(--alert-on-rail);
@@ -632,6 +635,28 @@ body.keys-held .rail .rail-meta .num {
 .rail-health {
   padding-top: 10px;
   border-top: 1px solid var(--rule-strong);
+}
+/* Its rows are gauges: an 8px light leads the name, quiet ink-3 while all is well, an alert ring with a dot when due.
+   The light takes the room at the row's start, so the names sit a step in from the lists' names above. */
+.rail-check {
+  justify-content: flex-start;
+}
+.rail-check .rail-meta {
+  margin-left: auto;
+}
+.rail-gauge {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
+  color: var(--ink-3);
+  overflow: visible;
+}
+.rail-gauge.is-due {
+  color: var(--alert);
+}
+.rail-item.is-cursor .rail-gauge:not(.is-due) {
+  color: color-mix(in srgb, var(--select-ink) 55%, transparent);
 }
 .rail-settings {
   margin-top: auto;

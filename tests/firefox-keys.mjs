@@ -58,7 +58,12 @@ try {
   await press(Key.INSERT);
   check("Insert toggles the flag back", (await js("document.querySelectorAll('.marker.is-flagged').length")) === flagged0);
 
-  for (const [n, name] of [["1", "Inbox"], ["3", "Projects"], ["4", "Waiting For"], ["5", "Someday / Maybe"], ["6", "Reference"], ["8", "Done"], ["9", "Areas"], ["2", "Next Actions"]]) {
+  // The rail's first group is ⌃1–6; the second group and the Trash are ⌃⇧1–4.
+  for (const [n, name] of [["1", "Inbox"], ["2", "Calendar"], ["3", "Next Actions"], ["4", "Waiting For"], ["5", "Agendas"], ["6", "Projects"]]) {
+    await press(Key.CONTROL, n);
+    check(`⌃${n} → ${name}`, (await title()) === name, await title());
+  }
+  for (const [n, name] of [["1", "Someday / Maybe"], ["2", "Reference"], ["3", "Done"], ["4", "Trash"]]) {
     await press(Key.CONTROL, Key.SHIFT, n);
     check(`⌃⇧${n} → ${name}`, (await title()) === name, await title());
   }

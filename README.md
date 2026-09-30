@@ -22,8 +22,9 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 
 | Keys | What they do |
 |---|---|
-| `⌃1`–`8` | Inbox · Calendar · Next Actions · Waiting For · Projects · Someday · Reference · Done (rail order). Control on every system, also on the Mac (⌘1–8 are the browser's tabs) |
-| `⌃9` | Trash: everything deleted in the last week (Settings › Trash sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty the Trash clears it |
+| `⌃1`–`6` | Inbox · Calendar · Next Actions · Waiting For · Agendas · Projects (the rail's first group). Control on every system, also on the Mac (⌘1–8 are the browser's tabs) |
+| `⌃⇧1`–`4` | Someday · Reference · Done · Trash (the second group and the Trash, counted from 1 again) |
+| `⌃⇧4` | Trash: everything deleted in the last week (Settings › Trash sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty the Trash clears it |
 | Calendar | `1` `2` `3` Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `T` today · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click an item for its details, double-click an empty day for a new action. Clicking a day or item from the next or previous month (the greyed days) picks it without turning the page |
 | `⇧R` | Start the Weekly Review |
 | `⌘⇧,` | Settings |
