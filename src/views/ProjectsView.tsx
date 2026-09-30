@@ -372,7 +372,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.addwaiting", label: "Add a waiting for to the project", group: "Projects", keys: ["w"], enabled: Boolean(focusId), run: () => focusId && ed.addWaiting(focusId) },
     { id: "proj.new", label: "New project", group: "Projects", keys: ["n"], run: create },
     { id: "proj.open", label: "Open project", group: "Projects", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "project", id: focusId }, true) },
-    { id: "proj.jump", label: "Jump to its next action", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
+    { id: "proj.jump", label: "Jump to its next action (or back to the appointment you came from)", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
     { id: "proj.rename", label: "Rename", group: "Projects", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "proj.done", label: "Complete project, or not done", group: "Projects", keys: ["e"], enabled: has, run: () => toggleDone(nav.targets()) },
     { id: "proj.archive", label: `Archive completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", enabled: doneHere.length > 0, run: () => ed.archive(doneHere) },
@@ -546,7 +546,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         areas ? (
           <EmptyState title={`No projects in ${areaFilterLabel(areas)}`} lines={["Press F to choose other areas, or show every area."]} />
         ) : (
-          <EmptyState title="No projects yet" lines={["Start one here, or let Claude propose projects when it clarifies your Inbox."]} />
+          <EmptyState title="No projects yet" lines={["Start one here, or make one when you clarify your Inbox (⇧P)."]} />
         )
       }
     />

@@ -11,16 +11,12 @@ const empty: State = {
   contexts: [],
   areas: [],
   files: [],
-  rules: [],
-  corrections: [],
   reviews: [],
   appointments: [],
 };
 
 let state: State = empty;
 let meta: {
-  hasKey: boolean;
-  keyHint: string | null;
   today: string;
   loaded: boolean;
   authRequired: boolean;
@@ -31,13 +27,11 @@ let meta: {
   trashDays: number;
   /** The calendar's first day of the week: 1 Monday, 0 Sunday. */
   weekStart: 0 | 1;
-  /** The language Claude clarifies in. */
-  clarifyLang: "en" | "sv";
   /** Subscribed calendars (Outlook, iCloud…): names, colours and hosts; their links stay on the server. */
   calendars: FeedInfo[];
   /** The hours the Calendar's week shows, [from, to), e.g. [7, 19]. */
   dayHours: [number, number];
-} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, clarifyLang: "en", calendars: [], dayHours: [7, 19] };
+} = { today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, calendars: [], dayHours: [7, 19] };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -459,7 +453,7 @@ export function patchMany(table: TableName, ids: ID[], data: Record<string, unkn
 
 /**
  * Why an active project is stalled, if it is: it has nothing open to do, or nothing in it has been
- * touched (edited or completed) for the stall threshold. Built in: no Claude needed.
+ * touched (edited or completed) for the stall threshold.
  */
 /**
  * A project with a start date hasn't begun until that day is over (owner's decision, GTD's "a calendar entry is a

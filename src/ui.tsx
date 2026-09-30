@@ -58,8 +58,6 @@ export type PickerSpec =
       title: string;
       current: string;
       placeholder?: string;
-      /** Masked input for secrets such as the API key. */
-      secret?: boolean;
       preview?: (s: string) => { ok: boolean; text: string };
       onPick: (s: string) => void;
     };
@@ -94,8 +92,8 @@ export interface UI {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   /** Start Clarify; Esc, Stop and the end state return to `returnTo` (the Inbox by default). */
-  /** Clarify the Inbox, by hand, or with Claude's proposals when `withClaude`. */
-  startClarify: (returnTo?: ViewId, withClaude?: boolean) => void;
+  /** Clarify the Inbox, one item at a time. */
+  startClarify: (returnTo?: ViewId) => void;
   leaveClarify: () => void;
   clarifyReturn: () => ViewId;
   startReview: () => void;
@@ -103,8 +101,10 @@ export interface UI {
   reveal: (t: Target) => void;
   /** J on an action: go to its project, remembering where you came from. */
   jumpToProject: (actionId: ID) => void;
-  /** J on a project: back to the action you jumped from, else its first next action. */
+  /** J on a project: back to the action or appointment you jumped from, else its first next action. */
   jumpToAction: (projectId: ID) => void;
+  /** J on an appointment linked to a project: go to the project, remembering the appointment, so J comes back. */
+  jumpFromAppointment: (key: string) => void;
   revealTarget: Target | null;
   clearReveal: () => void;
 }

@@ -67,8 +67,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   }, [step.id]);
   const ed = editors(ui);
   // Clarify runs inside the Get clear step, so the review never goes away underneath it.
-  const [clarifying, setClarifying] = useState<{ run: number; withClaude: boolean } | null>(null);
-  const clarify = (withClaude: boolean) => setClarifying((c) => ({ run: (c?.run ?? 0) + 1, withClaude }));
+  const [clarifying, setClarifying] = useState<{ run: number } | null>(null);
+  const clarify = () => setClarifying((c) => ({ run: (c?.run ?? 0) + 1 }));
   useEffect(() => setClarifying(null), [step.id]);
   // Steps without a list (Get clear, Finish) still need somewhere for focus to land.
   useEffect(() => {
@@ -93,7 +93,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     const waiting = mine.find((a) => a.status === "waiting");
     return waiting ? `Waiting · ${waiting.waiting_who ?? "someone"}` : "";
   };
-  // The review's checks are built in (no Claude): each returns a short note, or nothing when all is well.
+  // The review's checks are built in: each returns a short note, or nothing when all is well.
   const weeks = meta.stallWeeks;
   const projectNote = (p: (typeof s.projects)[number]) => {
     const r = stallReason(s, p);
@@ -310,8 +310,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "rv.next", label: "Next step", group: "Review", keys: ["mod+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
     { id: "rv.prev", label: "Previous step", group: "Review", keys: ["mod+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
-    { id: "rv.clarify", label: "Clarify", group: "Review", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: () => clarify(false) },
-    { id: "rv.clarifyclaude", label: "Clarify with Claude", group: "Review", keys: ["alt+k"], enabled: step.id === "clear" && inboxCount > 0, run: () => clarify(true) },
+    { id: "rv.clarify", label: "Clarify", group: "Review", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: clarify },
     {
       id: "rv.addnext",
       label: "Add a next action to this project",
@@ -422,13 +421,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const last = lastReview(s);
   const clarifyHost = {
     leave: () => setClarifying(null),
-    restart: clarify,
-    // Clarify can't run: back to the list with the filing picker open on the item in hand.
-    fileInbox: () => {
-      setClarifying(null);
-      const id = nav.focus ?? rows[0]?.key;
-      if (id) fileStuff(ui, [id]);
-    },
     backLabel: "Back to Get clear",
     offerNext: false,
   };
@@ -506,7 +498,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
 
       </div>
       {step.id === "clear" && clarifying ? (
-        <ClarifyView key={clarifying.run} regionActive={regionActive} withClaude={clarifying.withClaude} host={clarifyHost} />
+        <ClarifyView key={clarifying.run} regionActive={regionActive} host={clarifyHost} />
       ) : step.id === "sweep" ? (
         <MindSweep onDone={doneHere} captured={s.stuff.filter((x) => x.created_at >= sess.startedAt).sort((a, b) => b.created_at.localeCompare(a.created_at))} active={regionActive} />
       ) : step.id === "finish" ? (
@@ -553,7 +545,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id !== "finish" ? [{ k: "mod+.", label: "Next step", touch: "hide" as const }] : []),
             { k: "mod+,", label: "Previous", touch: "hide" as const },
             ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "t", label: "Add next action" }, { k: "w", label: "Add waiting for" }] : []),
-            ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
+            ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
             ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Reviewed", primary: true }] : []),

@@ -323,7 +323,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
         active={regionActive}
         showHeaders={false}
         onOpen={(k) => ui.openDetail({ kind: "ref", id: k }, true)}
-        empty={<EmptyState title="No reference material" lines={["Add a note here. Claude files non-actionable stuff here when it clarifies."]} />}
+        empty={<EmptyState title="No reference material" lines={["Add a note here, or file non-actionable stuff here when you clarify the Inbox."]} />}
       />
       <input
         ref={fileInput}

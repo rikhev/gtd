@@ -249,8 +249,19 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     ui.followDetail(focusItem ? { kind: focusItem.kind, id: focusItem.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusItem?.key]);
+  // An appointment J is bringing back to (see below), picked once its week has arrived from the calendars.
+  const arriving = useRef<string | null>(null);
   // The item cursor lets go when its item leaves the cursor day (moved, completed).
   useEffect(() => {
+    const due = arriving.current;
+    if (due) {
+      if (cursor !== due.slice(-10)) arriving.current = null;
+      else if (cursorItems.some((i) => i.key === `e:${due}`)) {
+        arriving.current = null;
+        setItemKey(`e:${due}`);
+        return;
+      }
+    }
     if (itemKey && !cursorItems.some((i) => i.key === itemKey)) setItemKey(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursor, items]);
@@ -454,6 +465,14 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], "defer") : ped.date([focusItem.id], "start")),
     },
     {
+      id: "cal.jump",
+      label: "Jump to its project",
+      group: "Calendar",
+      keys: ["j"],
+      enabled: focusItem?.kind === "event",
+      run: () => focusItem?.kind === "event" && ui.jumpFromAppointment(focusItem.id),
+    },
+    {
       id: "cal.project",
       label: "Link the appointment to a project",
       group: "Calendar",
@@ -465,6 +484,23 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     },
   ];
   useCommands("list:calendar", commands, { priority: 10, active: regionActive });
+
+  // J from a project lands here on its appointment: that day, the appointment picked (its key ends in its day).
+  useEffect(() => {
+    if (ui.revealTarget?.kind !== "event") return;
+    const key = ui.revealTarget.id;
+    const day = key.slice(-10);
+    setCursor(day);
+    // Already on screen (its week fetched): pick it now; otherwise once it arrives.
+    if (onDay(day).some((i) => i.key === `e:${key}`)) setItemKey(`e:${key}`);
+    else {
+      arriving.current = key;
+      setItemKey(null);
+    }
+    if (mode === "year") setMode("week");
+    ui.clearReveal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.revealTarget]);
 
   // Opening the month on the current one: this week goes to the top, the past a scroll away above it.
   useEffect(() => {

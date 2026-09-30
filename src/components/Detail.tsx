@@ -457,6 +457,7 @@ function EventDetail({ e }: { e: CalEvent }) {
     [
       { id: "detail.e.addnext", label: "Add a next action (from this appointment)", group: "Details", keys: ["t"], run: () => quickAddNextAction(ui) },
       { id: "detail.e.addwait", label: "Add a waiting for (from this appointment)", group: "Details", keys: ["w"], run: () => quickAddWaiting(ui) },
+      { id: "detail.e.jump", label: "Jump to its project", group: "Details", keys: ["j"], run: () => ui.jumpFromAppointment(e.key) },
     ],
     { priority: 21, active },
   );

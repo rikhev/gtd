@@ -5,12 +5,10 @@ import { extractText } from "unpdf";
 
 const PREVIEW_LIMIT = 60_000;
 
-export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-
 export interface Extracted {
   /** Short line used as the inbox subject. */
   title: string;
-  /** Plain-text body, used for previews and for Claude when the file isn't sent natively. */
+  /** Plain-text body, shown as the file's preview. */
   text: string;
   kind: "email" | "file";
   mime: string;

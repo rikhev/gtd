@@ -23,8 +23,6 @@ export const COLUMNS: Record<TableName, string[]> = {
   contexts: ["id", "name", "color", "sort"],
   areas: ["id", "name", "sort", "color"],
   files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at"],
-  rules: ["id", "text", "status", "created_at"],
-  corrections: ["id", "stuff_text", "field", "proposed", "chosen", "used", "created_at"],
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
 };
@@ -56,17 +54,11 @@ CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL,
   preview TEXT NOT NULL DEFAULT '', owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL, created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS rules (id TEXT PRIMARY KEY, text TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS corrections (
-  id TEXT PRIMARY KEY, stuff_text TEXT NOT NULL, field TEXT NOT NULL, proposed TEXT NOT NULL,
-  chosen TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL
-);
 CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, completed_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS appointments (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', date TEXT NOT NULL,
   time TEXT, end_time TEXT, feed TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS proposals (stuff_id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
 
@@ -181,8 +173,6 @@ export function loadState(): State {
     contexts: all("contexts"),
     areas: all("areas"),
     files: all("files"),
-    rules: all("rules"),
-    corrections: all("corrections"),
     reviews: all("reviews"),
     appointments: all("appointments"),
   };

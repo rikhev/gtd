@@ -109,23 +109,6 @@ export interface FileRow {
   created_at: string;
 }
 
-export interface Rule {
-  id: ID;
-  text: string;
-  status: "suggested" | "active";
-  created_at: string;
-}
-
-export interface Correction {
-  id: ID;
-  stuff_text: string;
-  field: string;
-  proposed: string;
-  chosen: string;
-  used: 0 | 1;
-  created_at: string;
-}
-
 /**
  * An appointment from a subscribed calendar linked to a project (owner's request): an upcoming one is the project's
  * next step, so a project without a next action shows as scheduled rather than stalled. The appointment itself stays
@@ -157,8 +140,6 @@ export interface Tables {
   contexts: Context;
   areas: Area;
   files: FileRow;
-  rules: Rule;
-  corrections: Correction;
   reviews: Review;
   appointments: Appointment;
 }
@@ -171,7 +152,7 @@ export type Op =
   | { type: "patch"; table: TableName; id: ID; data: Record<string, unknown> }
   | { type: "delete"; table: TableName; id: ID };
 
-/* ---- Clarify proposals (the shape Claude returns, edited by the owner) ---- */
+/* ---- Clarify decisions (each Inbox item's outcome, as the owner sets it on the Clarify screen) ---- */
 
 export type ProposedKind = "next" | "waiting" | "someday";
 

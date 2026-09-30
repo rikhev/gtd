@@ -1,12 +1,10 @@
 import { NotesArea } from "../components/NotesArea.tsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Mail, StickyNote, Timer } from "lucide-react";
-import { getMeta, getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore, bareArea } from "../store.ts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileText, Mail, StickyNote } from "lucide-react";
+import { getState, mutate, newAction, newProject, notify, plural, stamp, uid, useStore, bareArea } from "../store.ts";
 import { useUI } from "../ui.tsx";
-import { runWhenReady, useCommands, type Command } from "../keys.ts";
+import { useCommands, type Command } from "../keys.ts";
 import { RAIL } from "../components/Chrome.tsx";
-import { promptApiKey } from "../apiKey.ts";
-import { suggestRules } from "../rules.ts";
 import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
 import { splitStuff, stuffTitle } from "./InboxView.tsx";
 import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
@@ -15,20 +13,17 @@ import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
 
 type Draft = Omit<Proposal, "actions"> & { actions: (ProposedAction & { done?: boolean })[] };
 
-interface JobState {
-  id: string;
+/** A Clarify run: the Inbox as it stood when it began, oldest first, each item with its blank decision. */
+interface Session {
   order: string[];
   proposals: Record<string, Proposal>;
-  done: boolean;
-  error: { code: string; message: string } | null;
-  cancelled?: boolean;
 }
 
 const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x));
 
 const normTitle = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "");
 
-/** An open project with the same title as Claude's proposed new one (e.g. created by an earlier item this session). */
+/** An open project with the same title as the decision's new one (e.g. created by an earlier item this session). */
 function matchingProject(title: string | undefined) {
   if (!title?.trim()) return undefined;
   return getState().projects.find((p) => (p.status === "active" || p.status === "someday") && normTitle(p.title) === normTitle(title));
@@ -56,9 +51,6 @@ const DISPOSITIONS: Record<Draft["disposition"], string> = {
 /** Where a Clarify run lives: its own screen by default, or inside another view (the Weekly Review) that stays put. */
 export interface ClarifyHost {
   leave: () => void;
-  restart: (withClaude: boolean) => void;
-  /** Clarify can't run: file the Inbox by hand instead. */
-  fileInbox: () => void;
   backLabel: string;
   /** Offer "Work from Next Actions" once the Inbox is clear. */
   offerNext: boolean;
@@ -71,145 +63,39 @@ const fitHeight = (el: HTMLTextAreaElement | null) => {
   el.style.height = `${el.scrollHeight}px`;
 };
 
-export function ClarifyView({ regionActive, withClaude = false, host: hosted }: { regionActive: boolean; withClaude?: boolean; host?: ClarifyHost }) {
+export function ClarifyView({ regionActive, host: hosted }: { regionActive: boolean; host?: ClarifyHost }) {
   const ui = useUI();
   const host: ClarifyHost = hosted ?? {
     leave: ui.leaveClarify,
-    restart: (claude) => ui.startClarify(ui.clarifyReturn(), claude),
-    fileInbox: () => {
-      ui.go("inbox");
-      runWhenReady("inbox.file");
-    },
     backLabel: ui.clarifyReturn() === "review" ? "Back to the Weekly Review" : "Back to the Inbox",
     offerNext: ui.clarifyReturn() !== "review",
   };
-  const meta = useMeta();
-  // Claude is optional: K clarifies by hand on this screen; ⌥K asks Claude for proposals.
-  const byHand = !withClaude;
   const s = useStore((x) => x);
-  const [job, setJob] = useState<JobState | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
+  const [job, setJob] = useState<Session | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const originals = useRef<Record<string, Proposal>>({});
   const [index, setIndex] = useState(0);
   const [handled, setHandled] = useState<Set<string>>(new Set());
-  // By hand, each item is first asked GTD's question, "is it actionable?", before any action is written (owner's
-  // decision after the GTD critique: the capture used to pass straight through as the next action).
+  // Each item is first asked GTD's question, "is it actionable?", before any action is written (owner's decision
+  // after the GTD critique: the capture used to pass straight through as the next action).
   const [answered, setAnswered] = useState<Set<string>>(new Set());
   const [row, setRow] = useState(0);
-  const corrections = useRef(0);
   const card = useRef<HTMLDivElement>(null);
 
-  const start = useCallback(async (fresh = false, isLive: () => boolean = () => true) => {
-    setStartError(null);
-    setJob(null);
-    if (byHand) {
-      // A session with no Claude: every Inbox item gets a blank decision, its first line as the first action.
-      const items = getState()
-        .stuff.filter((x) => x.status === "inbox")
-        .sort((a, b) => a.created_at.localeCompare(b.created_at));
-      const proposals: Record<string, Proposal> = {};
-      for (const st of items) proposals[st.id] = blankDecision(st.id, st.text);
-      setJob({ id: "by-hand", order: items.map((x) => x.id), proposals, done: true, error: null });
-      return;
-    }
-    // Without a key there is nothing to wait for: go straight to the ways forward, never to "Claude is reading…".
-    if (!getMeta().hasKey) {
-      setStartError("No Claude API key yet.");
-      return;
-    }
-    try {
-      const res = await fetch("/api/clarify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fresh }) });
-      const j = (await res.json()) as JobState;
-      // The screen closed while the job was starting: stop it rather than paying for it.
-      if (!isLive()) {
-        if (!j.done) void fetch(`/api/clarify/${j.id}`, { method: "DELETE" });
-        return;
-      }
-      setJob(j);
-    } catch (e) {
-      if (isLive()) setStartError((e as Error).message);
-    }
-  }, [byHand]);
-
+  // Every Inbox item gets a blank decision, its first line as the first action, in the order it was captured.
   useEffect(() => {
-    let live = true;
-    void start(false, () => live);
-    return () => {
-      live = false;
-    };
-  }, [start]);
-
-  // Leaving Clarify (Esc, another list, closing the tab) stops Claude; finished proposals stay cached.
-  const jobRef = useRef<JobState | null>(null);
-  const handledRef = useRef(handled);
-  jobRef.current = job;
-  handledRef.current = handled;
-  useEffect(
-    () => () => {
-      const j = jobRef.current;
-      if (!j || j.done) return;
-      void fetch(`/api/clarify/${j.id}`, { method: "DELETE", keepalive: true });
-      // A job that failed never ran; there is nothing to report stopping.
-      if (j.error) return;
-      const ready = Object.keys(j.proposals).filter((id) => !handledRef.current.has(id)).length;
-      notify(
-        ready
-          ? `Stopped Claude. ${plural(ready, "proposal")} ready for next time; the rest stay in the Inbox.`
-          : "Stopped Claude. Your Inbox is unchanged.",
-      );
-    },
-    [],
-  );
-
-  /** Stop Claude but keep reviewing what is already proposed. */
-  const stop = async () => {
-    if (!job || job.done) return;
-    const res = await fetch(`/api/clarify/${job.id}`, { method: "DELETE" });
-    const j = (await res.json()) as JobState;
-    setJob(j);
-    const ready = Object.keys(j.proposals).filter((id) => !handled.has(id)).length;
-    if (!ready) {
-      notify("Stopped Claude before any proposals were ready. Your Inbox is unchanged.");
-      host.leave();
-    } else {
-      notify(`Stopped Claude. Review the ${plural(ready, "proposal")} already made; the rest stay in the Inbox.`);
-    }
-  };
-
-  // Poll while Claude works through the rest of the inbox.
-  useEffect(() => {
-    if (!job || job.done) return;
-    const t = window.setTimeout(async () => {
-      const res = await fetch(`/api/clarify/${job.id}`);
-      if (res.ok) setJob(await res.json());
-    }, 900);
-    return () => window.clearTimeout(t);
-  }, [job]);
-
-  useEffect(() => {
-    if (!job) return;
-    setDrafts((prev) => {
-      const next = { ...prev };
-      for (const [k, p] of Object.entries(job.proposals)) {
-        if (!next[k]) {
-          next[k] = clone(p);
-          originals.current[k] = clone(p);
-        }
-      }
-      return next;
-    });
-  }, [job]);
+    const items = getState()
+      .stuff.filter((x) => x.status === "inbox")
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const proposals: Record<string, Proposal> = {};
+    for (const st of items) proposals[st.id] = blankDecision(st.id, st.text);
+    setJob({ order: items.map((x) => x.id), proposals });
+    setDrafts(Object.fromEntries(Object.entries(proposals).map(([k, p]) => [k, clone(p)])));
+  }, []);
 
   const queue = useMemo(
     () =>
       job
-        ? job.order.filter(
-            (id) =>
-              (s.stuff.some((x) => x.id === id && x.status === "inbox") || handled.has(id)) &&
-              // After a stop, items Claude never reached drop out of this session.
-              (!job.cancelled || Boolean(job.proposals[id]) || handled.has(id)),
-          )
+        ? job.order.filter((id) => s.stuff.some((x) => x.id === id && x.status === "inbox") || handled.has(id))
         : [],
     [job, s.stuff, handled],
   );
@@ -256,27 +142,6 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     else setIndex(queue.length);
   };
 
-  const recordCorrections = (id: string, d: Draft, ops: Op[]) => {
-    if (byHand) return; // no proposal, so nothing Claude could learn from
-    const o = originals.current[id];
-    const text = current?.text ?? "";
-    if (!o) return;
-    const add = (field: string, proposed: string, chosen: string) => {
-      if (proposed === chosen) return;
-      corrections.current++;
-      ops.push({ type: "create", table: "corrections", row: { id: uid(), stuff_text: text.slice(0, 400), field, proposed, chosen, used: 0, created_at: stamp() } });
-    };
-    add("outcome", o.disposition, d.disposition);
-    const projName = (p: string | null, np: Draft["new_project"]) => (p === "new" ? `new project “${np?.title ?? ""}”` : getState().projects.find((x) => x.id === p)?.title ?? "none");
-    d.actions.forEach((a, i) => {
-      const oa = o.actions[i];
-      if (!oa) return;
-      add("context", oa.context ?? "none", a.context ?? "none");
-      add("project", projName(oa.project, o.new_project), projName(a.project, d.new_project));
-      add("list", oa.kind, a.kind);
-    });
-  };
-
   const accept = () => {
     if (!current || !draft) return;
     // Every Waiting For action needs someone or something to wait on before it's filed.
@@ -318,7 +183,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       moveFiles("ref", rid);
       label = `Filed as reference: ${ref.title}`;
     } else {
-      // Contexts and areas named by Claude that don't exist yet are created on the fly.
+      // Contexts and areas typed as new ones are created on the fly.
       const ctxByName = new Map(st.contexts.map((c) => [c.name.toLowerCase(), c.id]));
       const ctxId = (name: string | null) => {
         if (!name) return null;
@@ -374,10 +239,9 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       }
       if (newProjectId) moveFiles("project", newProjectId);
       else if (created[0]) moveFiles("action", created[0]);
-      // Clarifying by hand carries the item's own notes (everything under its first line, as the Inbox pane shows
-      // them) over to the first action, as they are: no "Captured:" copy of the whole capture (owner's decision).
-      // Claude's clarifications leave the notes alone: its proposal already carries what matters.
-      const carried = byHand ? splitStuff(current).rest.trim() : "";
+      // The item's own notes (everything under its first line, as the Inbox pane shows them) go over to the first
+      // action, as they are: no "Captured:" copy of the whole capture (owner's decision).
+      const carried = splitStuff(current).rest.trim();
       if (carried && created[0]) {
         const i = ops.findIndex((o) => o.type === "create" && o.table === "actions" && (o.row as { id: string }).id === created[0]);
         if (i >= 0) (ops[i] as { row: Record<string, unknown> }).row.notes = carried;
@@ -393,20 +257,12 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
       label = label ? `Clarified: ${label}` : "Clarified";
     }
     ops.push({ type: "patch", table: "stuff", id: current.id, data: { status: d.disposition === "trash" ? "trashed" : "processed", processed_at: stamp() } });
-    recordCorrections(current.id, d, ops);
     finishItem(current.id, label, ops);
   };
 
   const trashItem = () => {
     if (!current) return;
     finishItem(current.id, "Trashed", [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]);
-  };
-
-  // Repeated corrections can become rules, but only when the owner asks Claude (R at the end, or Settings).
-  const offerRules = corrections.current >= 3;
-  const askRules = () => {
-    corrections.current = 0;
-    void suggestRules();
   };
 
   const pickFor = (i: number, field: "context" | "project" | "due" | "defer" | "time" | "energy" | "kind" | "who") => {
@@ -506,7 +362,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     return el ? Number(el.dataset.row) : row;
   };
 
-  const gating = byHand && Boolean(current && draft) && !answered.has(current!.id);
+  const gating = Boolean(current && draft) && !answered.has(current!.id);
   const ready = Boolean(current && draft) && !gating;
   /** The answer to "is it actionable?": Yes starts an empty next action to put into words; the rest file the item. */
   const answer = (a: "yes" | "someday" | "reference" | "trash") => {
@@ -529,18 +385,12 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     // Yes: the cursor waits in the empty action, the capture beside it as the source.
     if (a === "yes") window.setTimeout(() => card.current?.querySelector<HTMLElement>("[data-row='0'] .p-title")?.focus(), 0);
   };
-  const err = startError ?? job?.error?.message;
-  const stopped = Boolean(err && !draft);
   const backLabel = host.backLabel;
-  const keyProblem = !meta.hasKey || /api key/i.test(err ?? "");
-  // Ways forward when Claude can't run: add a key right here, or file the Inbox by hand.
-  const addKey = () => promptApiKey(ui, () => void start(true));
-  const fileByHand = host.fileInbox;
   const commands: Command[] = [
     { id: "cl.yes", label: "Actionable: decide the next action", group: "Clarify", keys: ["y"], enabled: gating, run: () => answer("yes") },
     { id: "cl.someday", label: "Not now: Someday / Maybe", group: "Clarify", keys: ["s"], enabled: gating, run: () => answer("someday") },
     { id: "cl.reference", label: "Not actionable: keep as Reference", group: "Clarify", keys: ["r"], enabled: gating, run: () => answer("reference") },
-    { id: "cl.accept", label: "Accept proposal and continue", group: "Clarify", keys: ["mod+enter"], inInput: true, enabled: ready, run: () => {
+    { id: "cl.accept", label: "Accept and continue", group: "Clarify", keys: ["mod+enter"], inInput: true, enabled: ready, run: () => {
       (document.activeElement as HTMLElement | null)?.blur?.();
       window.setTimeout(accept, 0);
     } },
@@ -566,17 +416,6 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     { id: "cl.kind", label: "File as (list or whole item)", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
     { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready, run: () => pickFor(rowOfFocus(), "who") },
     {
-      id: "cl.retry",
-      label: byHand ? "Clarify with Claude instead" : "Ask Claude again (fresh)",
-      group: "Clarify",
-      keys: ["alt+k"],
-      run: () => {
-        if (byHand) return host.restart(true);
-        if (job && !job.done) void fetch(`/api/clarify/${job.id}`, { method: "DELETE" });
-        void start(true);
-      },
-    },
-    {
       id: "cl.leave",
       label: "Leave the field, then Clarify",
       group: "Clarify",
@@ -590,7 +429,6 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
         else host.leave();
       },
     },
-    { id: "cl.stop", label: "Stop Claude (keep reviewing what's ready)", group: "Clarify", keys: ["shift+escape"], inInput: true, enabled: Boolean(job && !job.done), run: () => void stop() },
     { id: "cl.edit", label: "Edit the action text", group: "Clarify", keys: ["f2"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus()}'] .p-title`)?.focus() },
     {
       id: "cl.enter",
@@ -604,36 +442,10 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
         else card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus()}'] .p-title`)?.focus();
       },
     },
-    { id: "cl.rowdown", label: "Next proposed action", group: "Clarify", keys: ["arrowdown"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus() + 1}']`)?.focus() },
-    { id: "cl.rowup", label: "Previous proposed action", group: "Clarify", keys: ["arrowup"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${Math.max(0, rowOfFocus() - 1)}']`)?.focus() },
+    { id: "cl.rowdown", label: "Next action in the decision", group: "Clarify", keys: ["arrowdown"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus() + 1}']`)?.focus() },
+    { id: "cl.rowup", label: "Previous action in the decision", group: "Clarify", keys: ["arrowup"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${Math.max(0, rowOfFocus() - 1)}']`)?.focus() },
   ];
-  const finished = Boolean(job && queue.length > 0 && index >= queue.length);
-  commands.push(
-    { id: "cl.rules", label: "Ask Claude to turn your corrections into rules", group: "Clarify", keys: ["r"], enabled: finished && offerRules, run: askRules },
-    { id: "cl.addkey", label: meta.hasKey ? "Change the API key" : "Add an API key", group: "Clarify", keys: ["enter"], enabled: stopped && keyProblem, run: addKey },
-    { id: "cl.byhand", label: "File the Inbox", group: "Clarify", keys: ["v"], enabled: stopped, run: fileByHand },
-    { id: "cl.hand", label: "Clarify without Claude", group: "Clarify", keys: ["k"], enabled: stopped, run: () => host.restart(false) },
-  );
   useCommands("clarify", commands, { priority: 15, active: regionActive });
-
-  if (stopped) {
-    return (
-      <div className="clarify-state" role="alert">
-        <Tag size="md">Clarify stopped</Tag>
-        <p className="clarify-msg">{err}</p>
-        <KeyChoices
-          choices={[
-            ...(keyProblem
-              ? [{ k: "enter", label: meta.hasKey ? "Enter a working API key and start" : "Add your Claude API key and start", run: addKey }]
-              : [{ k: "alt+k", label: "Ask Claude again", run: () => void start(true) }]),
-            { k: "k", label: "Clarify without Claude", run: () => host.restart(false) },
-            { k: "v", label: "File the Inbox", run: fileByHand },
-            { k: "escape", label: backLabel, run: host.leave },
-          ]}
-        />
-      </div>
-    );
-  }
 
   if (job && queue.length === 0) {
     return (
@@ -652,7 +464,6 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
         <p className="clarify-msg">{plural(handled.size, "item")} clarified. Everything has a place.</p>
         <KeyChoices
           choices={[
-            ...(offerRules ? [{ k: "r", label: "Ask Claude to turn your corrections into rules", run: askRules }] : []),
             { k: "escape", label: backLabel, run: host.leave },
             ...(!host.offerNext ? [] : [{ k: RAIL.find((r) => r.id === "next")!.key!, label: "Work from Next Actions", run: () => ui.go("next") }]),
           ]}
@@ -678,16 +489,6 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
             <i key={id} className={`${handled.has(id) ? "is-done" : ""} ${i === index ? "is-current" : ""} ${drafts[id] ? "is-ready" : ""}`} />
           ))}
         </span>
-        {job && !job.done && (
-          <span className="muted-text small clarify-reading">
-            Claude is reading {plural(total - Object.keys(job.proposals).length, "more item")}…
-            <button type="button" className="text-btn" onClick={() => void stop()}>
-              Stop
-            </button>
-          </span>
-        )}
-        {job?.cancelled && <span className="muted-text small">Stopped. Items Claude didn't reach stay in the Inbox.</span>}
-        {err && <span className="error-text small">{err}</span>}
       </div>
 
       <div className="clarify-card">
@@ -710,9 +511,9 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
           </div>
         </section>
 
-        <section className="clarify-proposal" aria-label="Claude's proposal" aria-busy={!draft}>
+        <section className="clarify-proposal" aria-label="Your decision">
           <h2 className="pane-h">
-            {byHand ? "Your decision" : "Proposal"}
+            Your decision
             {draft && !gating && <Tag>{DISPOSITIONS[draft.disposition]}</Tag>}
           </h2>
           {gating ? (
@@ -720,14 +521,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
               <p className="clarify-q">Is it actionable?</p>
               <p className="muted-text">Is there anything you, or someone, should do about it? Decide that before writing any action.</p>
             </div>
-          ) : !draft ? (
-            <div className="proposal-skeleton" aria-live="polite">
-              <p className="muted-text">Claude is reading this item…</p>
-              <i />
-              <i />
-              <i />
-            </div>
-          ) : (
+          ) : !draft ? null : (
             <>
               {draft.disposition === "reference" && (
                 <div className="p-block">
@@ -751,7 +545,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                   </label>
                 </div>
               )}
-              {draft.disposition === "trash" && <p className="p-note">Claude thinks this can go. Accept to trash it, or file it as something else.</p>}
+              {draft.disposition === "trash" && <p className="p-note">Accept to trash it, or file it as something else.</p>}
               {(draft.disposition === "actionable" || draft.disposition === "someday") && (
                 <>
                   {draft.new_project && (
@@ -787,7 +581,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                     {draft.actions.map((a, i) => {
                       // By hand, the first action starts as the capture's own words: until it is rewritten it is drawn
                       // as raw material, with a prompt, and focusing it selects it so typing replaces it.
-                      const raw = byHand && Boolean(current) && a.title.trim() !== "" && a.title.trim() === stuffTitle(current!).trim();
+                      const raw = Boolean(current) && a.title.trim() !== "" && a.title.trim() === stuffTitle(current!).trim();
                       return (
                       <li key={i} data-row={i} tabIndex={0} aria-label={`Proposed action ${i + 1}: ${a.title}`} className={`p-row ${a.done ? "is-done" : ""}`} onFocus={() => setRow(i)}>
                         <div className="p-row-top">
@@ -801,7 +595,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                             value={a.title}
                             aria-label={`Action ${i + 1}`}
                             aria-describedby={raw ? `p-raw-${i}` : undefined}
-                            placeholder={byHand ? "What is the very next physical step?" : "Describe the next action"}
+                            placeholder="What is the very next physical step?"
                             onFocus={(e) => raw && e.currentTarget.select()}
                             onKeyDown={(e) => e.key === "Enter" && !e.metaKey && !e.ctrlKey && e.preventDefault()}
                             onChange={(e) => {
@@ -809,11 +603,6 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                               updateRow(i, { title: e.target.value.replace(/\n/g, " ") });
                             }}
                           />
-                          {a.two_minute && (
-                            <span className={`two-min ${a.done ? "is-on" : ""}`} title="Under two minutes: E marks it done now">
-                              <Timer size={12} strokeWidth={2} aria-hidden /> 2 min
-                            </span>
-                          )}
                         </div>
                         <div className="p-fields">
                           <button type="button" className="p-field" onClick={() => pickFor(i, "project")}>
@@ -863,7 +652,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                       );
                     })}
                   </ol>
-                  {draft.actions.length === 0 && <p className="p-note">No actions proposed. Add one if this needs doing.</p>}
+                  {draft.actions.length === 0 && <p className="p-note">No actions yet. Add one if this needs doing.</p>}
                 </>
               )}
 
@@ -880,7 +669,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
           { k: "mod+.", label: "Skip", touch: "more" as const },
         ] : [
           { k: "mod+enter", label: "Accept", primary: true },
-          ...(byHand ? [{ k: "n", label: "Add action", touch: "more" as const }] : []),
+          { k: "n", label: "Add action", touch: "more" as const },
           { k: "v", label: "File as" },
           { k: "shift+p", label: "Project", touch: "more" as const },
           { k: "e", label: "Done now" },

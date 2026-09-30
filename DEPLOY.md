@@ -4,7 +4,7 @@ The finished setup:
 
 ```
 browser ──HTTPS──▶ nginx (gtd.hevosmaa.net) ──▶ 127.0.0.1:8787 Stiltje (systemd, user "gtd")
-                                                   └─ /var/lib/gtd   lists, uploads, login, API key, backups
+                                                   └─ /var/lib/gtd   lists, uploads, login, backups
 ```
 
 - **The app is never reachable directly.** It listens on localhost only, behind your existing nginx; rikard.me is untouched.
@@ -149,7 +149,6 @@ If they're missing: `sudo firewall-cmd --permanent --add-service=http --add-serv
 ## 7. First sign-in
 
 1. Open **https://gtd.hevosmaa.net** and sign in with your password and authenticator code.
-2. Optional: go to **Settings → Claude → API key** and paste your key. It's checked with Claude, then stored in `/var/lib/gtd/.env`, which only the `gtd` user can read.
 
 ## 8. Nightly backups
 
@@ -191,7 +190,7 @@ git commit -am "What changed"
 
 The service runs on Stockholm time (`Environment=TZ=Europe/Stockholm` in `gtd.service`), so the app's "today" turns at your midnight; change it there if you move. Calendar appointments are shown in your browser's time zone either way.
 
-Your data, uploads, login and API key live in `/var/lib/gtd` and are never touched by a deploy. `./deploy/deploy.sh --force` rebuilds even if nothing changed. On the server itself, `/opt/gtd/deploy/update.sh` does the same without the push.
+Your data, uploads and login live in `/var/lib/gtd` and are never touched by a deploy. `./deploy/deploy.sh --force` rebuilds even if nothing changed. On the server itself, `/opt/gtd/deploy/update.sh` does the same without the push.
 
 The script asks for your sudo password to restart the service. To skip that, allow just these commands without a password, with `sudo visudo -f /etc/sudoers.d/gtd` (replace `you` with your VPS username):
 

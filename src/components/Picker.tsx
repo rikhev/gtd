@@ -230,7 +230,7 @@ export function Picker({ spec, close }: Props) {
       <input
         ref={input}
         className="picker-input"
-        type={spec.type === "text" && spec.secret ? "password" : "text"}
+        type="text"
         value={q}
         placeholder={placeholder}
         onChange={(e) => setQ(e.target.value)}

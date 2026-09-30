@@ -561,7 +561,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
 
   const empty =
     mode === "next" ? (
-      <EmptyState title="No next actions yet" lines={["Add an action here, capture to the Inbox, or let Claude clarify what you have captured."]} />
+      <EmptyState title="No next actions yet" lines={["Add an action here, or capture to the Inbox and clarify what you have captured."]} />
     ) : mode === "waiting" ? (
       <EmptyState title="Nothing delegated" lines={["Delegate any action and it waits here, with who and since when."]} />
     ) : mode === "someday" ? (

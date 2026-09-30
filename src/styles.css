@@ -659,12 +659,12 @@ body.keys-held .rail .rail-meta .num {
 .rail-item.is-current .rail-name {
   font-weight: 650;
 }
-.rail-item.is-cursor {
-  box-shadow: inset 0 0 0 2px var(--ink);
-  background: var(--rail-2);
-}
+/* The rail's cursor follows the same rule as a list's: Selection Blue with the row's hairline, not an ink ring. */
+.rail-item.is-cursor,
 .rail-item.is-current.is-cursor {
-  background: var(--rail-current);
+  background: var(--select);
+  color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* The phone tab bar replaces the rail below 820px. */
@@ -1182,7 +1182,7 @@ body.is-col-resizing * {
 }
 .grid.is-active .group-head.is-focus {
   background: var(--select);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .chev {
   width: 8px;
@@ -1571,6 +1571,30 @@ body.is-col-resizing * {
   height: 44px; /* the top bar's height: the pane's header rule continues the top bar's */
   padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--rule);
+}
+/*
+ * Where you are (the One Blue Rule): the active region's cursor takes Selection Blue, as the focused row does in the
+ * active list. The pane has no cursor row of its own, so its header bar is its cursor: blue while keys go to the pane,
+ * plain otherwise, like a window's title bar when it is in front. Its lower edge takes the row's 45% accent hairline.
+ */
+.detail-bar {
+  transition: background-color 120ms var(--ease), border-color 120ms var(--ease);
+}
+.detail.is-active .detail-bar {
+  background: var(--select);
+  border-bottom-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
+}
+.detail.is-active .detail-title,
+.detail.is-active .detail-back {
+  color: var(--select-ink);
+}
+.detail.is-active .detail-bar .icon-btn {
+  color: color-mix(in srgb, var(--select-ink) 75%, transparent);
+}
+.detail.is-active .detail-bar .icon-btn:hover,
+.detail.is-active .detail-back:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--select-ink);
 }
 .detail-title {
   margin: 0;
@@ -2338,11 +2362,6 @@ textarea.field-text {
   box-shadow: 0 0 0 1px var(--select-ink);
 }
 
-.clarify-reading {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-}
 .text-btn {
   color: var(--ink-2);
   text-decoration: underline;
@@ -2552,23 +2571,6 @@ textarea.field-text {
 .p-field:focus-visible .p-lbl {
   color: inherit;
 }
-.two-min {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-2);
-  border: 1px dashed var(--rule-strong);
-  border-radius: 5px;
-  padding: 1px 7px;
-  flex: none;
-}
-.two-min.is-on {
-  background: var(--ink);
-  color: var(--paper);
-  border-style: solid;
-}
 .p-done-note,
 .p-note {
   margin: 6px 0 0 66px;
@@ -2577,18 +2579,6 @@ textarea.field-text {
 }
 .p-note {
   margin-left: 0;
-}
-.proposal-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.proposal-skeleton i {
-  height: 58px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--rule) 0, color-mix(in srgb, var(--rule) 40%, var(--sheet)) 50%, var(--rule) 100%);
-  background-size: 200% 100%;
-  animation: shimmer 1.3s linear infinite;
 }
 @keyframes shimmer {
   from {
@@ -2746,13 +2736,6 @@ textarea.field-text {
 .review-title:focus-visible {
   outline: none;
 }
-.review-claude {
-  max-width: 80ch;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-2);
-}
 .flag-note {
   display: inline-flex;
   align-items: center;
@@ -2789,12 +2772,6 @@ textarea.field-text {
   margin-top: var(--row);
   padding-bottom: 6px;
 }
-.key-state {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  font-weight: 600;
-}
 /* A setting's value is its control: the value and a caret, with no box around it. */
 .set-value {
   display: inline-flex;
@@ -2817,10 +2794,6 @@ textarea.field-text {
 .row.is-focus .set-value svg,
 .set-value:hover svg {
   color: var(--ink);
-}
-.key-hint {
-  font-weight: 400;
-  color: var(--ink-2);
 }
 .settings-facts p {
   margin: 8px 0 0;
@@ -3190,7 +3163,7 @@ textarea.field-text {
   outline-offset: 2px;
 }
 
-/* The rail cursor already draws its own ring; don't stack the browser focus outline on it. */
+/* The rail cursor already draws its own fill; don't stack the browser focus outline on it. */
 .rail .is-cursor:focus-visible {
   outline: none;
 }
@@ -3200,13 +3173,9 @@ textarea.field-text {
   font-weight: 600;
 }
 
-/* The detail pane takes focus as a whole when opened; the ink ring below marks it. */
+/* The detail pane takes focus as a whole when opened; its header bar says so (see .detail.is-active), not a frame. */
 .detail:focus {
   outline: none;
-}
-/* Focus on the pane itself is the focused row's 1px accent hairline, never a painted pane (the One Blue Rule). */
-.detail:focus {
-  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* Palette section headings: Label Caps over a rule, like the group heads. */

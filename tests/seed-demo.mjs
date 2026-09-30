@@ -67,5 +67,3 @@ stuff("gutter on the garage is leaking", "text", 0);
 const res = await fetch(`${API}/api/ops`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ops }) });
 console.log(res.status, await res.text(), ops.length, "ops");
 
-// Cached synthetic proposals so Clarify can be exercised without an API key.
-await import("./seed-proposals.mjs");

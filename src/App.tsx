@@ -3,7 +3,7 @@ import { fits, openFit, useFit } from "./fit.ts";
 import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
+import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, runKey, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
@@ -26,7 +26,6 @@ const SearchView = lazy(() => import("./views/SearchSettings.tsx").then((m) => (
 const SettingsView = lazy(() => import("./views/SearchSettings.tsx").then((m) => ({ default: m.SettingsView })));
 import { isEditable } from "./keys.ts";
 import { isDark, setTheme, useTheme } from "./theme.ts";
-import { promptApiKey } from "./apiKey.ts";
 import { today } from "../shared/dates.ts";
 
 /**
@@ -114,9 +113,9 @@ export default function App() {
   const [revealTarget, setRevealTarget] = useState<Target | null>(null);
   const [clarifyRun, setClarifyRun] = useState(0);
   const clarifyReturn = useRef<ViewId>("inbox");
-  const clarifyWithClaude = useRef(false);
   const prevView = useRef<ViewId>("next");
-  const jumpOrigin = useRef<{ actionId: string; projectId: string } | null>(null);
+  // Where J came from (an action, or an appointment in the Calendar), so J on the project goes back there.
+  const jumpOrigin = useRef<{ actionId?: string; eventKey?: string; projectId: string } | null>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -262,9 +261,8 @@ export default function App() {
       },
       searchQuery,
       setSearchQuery,
-      startClarify: (returnTo?: ViewId, withClaude = false) => {
+      startClarify: (returnTo?: ViewId) => {
         clarifyReturn.current = returnTo ?? "inbox";
-        clarifyWithClaude.current = withClaude;
         setClarifyRun((n) => n + 1);
         go("clarify");
       },
@@ -290,16 +288,39 @@ export default function App() {
         setRevealTarget({ kind: "project", id: p.id });
         notify(`Project: ${p.title}`);
       },
+      jumpFromAppointment: (key) => {
+        const s = getState();
+        const link = s.appointments.find((x) => x.id === key);
+        const p = link ? s.projects.find((x) => x.id === link.project_id && x.status !== "trashed") : undefined;
+        if (!link || !p) {
+          notify("This appointment isn't linked to a project. P links one.");
+          return;
+        }
+        jumpOrigin.current = { eventKey: key, projectId: p.id };
+        go(p.status === "someday" ? "someday" : "projects");
+        setRevealTarget({ kind: "project", id: p.id });
+        notify(`Project: ${p.title}`);
+      },
       jumpToAction: (projectId) => {
         const s = getState();
         const open = (id: string) => s.actions.some((x) => x.id === id && ["next", "waiting", "someday"].includes(x.status));
         const origin = jumpOrigin.current;
-        let target = origin && origin.projectId === projectId && open(origin.actionId) ? origin.actionId : undefined;
+        const toCalendar = (key: string) => {
+          go("calendar");
+          setRevealTarget({ kind: "event", id: key });
+        };
+        // Jumped here from an appointment that is still linked: back to it in the Calendar.
+        if (origin?.eventKey && origin.projectId === projectId && s.appointments.some((x) => x.id === origin.eventKey && x.project_id === projectId)) return toCalendar(origin.eventKey);
+        let target = origin?.actionId && origin.projectId === projectId && open(origin.actionId) ? origin.actionId : undefined;
         if (!target) {
           const acts = s.actions.filter((x) => x.project_id === projectId).sort((a, b) => a.sort - b.sort);
           target = (acts.find((x) => x.status === "next") ?? acts.find((x) => x.status === "waiting") ?? acts.find((x) => x.status === "someday"))?.id;
         }
         if (!target) {
+          // No action to go to, but an appointment ahead is its next step: that, in the Calendar.
+          const p = s.projects.find((x) => x.id === projectId);
+          const appt = p ? nextAppointment(s, p) : null;
+          if (appt) return toCalendar(appt.id);
           notify("This project has no next action yet. Enter opens it so you can add one.");
           return;
         }
@@ -345,9 +366,8 @@ export default function App() {
     { id: "g.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     { id: "g.help", label: "Keys on this screen", group: "Help", keys: ["?"], run: () => setHelp(true) },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
-    // K clarifies (you decide, one item at a time); ⌥K clarifies with Claude's proposals.
+    // K clarifies: you decide, one item at a time.
     { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
-    { id: "g.clarifyclaude", label: `Clarify with Claude${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["alt+k"], run: () => ui.startClarify(undefined, true) },
     // ⇧E archives what is done everywhere, not just on the list in view (owner's request); each list's View menu still
     // archives that list alone.
     { id: "g.archive", label: `Archive all done items to Done${archivable ? ` (${archivable})` : ""}`, group: "Actions", keys: ["shift+e"], run: archiveAllDone },
@@ -388,12 +408,6 @@ export default function App() {
     { id: "g.upload", label: "Upload files to the Inbox", group: "Capture", keys: ["mod+o"], hidden: view === "inbox", run: () => document.querySelector<HTMLInputElement>("#global-upload")?.click() },
     { id: "g.exportzip", label: "Export everything as Markdown (.zip)", group: "Data", run: () => (window.location.href = "/api/export/zip") },
     { id: "g.exportjson", label: "Export everything as JSON", group: "Data", run: () => (window.location.href = "/api/export/json") },
-    { id: "g.rules", label: "Rules Claude follows", group: "Settings", run: () => go("settings") },
-    // One API-key command at a time: on the Settings screen its own row command takes over.
-    { id: "g.apikey", label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key", group: "Settings", hidden: view === "settings", run: () => promptApiKey(ui) },
-    { id: "g.clarifyfresh", label: "Clarify again from scratch (ignore cached proposals)", group: "Clarify", enabled: meta.hasKey, run: () => {
-      void fetch("/api/clarify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fresh: true }) }).then(() => ui.startClarify(undefined, true));
-    } },
     { id: "g.reload", label: "Reload lists", group: "Data", run: () => void load().then(() => notify("Reloaded")) },
     { id: "g.signout", label: "Sign out", group: "Account", enabled: meta.authRequired, run: () => void signOut() },
     { id: "g.signoutall", label: "Sign out on every device", group: "Account", enabled: meta.authRequired, run: () => void signOut(true) },
@@ -482,7 +496,7 @@ export default function App() {
       body = <ReferenceView regionActive={listActive} />;
       break;
     case "clarify":
-      body = <ClarifyView key={clarifyRun} regionActive={listActive} withClaude={clarifyWithClaude.current} />;
+      body = <ClarifyView key={clarifyRun} regionActive={listActive} />;
       break;
     case "review":
       body = <ReviewView regionActive={listActive} />;

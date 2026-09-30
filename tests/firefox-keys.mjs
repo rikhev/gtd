@@ -101,21 +101,21 @@ try {
   await press("k");
   await sleep(1200);
   check("K opens Clarify", (await title()) === "Clarify");
-  check("Clarify focus lands on the proposal row", (await js("document.activeElement?.dataset?.row")) === "0");
+  check("Clarify focus lands on the decision row", (await js("document.activeElement?.dataset?.row")) === "0");
   await press("c");
   check("C works immediately in Clarify", (await js("document.querySelector('.picker-title')?.textContent")) === "Context");
   await press(Key.ESCAPE);
   await press(Key.F2);
-  check("F2 edits the proposed title", (await js("document.activeElement?.className")) === "p-title");
+  check("F2 edits the action title", (await js("document.activeElement?.className")) === "p-title");
   await press(Key.ESCAPE);
   check("Esc from the title returns to the row", (await js("document.activeElement?.dataset?.row")) === "0");
   await press(Key.ARROW_DOWN);
-  check("↓ moves to the next proposed row", (await js("document.activeElement?.dataset?.row")) === "1");
+  check("↓ moves to the next action row", (await js("document.activeElement?.dataset?.row")) === "1");
   await press(Key.CONTROL, ".");
   check("⌃. skips to the next item", (await js("document.querySelector('.clarify-progress .num').textContent.trim().startsWith('2')")));
   await press(Key.META, Key.ENTER);
   await sleep(400);
-  check("⌘↵ accepts the proposal", (await js("document.querySelector('.status-msg').textContent")).startsWith("Clarified"));
+  check("⌘↵ accepts the decision", (await js("document.querySelector('.status-msg').textContent")).startsWith("Clarified"));
   await press(Key.ESCAPE);
   check("Esc on the row leaves Clarify", (await title()) === "Inbox", await title());
 

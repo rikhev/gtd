@@ -2,16 +2,14 @@ import { clearEvents, type FeedInfo } from "../calendarFeed.ts";
 import { useEffect, useMemo, useState } from "react";
 import { getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
-import { keyLabel, runKey, useCommands, type Command } from "../keys.ts";
+import { runKey, useCommands, type Command } from "../keys.ts";
 import { ChevronDown, Download } from "lucide-react";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { AreaName, ContextCode, KeyHints, type KeyHint } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../actionCommands.tsx";
-import { suggestRules } from "../rules.ts";
 import { isDark, setTheme, useTheme } from "../theme.ts";
-import { promptApiKey, removeApiKey } from "../apiKey.ts";
 import type { ID } from "../../shared/types.ts";
 
 /* ------------------------------------------------------------------ */
@@ -107,17 +105,16 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 }
 
 /* ------------------------------------------------------------------ */
-/* Settings: rules, contexts, Claude, export                            */
+/* Settings: general, areas, contexts, export                          */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "lang" | "export" | "feed" | "addfeed" | "hours"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "context" | "area" | "stall" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours"; id: ID; text: string; status?: string; color?: string };
 
-/** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–5. */
+/** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–4. */
 const TABS = [
   { id: "general", title: "General" },
   { id: "areas", title: "Areas" },
   { id: "contexts", title: "Contexts" },
-  { id: "claude", title: "Claude" },
   { id: "data", title: "Data" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
@@ -126,10 +123,6 @@ const TAB_OF: Record<string, TabId> = {
   calendar: "general",
   review: "general",
   trash: "general",
-  claude: "claude",
-  language: "claude",
-  suggested: "claude",
-  rules: "claude",
   areas: "areas",
   contexts: "contexts",
   export: "data",
@@ -141,7 +134,9 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const meta = useMeta();
   const [editing, setEditing] = useState<string | null>(null);
   const theme = useTheme();
-  const [tab, setTab] = usePersisted<TabId>("settings:tab", "general");
+  const [storedTab, setTab] = usePersisted<TabId>("settings:tab", "general");
+  // A tab remembered from before that no longer exists falls back to General.
+  const tab: TabId = TABS.some((t) => t.id === storedTab) ? storedTab : "general";
   const tabIdx = Math.max(0, TABS.findIndex((t) => t.id === tab));
 
   const groups: GridGroup<SRow>[] = useMemo(
@@ -177,34 +172,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [{ key: "trash", kind: "trash" as const, id: "trash", text: "Keep deleted items" }],
       },
       {
-        key: "claude",
-        label: "Connection",
-        hideCount: true,
-        rows: [{ key: "apikey", kind: "apikey" as const, id: "apikey", text: "API key", status: meta.hasKey ? "set" : "missing" }],
-      },
-      {
-        key: "language",
-        label: "Language",
-        hideCount: true,
-        rows: [{ key: "lang", kind: "lang" as const, id: "lang", text: "Clarify in" }],
-      },
-      {
-        key: "suggested",
-        label: "Suggested rules",
-        rows: s.rules.filter((r) => r.status === "suggested").map((r) => ({ key: `r:${r.id}`, kind: "rule" as const, id: r.id, text: r.text, status: r.status })),
-        meta: s.rules.some((r) => r.status === "suggested")
-          ? undefined
-          : meta.hasKey
-            ? `Ask Claude (${keyLabel("mod+k")} › Suggest rules) once you have corrected the same kind of proposal a few times`
-            : "Rules come from correcting Claude's proposals, so they need an API key first",
-      },
-      {
-        key: "rules",
-        label: "Claude's rules",
-        rows: s.rules.filter((r) => r.status === "active").map((r) => ({ key: `r:${r.id}`, kind: "rule" as const, id: r.id, text: r.text, status: r.status })),
-        meta: s.rules.some((r) => r.status === "active") ? undefined : "None yet. Approve a suggested rule, or add your own",
-      },
-      {
         // Areas of focus are managed here (the Projects list groups by them); creating one also works from any area picker.
         key: "areas",
         label: "Areas",
@@ -226,7 +193,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.clarifyLang, meta.calendars, meta.dayHours],
+    [s.contexts, s.areas, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.calendars, meta.dayHours],
   );
   const shown = useMemo(() => groups.filter((g) => TAB_OF[g.key] === tab), [groups, tab]);
   // No group headings: the tab already says what the list is (owner's decision); each tab is one plain list.
@@ -238,8 +205,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     (nav.focus && isGroupKey(nav.focus) ? nav.focus.slice(6) : groups.find((g) => g.rows.some((r) => r.key === nav.focus))?.key) ??
     (tab === "areas" ? "areas" : tab === "contexts" ? "contexts" : undefined);
 
-  // Only rules, contexts and areas can be renamed or deleted; the other rows are settings, not list items.
-  const listRow = cur?.kind === "rule" || cur?.kind === "context" || cur?.kind === "area";
+  // Only contexts and areas can be renamed or deleted; the other rows are settings, not list items.
+  const listRow = cur?.kind === "context" || cur?.kind === "area";
   const moveArea = (id: ID, dir: -1 | 1) => {
     const list = [...s.areas].sort((a, b) => a.sort - b.sort);
     const i = list.findIndex((a) => a.id === id);
@@ -390,24 +357,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       run: () => cur && void removeCalendar(cur.id, cur.text),
     },
     {
-      id: "set.lang",
-      label: "Choose the language Claude clarifies in",
-      group: "Settings",
-      keys: ["enter", "f2"],
-      enabled: cur?.kind === "lang",
-      run: () =>
-        ui.openPicker({
-          type: "list",
-          title: "Claude clarifies in",
-          items: [
-            { id: "en", label: "English" },
-            { id: "sv", label: "Swedish", hint: "Svenska" },
-          ],
-          current: meta.clarifyLang,
-          onPick: (v) => (v === "en" || v === "sv") && void saveClarifyLang(v),
-        }),
-    },
-    {
       id: "set.trash",
       label: "Change how long deleted items are kept",
       group: "Settings",
@@ -451,59 +400,30 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           },
         }),
     },
-    {
-      id: "set.key",
-      label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key",
-      group: "Settings",
-      keys: ["enter", "f2"],
-      enabled: cur?.kind === "apikey",
-      run: () => promptApiKey(ui),
-    },
-    {
-      id: "set.keyremove",
-      label: "Remove the API key",
-      group: "Settings",
-      keys: ["backspace", "delete"],
-      enabled: cur?.kind === "apikey" && meta.hasKey,
-      run: () => void removeApiKey(),
-    },
-    {
-      id: "set.approve",
-      label: "Approve rule",
-      group: "Settings",
-      keys: ["enter"],
-      enabled: cur?.kind === "rule" && cur.status === "suggested",
-      run: () => cur && mutate("Rule approved: Claude will follow it", [{ type: "patch", table: "rules", id: cur.id, data: { status: "active" } }]),
-    },
     { id: "set.edit", label: "Rename", group: "Settings", keys: ["f2"], enabled: listRow, run: () => cur && setEditing(cur.key) },
-    { id: "set.suggest", label: "Ask Claude to suggest rules from your corrections", group: "Settings", keys: ["shift+k"], enabled: meta.hasKey, run: () => void suggestRules() },
     {
       id: "set.new",
-      label: groupOfFocus === "contexts" ? "New context" : groupOfFocus === "areas" ? "New area" : "New rule",
+      label: groupOfFocus === "contexts" ? "New context" : "New area",
       group: "Settings",
       keys: ["n"],
-      // N adds to the list in front of you: areas, contexts, or Claude's rules; General and Data have nothing to add.
-      enabled: tab === "areas" || tab === "contexts" || tab === "claude",
+      // N adds to the list in front of you: areas or contexts; General and Data have nothing to add.
+      enabled: tab === "areas" || tab === "contexts",
       run: () => {
         const id = crypto.randomUUID();
         if (groupOfFocus === "areas") {
           mutate("New area", [{ type: "create", table: "areas", row: { id, name: "", sort: Math.max(0, ...s.areas.map((a) => a.sort)) + 1, color: nextAreaColor() } }], { silent: true });
           nav.setFocus(`a:${id}`);
           setEditing(`a:${id}`);
-        } else if (groupOfFocus === "contexts") {
+        } else {
           mutate("New context", [{ type: "create", table: "contexts", row: { id, name: "@", color: CONTEXT_COLORS[s.contexts.length % CONTEXT_COLORS.length], sort: s.contexts.length } }], { silent: true });
           nav.setFocus(`c:${id}`);
           setEditing(`c:${id}`);
-        } else {
-          mutate("New rule", [{ type: "create", table: "rules", row: { id, text: "", status: "active", created_at: new Date().toISOString() } }], { silent: true });
-          nav.setFocus(`r:${id}`);
-          setEditing(`r:${id}`);
         }
       },
     },
     {
       id: "set.delete",
-      label: cur?.status === "suggested" ? "Reject rule" : "Delete",
+      label: "Delete",
       group: "Settings",
       keys: ["backspace", "delete"],
       enabled: listRow,
@@ -515,12 +435,12 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             { type: "delete", table: "areas", id: cur.id },
             ...s.projects.filter((p) => p.area_id === cur.id).map((p) => ({ type: "patch" as const, table: "projects" as const, id: p.id, data: { area_id: null } })),
           ]);
-        } else if (cur.kind === "context") {
+        } else {
           mutate("Context deleted", [
             { type: "delete", table: "contexts", id: cur.id },
             ...s.actions.filter((a) => a.context_id === cur.id).map((a) => ({ type: "patch" as const, table: "actions" as const, id: a.id, data: { context_id: null } })),
           ]);
-        } else mutate(cur.status === "suggested" ? "Rule rejected" : "Rule deleted", [{ type: "delete", table: "rules", id: cur.id }]);
+        }
       },
     },
     { id: "set.areaup", label: "Move area up", group: "Settings", keys: ["alt+arrowup"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, -1) },
@@ -575,11 +495,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         editing === r.key ? (
           <InlineEdit
             value={r.text}
-            placeholder={r.kind === "context" ? "Name the context" : r.kind === "area" ? "Name the area" : "Describe the rule"}
+            placeholder={r.kind === "context" ? "Name the context" : "Name the area"}
             onDone={(v) => {
               setEditing(null);
-              const table = r.kind === "rule" ? "rules" : r.kind === "area" ? "areas" : "contexts";
-              const field = r.kind === "rule" ? "text" : "name";
+              const table = r.kind === "area" ? "areas" : "contexts";
+              const field = "name";
               let val = v.trim();
               if (r.kind === "context" && val && !val.startsWith("@")) val = `@${val}`;
               if (r.kind === "area") val = bareArea(val);
@@ -622,11 +542,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Add a calendar</span>
             <span className="subject-more">Outlook: Settings › Calendar › Shared calendars › Publish a calendar, then the ICS link. iCloud: share the calendar as a public calendar, then its webcal link. Shown read-only in the Calendar, Look back and Upcoming.</span>
           </span>
-        ) : r.kind === "lang" ? (
-          <span className="subject">
-            <span className="subject-text strong">Clarify in</span>
-            <span className="subject-more">The language of Claude's proposals and suggested rules, whatever the language of the captured stuff.</span>
-          </span>
         ) : r.kind === "trash" ? (
           <span className="subject">
             <span className="subject-text strong">Keep deleted items</span>
@@ -636,11 +551,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           <span className="subject">
             <span className="subject-text strong">Stalled after</span>
             <span className="subject-more">A project with a next action counts as stalled when nothing in it has been touched for this long.</span>
-          </span>
-        ) : r.kind === "apikey" ? (
-          <span className="subject">
-            <span className="subject-text strong">API key</span>
-            <span className="subject-more">{meta.hasKey ? `Kept out of the browser: only its last four characters are ever shown. Clarify with Claude uses Claude Sonnet 5.` : "Lets Claude propose projects and actions when you clarify with Claude (⌥K). Everything else works without it."}</span>
           </span>
         ) : r.kind === "area" ? (
           <AreaName name={r.text} color={r.color} />
@@ -669,25 +579,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           valueBtn(r, <span>{r.status ? "Can't read" : "Change link"}</span>)
         ) : r.kind === "addfeed" ? (
           valueBtn(r, <span>Add…</span>)
-        ) : r.kind === "lang" ? (
-          valueBtn(r, <span>{LANG_NAME[meta.clarifyLang]}</span>)
         ) : r.kind === "export" ? (
           valueBtn(r, <span>Download</span>, { icon: "download" })
-        ) : r.kind === "apikey" ? (
-          valueBtn(
-            r,
-            meta.hasKey ? (
-              <span className="key-state">
-                Connected
-                {meta.keyHint && <span className="key-hint num">…{meta.keyHint}</span>}
-              </span>
-            ) : (
-              <span className="badge">Not set</span>
-            ),
-            { label: meta.hasKey ? "Change the Claude API key" : "Add a Claude API key" },
-          )
-        ) : r.status === "suggested" ? (
-          valueBtn(r, <span>Approve</span>, { label: "Approve rule" })
         ) : r.kind === "area" ? (
           <span className="num muted-text">{plural(s.projects.filter((p) => p.area_id === r.id && p.status === "active").length, "active project")}</span>
         ) : r.kind === "context" ? (
@@ -741,10 +634,10 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         showHeaders={heads}
         head={false}
         empty={null}
-        // Double-click: what Enter does, or rename for areas, contexts and rules.
+        // Double-click: what Enter does, or rename for areas and contexts.
         onOpen={(k) => {
           const r = all.find((x) => x.key === k);
-          if (r) actOn(r, r.kind === "area" || r.kind === "context" || (r.kind === "rule" && r.status !== "suggested") ? "f2" : "enter");
+          if (r) actOn(r, r.kind === "area" || r.kind === "context" ? "f2" : "enter");
         }}
       />
       <KeyHints hints={hints} />
@@ -767,18 +660,6 @@ async function saveTrashDays(days: number) {
   if (j.trashDays) {
     updateMeta({ trashDays: j.trashDays });
     notify(`Deleted items are now kept ${plural(j.trashDays, "day")}.`);
-  } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
-}
-
-const LANG_NAME = { en: "English", sv: "Swedish" } as const;
-
-async function saveClarifyLang(lang: "en" | "sv") {
-  const res = await fetch("/api/settings/language", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ lang }) });
-  const j = (await res.json()) as { clarifyLang?: "en" | "sv"; error?: string };
-  if (j.clarifyLang === "en" || j.clarifyLang === "sv") {
-    updateMeta({ clarifyLang: j.clarifyLang });
-    // Proposals already made in the other language are made again the next time Clarify with Claude runs.
-    notify(`Claude now clarifies in ${LANG_NAME[j.clarifyLang]}.`);
   } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }
 

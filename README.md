@@ -1,6 +1,6 @@
 # Stiltje
 
-A local, keyboard-only GTD system. Capture stuff, let Claude propose how to clarify it, and work from compact Outlook-Tasks-style lists.
+A local, keyboard-only GTD system. Capture stuff, clarify it one item at a time, and work from compact Outlook-Tasks-style lists.
 
 ## Run it
 
@@ -10,7 +10,6 @@ npm run dev                 # http://localhost:5173
 ```
 
 - Data lives in `data/gtd.sqlite`, and uploaded files are stored in `data/files/`. Both stay on this Mac.
-- Clarify uses Claude Sonnet 5. Add your API key in **Settings → Claude → API key** (or ⌘K › "Add a Claude API key"). The app checks it with Claude, then saves it to `.env` in the project folder (readable only by you). The browser only ever sees the last four characters. Without a key, everything else still works.
 - To run a production build: `npm run build && npm start`, which serves on port 5173.
 
 ## Run it on a server
@@ -33,7 +32,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `⌥T` | New next action from anywhere: what to do, its context, then its project (`No project` first; type a new name to create one). On Projects, `T` adds one to the project under the cursor |
 | `⌥W` | New Waiting For item from anywhere: what you're waiting for, who or what you wait on, then its project. Waiting since today |
 | `T` `W` | Everywhere (action lists, Projects, Agendas, details, the Weekly Review): add a next action (`T`) or a Waiting For item (`W`) to the project |
-| `K` / `⌥K` | Clarify the Inbox / clarify it with Claude |
+| `K` | Clarify the Inbox, one item at a time |
 | `↑↓` `⌘↑↓` `fn↑↓` | Move / jump to the first or last row / page |
 | `Space` `⇧↑↓` `⌘A` | Tick a row / extend the range (`⇧Home`/`⇧End` to the ends) / select all. A plain arrow, Home/End or click clears the selection, as in Finder; `⇧`-click extends, `⌘`-click ticks, and dragging from anywhere beside the rail draws a selection rectangle (`⌘`-drag adds to the selection; a click on empty space clears it) |
 | `←` `→` | Collapse or expand a group. On Projects, a project's actions show in the details pane (pin it with `⌥P` to keep them beside the list), and `T` adds a next action to the project under the cursor (in a project's detail pane, `T` goes to its Add a next action field). Areas are managed in Settings › Areas (N adds, F2 renames, ⌥↑↓ reorders, Delete removes; projects keep going without one) |
@@ -73,19 +72,19 @@ These keys work inside Clarify:
 
 | Keys | What they do |
 |---|---|
-| `⌘↵` | Accept Claude's proposal |
-| `↑` `↓` | Move between proposed actions (the cursor starts on the first one) |
+| `Y` `S` `R` `Del` | Is it actionable? Yes / Someday / Reference / Trash |
+| `⌘↵` | Accept the decision |
+| `↑` `↓` | Move between the decision's actions (the cursor starts on the first one) |
 | `F2` or `Enter` | Edit the action text. `Tab` moves through the fields |
-| `Esc` | Field → row, then leave Clarify. Leaving stops Claude; proposals already made are kept for next time |
-| `⇧Esc` | Stop Claude but keep reviewing the proposals that are ready (also the "Stop" link while Claude is reading) |
-| `C` `P` `D` `S` `M` `G` `V` `⇧F` | Correct a field |
+| `Esc` | Field → row, then leave Clarify. Items you haven't decided stay in the Inbox |
+| `C` `P` `D` `S` `M` `G` `V` `⇧F` | Set a field |
 | `⇧P` | Make the item a project (more than one step): it's named after the item, its actions go into it, and the cursor lands on the first to name the next step. Also in File as (`V`) › Whole item → New project |
 | `N` / `⌥⌫` | Add / remove an action (`⌥⌫` only on the row, not while typing, where it deletes a word) |
 | `E` | Done now (two-minute rule) |
 | `⌘.` / `⌘,` | Skip to the next / previous item |
 | `Del` | Trash the item |
 
-Uploads accept PDF, DOCX, TXT/MD, images, .eml and .msg files. PDFs and images are sent to Claude as they are. For the other formats, the extracted text is sent.
+Uploads accept PDF, DOCX, TXT/MD, images, .eml and .msg files. The server extracts their text and shows it with the item while you clarify; nothing is sent anywhere else.
 
 ## Keyboard test in Firefox
 
@@ -93,7 +92,7 @@ Firefox is a target browser, so the full shortcut pass is scripted. It needs `br
 
 ```sh
 npm run demo            # terminal 1: app on demo data (data-demo/)
-npm run demo:seed       # terminal 2: synthetic lists + cached Clarify proposals
+npm run demo:seed       # terminal 2: synthetic lists
 npm run test:firefox    # drives your installed Firefox and prints PASS/FAIL per shortcut
 ```
 

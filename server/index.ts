@@ -5,7 +5,6 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { applyOps, db, FILES_DIR, getSetting, insertRow, loadState, now, patchRow, setSetting } from "./db.ts";
 import { extract, guessMime, looksLikeEmail } from "./extract.ts";
-import { cancelClarify, clarifyLang, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
 import { exportJson, exportZip } from "./export.ts";
 import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
 import { addFeed, eventsBetween, feedInfo, probe, removeFeed, syncAll, takeLinkNotes, updateFeed, validZone } from "./calendar.ts";
@@ -54,28 +53,13 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), clarifyLang: clarifyLang(), calendars: feedInfo(), dayHours: dayHours() } });
-});
-
-app.put("/api/settings/key", async (c) => {
-  const { key } = (await c.req.json().catch(() => ({}))) as { key?: string };
-  const result = await setApiKey(key ?? "");
-  return c.json({ ...result, hasKey: hasCredentials(), keyHint: keyHint() }, result.ok ? 200 : 400);
-});
-
-app.delete("/api/settings/key", (c) => {
-  clearApiKey();
-  return c.json({ ok: true, hasKey: hasCredentials(), keyHint: keyHint() });
+  return c.json({ state: loadState(), meta: { today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), calendars: feedInfo(), dayHours: dayHours() } });
 });
 
 app.post("/api/ops", async (c) => {
   const { ops } = (await c.req.json()) as { ops: Op[] };
   try {
     applyOps(ops);
-    for (const op of ops) {
-      // Editing a captured item invalidates Claude's cached proposal for it.
-      if (op.table === "stuff" && op.type !== "create") forgetProposal(op.id);
-    }
     return c.json({ ok: true });
   } catch (e) {
     return c.json({ ok: false, error: (e as Error).message }, 400);
@@ -167,30 +151,6 @@ app.delete("/api/files/:id", (c) => {
   return c.json({ ok: true });
 });
 
-app.post("/api/clarify", async (c) => {
-  const { fresh } = (await c.req.json().catch(() => ({}))) as { fresh?: boolean };
-  const job = startClarify(Boolean(fresh));
-  return c.json(jobStatus(job.id));
-});
-
-app.delete("/api/clarify/:id", (c) => {
-  const s = cancelClarify(c.req.param("id"));
-  return s ? c.json(s) : c.json({ error: "gone" }, 404);
-});
-
-app.get("/api/clarify/:id", (c) => {
-  const s = jobStatus(c.req.param("id"));
-  return s ? c.json(s) : c.json({ error: "gone" }, 404);
-});
-
-app.post("/api/rules/suggest", async (c) => {
-  try {
-    return c.json({ rules: await suggestRules() });
-  } catch (e) {
-    return c.json({ error: describeError(e) }, 502);
-  }
-});
-
 /**
  * Subscribed calendars (Outlook, iCloud… read-only ICS/webcal): their links stay here; the browser gets names, colours,
  * hosts and the appointments.
@@ -258,14 +218,6 @@ app.put("/api/settings/week", async (c) => {
   return c.json({ weekStart: start });
 });
 
-/** The language Claude clarifies in: English (the default) or Swedish. */
-app.put("/api/settings/language", async (c) => {
-  const { lang } = (await c.req.json().catch(() => ({}))) as { lang?: string };
-  if (lang !== "en" && lang !== "sv") return c.json({ error: "Choose English or Swedish" }, 400);
-  setSetting("clarifyLang", lang);
-  return c.json({ clarifyLang: lang });
-});
-
 /** Days a deleted item stays in the Trash before it is gone for good (the owner can change it in Settings). */
 const trashDays = () => Number(getSetting("trashDays", "7")) || 7;
 app.put("/api/settings/trash", async (c) => {
@@ -304,7 +256,6 @@ app.post("/api/review/complete", (c) => {
 
 app.patch("/api/stuff/:id/processed", (c) => {
   patchRow("stuff", c.req.param("id"), { status: "processed", processed_at: now() });
-  forgetProposal(c.req.param("id"));
   return c.json({ ok: true });
 });
 
@@ -334,6 +285,6 @@ if (authRequired() && !readAuth()) {
 }
 serve({ fetch: app.fetch, port, hostname }, () => {
   console.log(
-    `GTD on http://${hostname}:${port}  ·  login ${authRequired() ? "required" : "off (local mode)"}  ·  ${hasCredentials() ? "Claude key set" : "no Claude API key yet: add one in Settings"}`,
+    `GTD on http://${hostname}:${port}  ·  login ${authRequired() ? "required" : "off (local mode)"}`,
   );
 });
