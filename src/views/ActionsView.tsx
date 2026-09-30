@@ -373,7 +373,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     ...(mode === "done"
       ? []
       : [
-          { id: "list.archive", label: `Archive done actions to Done${doneCount ? ` (${doneCount})` : ""}`, group: "Actions", keys: ["shift+e"], enabled: doneCount > 0, run: archiveHere },
+          { id: "list.archive", label: `Archive done actions to Done${doneCount ? ` (${doneCount})` : ""}`, group: "Actions", enabled: doneCount > 0, run: archiveHere },
           { id: "list.showdone", label: showDone ? "Hide done actions" : "Show done actions", group: "View", run: () => setShowDone(!showDone) },
         ]),
   ];

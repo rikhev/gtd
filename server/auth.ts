@@ -271,14 +271,18 @@ export const guard: MiddlewareHandler = async (c, next) => {
       const host = c.req.header("x-forwarded-host") ?? c.req.header("host");
       if (origin && host && new URL(origin).host !== host) return c.json({ error: "Cross-site request refused" }, 403);
     }
-    if (!path.startsWith("/api/auth/") && !validSession(c)) return c.json({ error: "Sign in required" }, 401);
+    // Only asking whether you are signed in, and signing in, work without a session. Signing out needs one, or
+    // anyone could end every session from outside.
+    const open = path === "/api/auth/me" || path === "/api/auth/login";
+    if (!open && !validSession(c)) return c.json({ error: "Sign in required" }, 401);
   }
   await next();
   c.header("X-Content-Type-Options", "nosniff");
   c.header("X-Frame-Options", "DENY");
   c.header("Referrer-Policy", "no-referrer");
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  if (process.env.NODE_ENV === "production") {
+  // A route may set a stricter policy of its own (an uploaded file is sandboxed); keep it.
+  if (process.env.NODE_ENV === "production" && !c.res.headers.has("Content-Security-Policy")) {
     c.header(
       "Content-Security-Policy",
       "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",

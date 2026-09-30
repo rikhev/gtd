@@ -119,7 +119,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
       enabled: Boolean(focusId),
       run: () => toggleDone(nav.targets()),
     },
-    { id: "inbox.archive", label: `Archive done items to Done${doneIds.length ? ` (${doneIds.length})` : ""}`, group: "Inbox", keys: ["shift+e"], enabled: doneIds.length > 0, run: () => archiveDone(doneIds, "the Inbox") },
+    { id: "inbox.archive", label: `Archive done items to Done${doneIds.length ? ` (${doneIds.length})` : ""}`, group: "Inbox", enabled: doneIds.length > 0, run: () => archiveDone(doneIds, "the Inbox") },
     { id: "inbox.showdone", label: showDone ? "Hide done items" : "Show done items", group: "View", run: () => setShowDone(!showDone) },
     {
       id: "inbox.trash",

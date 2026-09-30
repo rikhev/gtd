@@ -17,6 +17,8 @@ interface Row {
   title: string;
   /** The list it was done on, and its project; for a project, its area. */
   from: string;
+  /** The same without its project, for when the rows are grouped by project. */
+  place: string;
   /** Its project (an action) or itself (a project), for grouping by project. */
   project: ID | null;
   at: string;
@@ -32,12 +34,15 @@ function rowsOf(s: State): Row[] {
     if (a.status !== "done" || !a.archived_at) continue;
     const list = LIST_NAMES[a.done_from ?? ""] ?? "Next Actions";
     const p = proj(a.project_id);
-    out.push({ key: `a:${a.id}`, kind: "action", id: a.id, title: a.title || "Untitled action", from: p ? `${list} · ${p.title || "Untitled project"}` : list, project: a.project_id, at: a.completed_at ?? a.archived_at });
+    // A waiting item names who it waited on after its list, as the Waiting For list does ("Waiting For · Anna Lind").
+    const who = a.done_from === "waiting" ? a.waiting_who?.trim() : "";
+    const place = who ? `${list} · ${who}` : list;
+    out.push({ key: `a:${a.id}`, kind: "action", id: a.id, title: a.title || "Untitled action", from: p ? `${place} · ${p.title || "Untitled project"}` : place, place, project: a.project_id, at: a.completed_at ?? a.archived_at });
   }
   for (const p of s.projects) {
     if (p.status !== "done" || !p.archived_at) continue;
     const area = s.areas.find((x) => x.id === p.area_id);
-    out.push({ key: `p:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", from: area ? `Projects · #${area.name}` : "Projects", project: p.id, at: p.completed_at ?? p.archived_at });
+    out.push({ key: `p:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", from: area ? `Projects · #${area.name}` : "Projects", place: "Projects", project: p.id, at: p.completed_at ?? p.archived_at });
   }
   // Newest first; on the same moment a project leads the actions closed along with it.
   return out.sort((a, b) => b.at.localeCompare(a.at) || (a.kind === b.kind ? 0 : a.kind === "project" ? -1 : 1));
@@ -149,7 +154,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
       render: (r) => <span className="kind-icon">{r.kind === "project" ? <Layers size={14} strokeWidth={1.75} aria-label="Project" /> : <Circle size={12} strokeWidth={1.75} aria-label="Action" />}</span>,
     },
     { key: "subject", label: "Item", width: "minmax(220px, 1fr)", render: (r) => <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title}</span> },
-    { key: "from", label: "Was in", width: "minmax(140px, 280px)", drop: 2, render: (r) => <span className="muted-text">{groupBy === "project" ? r.from.split(" · ")[0] : r.from}</span> },
+    { key: "from", label: "Was in", width: "minmax(140px, 360px)", drop: 2, render: (r) => <span className="muted-text">{groupBy === "project" ? r.place : r.from}</span> },
     {
       key: "at",
       label: "Done",

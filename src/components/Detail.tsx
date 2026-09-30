@@ -2,12 +2,12 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Rea
 import { X, Paperclip, Pin } from "lucide-react";
 import { mutate, newAction, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
-import { isEditable, keyLabel, runWhenReady, useCommands } from "../keys.ts";
+import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
-import { AreaName, ContextCode, Energy, KeyHints, Lamp, Marker } from "./bits.tsx";
+import { AreaName, ContextCode, Energy, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
@@ -64,11 +64,6 @@ function TextField({
           {label}
           {mark}
         </span>
-        {k && active && (
-          <kbd className="kbd field-key" aria-hidden="true">
-            {keyLabel(k.toLowerCase())}
-          </kbd>
-        )}
       </span>
       {multiline ? (
         <NotesArea value={v} onValue={setV} onBlur={commit} placeholder={placeholder} aria-label={label} ref={area} rows={rows} className="field-text" aria-keyshortcuts={k} />
@@ -87,16 +82,12 @@ function TextField({
   );
 }
 
-// Field keys sit on the fields themselves; the line keeps only what isn't a field.
-const DETAIL_HINTS: Record<string, { k: string; label: string }[]> = {
-  stuff: [
-    { k: "v", label: "File as" },
-    { k: "k", label: "Clarify" },
-    { k: "escape", label: "Close" },
-  ],
-  project: [{ k: "escape", label: "Close" }],
-  other: [{ k: "escape", label: "Close" }],
-};
+// The panes print no keys (owner's request: they are found in ⌘K and ⇧?, and each field announces its own). On a
+// touch screen an Inbox item's two ways forward stay, as buttons to tap.
+const STUFF_TOUCH: { k: string; label: string }[] = [
+  { k: "v", label: "File as" },
+  { k: "k", label: "Clarify" },
+];
 
 /** Whether the detail pane is the active region: its fields' letter keys only work then. */
 const DetailActive = createContext(false);
@@ -119,12 +110,6 @@ function PickField({ label, children, onOpen, k }: { label: string; children: Re
         <span className="field-label" id={`${id}-l`}>
           {label}
         </span>
-        {/* Each field shows its own key while the pane has focus (the key is also announced via aria-keyshortcuts). */}
-        {k && active && (
-          <kbd className="kbd field-key" aria-hidden="true">
-            {k}
-          </kbd>
-        )}
       </span>
       <button
         type="button"
@@ -169,16 +154,10 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
   useCommands(`detail-files:${owner.id}`, [{ id: "detail.attach", label: "Attach file", group: "Details", keys: ["mod+o"], inInput: true, run: () => input.current?.click() }], {
     priority: 30,
   });
-  const active = useContext(DetailActive);
   return (
     <section className="detail-files">
       <h3 className="detail-h">
         Files <span className="count">{files.length || ""}</span>
-        {active && (
-          <kbd className="kbd field-key detail-h-key" aria-hidden="true">
-            {keyLabel("mod+o")}
-          </kbd>
-        )}
       </h3>
 
       <ul>
@@ -188,7 +167,7 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
             <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="file-name">
               {f.name}
             </a>
-            <span className="file-size">{Math.max(1, Math.round(f.size / 1024))} KB</span>
+            <span className="file-size">{fileSize(f.size)}</span>
             <button
               type="button"
               className="icon-btn"
@@ -225,6 +204,33 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
   );
 }
 
+/**
+ * The pane keeps room for its scrollbar at all times (scrollbar-gutter in CSS), so fields never narrow when a long
+ * item starts to scroll. Where the scrollbar takes room of its own, the right padding gives that room back, so the
+ * fields sit as far from both edges as they would without it.
+ */
+const evenGutter = (el: HTMLDivElement | null) => {
+  if (!el) return;
+  const bar = el.offsetWidth - el.clientWidth;
+  el.style.paddingRight = bar > 0 ? `${Math.max(4, 16 - bar)}px` : "";
+};
+
+/**
+ * A file's size in decimal units, as the Finder gives them: kB up to 999, then MB, then GB; one decimal below 10
+ * ("1.2 MB"), whole numbers above ("34 MB"). A value that rounds to 1000 moves up a unit, so it never reads "1000 kB".
+ */
+function fileSize(bytes: number) {
+  const units = ["kB", "MB", "GB"];
+  let v = Math.max(bytes, 1) / 1000;
+  let u = 0;
+  while (u < units.length - 1 && Math.round(v) >= 1000) {
+    v /= 1000;
+    u++;
+  }
+  const shown = u > 0 && v < 10 ? v.toFixed(1).replace(/\.0$/, "") : String(Math.max(1, Math.round(v)));
+  return `${shown} ${units[u]}`;
+}
+
 function patch(table: TableName, id: string, data: Record<string, unknown>, label = "Saved") {
   mutate(label, [{ type: "patch", table, id, data }]);
 }
@@ -237,42 +243,76 @@ function ActionDetail({ a }: { a: Action }) {
   const proj = s.projects.find((p) => p.id === a.project_id);
   const rec = a.recurrence ? parseRecurrence(a.recurrence) : null;
   const done = a.status === "done";
-  const waiting = a.status === "waiting";
-  const projectField = (
-    <PickField label="Project" k="P" onOpen={() => ed.project([a.id])}>
-      {proj ? proj.title : none}
-    </PickField>
-  );
-  const contextField = (
-    <PickField label="Context" k="C" onOpen={() => ed.context([a.id])}>
-      <ContextCode ctx={ctx} />
-    </PickField>
-  );
-  const nextFields = (
-    <>
-      <PickField label="Due" k="D" onOpen={() => ed.date([a.id], "due")}>
-        {a.due ? <DueLong date={a.due} done={a.status === "done"} /> : none}
-      </PickField>
-      <PickField label="Start" k="S" onOpen={() => ed.date([a.id], "defer")}>
+  // What kind of item this is decides its fields: a done or trashed item keeps the kind it had.
+  const kind = (done ? a.done_from : a.status === "trashed" ? a.trashed_from : a.status) ?? "next";
+  const waiting = kind === "waiting";
+  // Each kind shows only the fields it needs (owner's request): a next action is planned (context, dates, time,
+  // energy, repeat), a waiting item is chased (who, follow up, since, due), a someday item is parked (context, when to
+  // look at it again). Done, nothing is planned any more, so start, repeat and bring back go. A field a kind doesn't
+  // need still shows while it holds something, so nothing set is hidden.
+  const NEEDS: Record<string, string[]> = {
+    next: ["context", "due", "start", "time", "energy", "repeat"],
+    waiting: ["who", "followup", "since", "due"],
+    someday: ["context", "back"],
+  };
+  const needs = new Set((NEEDS[kind] ?? NEEDS.next).filter((f) => !(done && ["start", "repeat", "back"].includes(f))));
+  const has: Record<string, unknown> = { context: a.context_id, due: a.due, start: a.defer, time: a.time_min, energy: a.energy, repeat: a.recurrence, back: a.bring_back, who: a.waiting_who, followup: a.followup, since: a.waiting_since };
+  const shown = (f: string) => needs.has(f) || Boolean(has[f]);
+  const fields: [string, ReactNode][] = [
+    [
+      "project",
+      <PickField key="project" label="Project" k="P" onOpen={() => ed.project([a.id])}>
+        {proj ? proj.title : none}
+      </PickField>,
+    ],
+    [
+      "context",
+      <PickField key="context" label="Context" k="C" onOpen={() => ed.context([a.id])}>
+        <ContextCode ctx={ctx} />
+      </PickField>,
+    ],
+    [
+      "due",
+      <PickField key="due" label="Due" k="D" onOpen={() => ed.date([a.id], "due")}>
+        {a.due ? <DueLong date={a.due} done={done} /> : none}
+      </PickField>,
+    ],
+    [
+      "start",
+      <PickField key="start" label="Start" k="S" onOpen={() => ed.date([a.id], "defer")}>
         {a.defer ? formatLong(a.defer) : none}
-      </PickField>
-      <PickField label="Time" k="T" onOpen={() => ed.time([a.id])}>
+      </PickField>,
+    ],
+    [
+      "time",
+      <PickField key="time" label="Time" k="T" onOpen={() => ed.time([a.id])}>
         {a.time_min ? formatTime(a.time_min) : none}
-      </PickField>
-      <PickField label="Energy" k="G" onOpen={() => ed.energy([a.id])}>
+      </PickField>,
+    ],
+    [
+      "energy",
+      <PickField key="energy" label="Energy" k="G" onOpen={() => ed.energy([a.id])}>
         <Energy level={a.energy} />
-      </PickField>
-      <PickField label="Repeat" k="R" onOpen={() => ed.recurrence([a.id])}>
+      </PickField>,
+    ],
+    [
+      "repeat",
+      <PickField key="repeat" label="Repeat" k="R" onOpen={() => ed.recurrence([a.id])}>
         {rec ? recurrenceLabel(rec) : none}
-      </PickField>
-      <PickField label="Bring back" k="B" onOpen={() => ed.date([a.id], "bring_back")}>
+      </PickField>,
+    ],
+    [
+      "back",
+      <PickField key="back" label="Bring back" k="B" onOpen={() => ed.date([a.id], "bring_back")}>
         {a.bring_back ? formatLong(a.bring_back) : none}
-      </PickField>
-    </>
-  );
-  const waitingFields = (
-    <>
+      </PickField>,
+    ],
+  ];
+  fields.push(
+    [
+      "who",
       <TextField
+        key="who"
         label="Waiting on"
         value={a.waiting_who ?? ""}
         onCommit={(v) => {
@@ -282,39 +322,50 @@ function ActionDetail({ a }: { a: Action }) {
           }
           patch("actions", a.id, { waiting_who: v.trim() });
         }}
-      />
-      <PickField label="Follow up" onOpen={() => ed.date([a.id], "followup")}>
+      />,
+    ],
+    [
+      "followup",
+      <PickField key="followup" label="Follow up" onOpen={() => ed.date([a.id], "followup")}>
         {a.followup ? <DueLong date={a.followup} done={a.status !== "waiting"} /> : none}
-      </PickField>
-      {/* When the waiting began: today by default, set back to the real day when it is filed later. */}
-      <PickField label="Since" k="I" onOpen={() => ed.date([a.id], "waiting_since")}>
+      </PickField>,
+    ],
+    [
+      // When the waiting began: today by default, set back to the real day when it is filed later.
+      "since",
+      <PickField key="since" label="Since" k="I" onOpen={() => ed.date([a.id], "waiting_since")}>
         {a.waiting_since ? formatLong(a.waiting_since) : none}
-      </PickField>
-    </>
+      </PickField>,
+    ],
   );
+  // One grid for every kind (owner's request): a field keeps its place whatever the item is. Row by row: what it
+  // belongs to and who or where; when it comes up for you (start, follow up, or bring back) beside when it is due;
+  // time and energy; how it recurs (or, waiting, since when). A row keeps an empty cell rather than letting a field
+  // slide across, so Due is always on the right. Fields this kind doesn't need but that hold a value follow.
+  const rows: [string, string | null][] = [
+    ["project", waiting ? "who" : "context"],
+    [waiting ? "followup" : kind === "someday" ? "back" : "start", "due"],
+    ["time", "energy"],
+    [waiting ? "since" : "repeat", null],
+  ];
+  const byKey = new Map(fields);
+  const visible = (f: string | null): f is string => f !== null && (f === "project" || shown(f));
+  const placed = new Set(rows.flat());
+  const gap = (key: string) => <span key={key} className="field-gap" aria-hidden="true" />;
+  const layout: ReactNode[] = [];
+  rows.forEach(([l, r], i) => {
+    if (!visible(l) && !visible(r)) return;
+    layout.push(visible(l) ? byKey.get(l) : gap(`gl${i}`), r && visible(r) ? byKey.get(r) : gap(`gr${i}`));
+  });
+  for (const [f, el] of fields) if (!placed.has(f) && visible(f)) layout.push(el);
   return (
     <>
       {/* Important or done is the one thing the fields don't say, so its mark rides after the label. */}
       <TextField label="Subject" mark={a.flagged || done ? <Marker flagged={Boolean(a.flagged)} done={done} /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
-      {/* Fields in the order the item's kind asks for them: a waiting item leads with who it waits on, when to
-          follow up and since when, right after its project; a next action's own fields follow. */}
+      {/* The shared grid (see rows above): every kind's fields in the same places. */}
       <div className="field-grid">
-        {projectField}
-        {waiting ? (
-          waitingFields
-        ) : (
-          <>
-            {contextField}
-            {nextFields}
-          </>
-        )}
+        {layout}
       </div>
-      {waiting && (
-        <div className="field-grid">
-          {contextField}
-          {nextFields}
-        </div>
-      )}
       <TextField label="Notes" value={a.notes} multiline rows={4} onCommit={(v) => patch("actions", a.id, { notes: v })} placeholder="Details, links, phone numbers…" />
       <Files owner={{ kind: "action", id: a.id }} />
       <p className="detail-meta">
@@ -371,26 +422,42 @@ function ProjectDetail({ p }: { p: Project }) {
         <PickField label="Status" k="V" onOpen={() => ed.move([p.id])}>
           {{ active: "Active", someday: "Someday", done: "Done", trashed: "Trash" }[p.status]}
         </PickField>
-        <PickField label="Start" k="S" onOpen={() => ed.date([p.id], "start")}>
-          {p.start ? formatLong(p.start) : none}
-        </PickField>
-        <PickField label="Due" k="D" onOpen={() => ed.date([p.id], "due")}>
-          {p.due ? <DueLong date={p.due} done={p.status === "done"} /> : none}
-        </PickField>
-        <PickField label="Bring back" k="B" onOpen={() => ed.date([p.id], "bring_back")}>
-          {p.bring_back ? formatLong(p.bring_back) : none}
-        </PickField>
+        {/* The same grid as an action's: when it comes up for you (start, or for a someday project when to look at it
+            again) on the left, Due always on the right. Each status shows the dates it needs; any date already set
+            still shows, after them. */}
+        {(() => {
+          const someday = p.status === "someday";
+          const startF = (
+            <PickField key="start" label="Start" k="S" onOpen={() => ed.date([p.id], "start")}>
+              {p.start ? formatLong(p.start) : none}
+            </PickField>
+          );
+          const backF = (
+            <PickField key="back" label="Bring back" k="B" onOpen={() => ed.date([p.id], "bring_back")}>
+              {p.bring_back ? formatLong(p.bring_back) : none}
+            </PickField>
+          );
+          const dueF = (
+            <PickField key="due" label="Due" k="D" onOpen={() => ed.date([p.id], "due")}>
+              {p.due ? <DueLong date={p.due} done={p.status === "done"} /> : none}
+            </PickField>
+          );
+          const left = someday ? backF : p.status === "active" || p.start ? startF : null;
+          const right = !someday || p.due ? dueF : null;
+          const extra = someday ? (p.start ? startF : null) : p.bring_back ? backF : null;
+          return (
+            <>
+              {(left || right) && (left ?? <span key="gl" className="field-gap" aria-hidden="true" />)}
+              {(left || right) && (right ?? <span key="gr" className="field-gap" aria-hidden="true" />)}
+              {extra}
+            </>
+          );
+        })()}
       </div>
       <section className="detail-actions">
         <h3 className="detail-h">
           Actions <span className="count">{open.length}</span>
           {doneCount > 0 && <span className="detail-h-note">{doneCount} done</span>}
-          {active && (
-            <span className="detail-h-key" aria-hidden="true">
-              <kbd className="kbd field-key">T</kbd>
-              <kbd className="kbd field-key">W</kbd>
-            </span>
-          )}
         </h3>
         {p.status === "active" && !open.length && (notStarted(p) || startsToday(p)) && (
           <p className="badge-line is-quiet">{notStarted(p) ? `Starts ${formatLong(p.start!)}. No next action needed before then.` : "Starts today. Add its first next action below."}</p>
@@ -414,7 +481,7 @@ function ProjectDetail({ p }: { p: Project }) {
                 >
                   <Marker flagged={!done && Boolean(a.flagged)} done={done} />
                   <span className="mini-title">{a.title || "Untitled action"}</span>
-                  <span className="mini-meta">{a.status === "waiting" ? `Waiting · ${a.waiting_who ?? ""}` : a.status === "someday" ? "Someday" : ""}</span>
+                  <span className="mini-meta">{a.status === "waiting" ? `Waiting · ${a.waiting_who ?? ""}` : done && a.done_from === "waiting" && a.waiting_who ? `Waited · ${a.waiting_who}` : a.status === "someday" ? "Someday" : ""}</span>
                   <span className="mini-date">{when ? formatDate(when.slice(0, 10)) : ""}</span>
                 </button>
               </li>
@@ -498,6 +565,7 @@ function RefDetail({ r }: { r: Ref }) {
 }
 
 export function Detail({ target, active }: { target: Target | null; active: boolean }) {
+  const touch = useIsTouch();
   const ui = useUI();
   const s = useStore((x) => x);
   const root = useRef<HTMLElement>(null);
@@ -631,10 +699,9 @@ export function Detail({ target, active }: { target: Target | null; active: bool
         </span>
       </div>
       <DetailActive.Provider value={active}>
-        <div className="detail-body">
+        <div className="detail-body" ref={evenGutter}>
           {body ?? <p className="muted-text">{target ? "This item no longer exists." : "Nothing here has details. Move the cursor onto an item, action or project."}</p>}
-          {/* The pane is a letter-key mode, so while it has focus it names its few keys (owner's decision). */}
-          {active && body && target && <KeyHints hints={DETAIL_HINTS[target.kind] ?? DETAIL_HINTS.other} />}
+          {touch && body && target?.kind === "stuff" && <KeyHints hints={STUFF_TOUCH} />}
         </div>
       </DetailActive.Provider>
     </aside>

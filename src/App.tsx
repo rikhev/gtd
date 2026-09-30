@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
+import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
@@ -279,6 +279,7 @@ export default function App() {
   };
 
   const inboxCount = s.stuff.filter((x) => x.status === "inbox").length;
+  const archivable = s.actions.filter((a) => a.status === "done" && !a.archived_at).length + s.projects.filter((p) => p.status === "done" && !p.archived_at).length;
 
   const theme = useTheme();
   const themeTo = (pref: "system" | "light" | "dark") => {
@@ -305,6 +306,9 @@ export default function App() {
     // K clarifies (you decide, one item at a time); ⌥K clarifies with Claude's proposals.
     { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
     { id: "g.clarifyclaude", label: `Clarify with Claude${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["alt+k"], run: () => ui.startClarify(undefined, true) },
+    // ⇧E archives what is done everywhere, not just on the list in view (owner's request); each list's View menu still
+    // archives that list alone.
+    { id: "g.archive", label: `Archive all done items to Done${archivable ? ` (${archivable})` : ""}`, group: "Actions", keys: ["shift+e"], run: archiveAllDone },
     { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["shift+r"], run: ui.startReview },
     // A project from anywhere: its outcome, its area, its first next action (on Projects, N adds one in place).
     { id: "g.newproject", label: "New project", group: "Projects", keys: ["alt+n"], run: () => projectEditors(ui).create() },

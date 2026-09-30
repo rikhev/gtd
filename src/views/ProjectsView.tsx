@@ -261,11 +261,11 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   const [sort, setSort] = useSort("projects");
   const sorters: Sorters<Project> = useMemo(
     () => ({
-      // Status, one group per lamp, what needs you first: stalled, waiting, on track, then everything with the clock
+      // Status, one group per lamp, what needs you first: stalled, on track, waiting, then everything with the clock
       // (starting today or later, soonest first), someday, completed (owner's decision: the clocks sort together).
       mark: (p) => {
         const h = projectHealth(s, p);
-        const rank = { stalled: 0, waiting: 1, ok: 2, scheduled: 3, someday: 4, done: 5 }[h];
+        const rank = { stalled: 0, ok: 1, waiting: 2, scheduled: 3, someday: 4, done: 5 }[h];
         return `${rank}|${h === "scheduled" ? p.start ?? "" : ""}`;
       },
       subject: (p) => p.title,
@@ -366,7 +366,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.jump", label: "Jump to its next action", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
     { id: "proj.rename", label: "Rename", group: "Projects", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "proj.done", label: "Complete project, or not done", group: "Projects", keys: ["e"], enabled: has, run: () => toggleDone(nav.targets()) },
-    { id: "proj.archive", label: `Archive completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", keys: ["shift+e"], enabled: doneHere.length > 0, run: () => ed.archive(doneHere) },
+    { id: "proj.archive", label: `Archive completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", enabled: doneHere.length > 0, run: () => ed.archive(doneHere) },
     { id: "proj.showdone", label: showDone ? "Hide completed projects" : "Show completed projects", group: "View", run: () => setShowDone(!showDone) },
     { id: "proj.area", label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
     { id: "proj.due", label: "Due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },

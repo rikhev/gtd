@@ -134,20 +134,32 @@ app.post("/api/capture", async (c) => {
   return c.json(row);
 });
 
+/** A stored file's id is a UUID: nothing with a dot or a slash can name a path outside the files folder. */
+const fileId = (id: string) => (/^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null);
+
+/**
+ * Only what the browser shows safely opens in a tab: raster images, PDFs and plain text. Anything else (HTML, SVG,
+ * scripts, office files) downloads, so an uploaded page can never run inside the app with your session. The file is
+ * also sandboxed (no scripts, its own origin), except a PDF, whose viewer won't run sandboxed.
+ */
+const INLINE = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain"]);
+
 app.get("/api/files/:id", (c) => {
-  const id = c.req.param("id");
-  const row = db.prepare("SELECT * FROM files WHERE id = ?").get(id) as FileRow | undefined;
+  const id = fileId(c.req.param("id"));
+  const row = id ? (db.prepare("SELECT * FROM files WHERE id = ?").get(id) as FileRow | undefined) : undefined;
   const path = `${FILES_DIR}/${id}`;
-  if (!row || !existsSync(path)) return c.text("File not found", 404);
-  const inline = row.mime.startsWith("image/") || row.mime === "application/pdf" || row.mime.startsWith("text/");
+  if (!id || !row || !existsSync(path)) return c.text("File not found", 404);
+  const inline = INLINE.has(row.mime);
   return c.body(readFileSync(path), 200, {
-    "Content-Type": row.mime,
-    "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${encodeURIComponent(row.name)}"`,
+    "Content-Type": inline ? row.mime : "application/octet-stream",
+    "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(row.name)}`,
+    ...(row.mime === "application/pdf" ? {} : { "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'" }),
   });
 });
 
 app.delete("/api/files/:id", (c) => {
-  const id = c.req.param("id");
+  const id = fileId(c.req.param("id"));
+  if (!id) return c.json({ error: "No such file" }, 404);
   db.prepare("DELETE FROM files WHERE id = ?").run(id);
   const path = `${FILES_DIR}/${id}`;
   if (existsSync(path)) unlinkSync(path);

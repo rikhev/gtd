@@ -54,7 +54,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | Browser Back / Forward | Move between the views you visited. Every view has its own address (`#inbox`, `#next`, `#waiting`, `#projects`, `#someday`, `#reference`, `#done`, `#review`, `#settings`), so a reload or bookmark opens the same list |
 | Click the marker area | Mark a row as important, or unmark it. The keyboard way is `Ins` |
 | Click the box | Mark an action done, as in classic Outlook: it stays on its list, greyed and struck through, at the bottom of its group. Click again (or `E`) to take it back |
-| `⇧E` | Archive this list's done items (the Inbox's, or completed projects on Projects). The View menu (`⌥V`) also has Show/Hide done actions |
+| `⇧E` | Archive every done item to Done, on every list at once: done actions (the Inbox's too) and completed projects. A list's View menu (`⌥V`) archives that list alone, and has Show/Hide done actions |
 | `I` | On Waiting For (list or details pane): when the waiting began. New items start today; set the real day when you file one later ("20 sep" means the last 20 September; a future date is refused) |
 | `⇧P` | Turn a next action (or a someday one) into a project: its title becomes the outcome, and its notes, files, dates and area go with it. You're asked for the project's first next action straight away (Esc to add it later). Also in the Move picker (`V`) and ⌘K; `⌘Z` undoes it |
 | Column order | Drag a column heading sideways, or ⌘K › Arrange columns… (then Reset column order to undo). Remembered per list |

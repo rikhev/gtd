@@ -286,7 +286,7 @@ export function KeyHints({ hints }: { hints: KeyHint[] }) {
 }
 
 /** A touch-first device (coarse pointer), kept current if the device changes mode. */
-function useIsTouch() {
+export function useIsTouch() {
   const q = "(pointer: coarse)";
   const [on, setOn] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
   useEffect(() => {

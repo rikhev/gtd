@@ -1527,6 +1527,8 @@ body.is-col-resizing * {
 .detail-body {
   flex: 1;
   overflow: auto;
+  /* Room for the scrollbar is kept whether or not it shows, so fields don't narrow when it appears. */
+  scrollbar-gutter: stable;
   padding: 14px 16px 40px;
   display: flex;
   flex-direction: column;
@@ -2003,7 +2005,7 @@ textarea.field-text {
 }
 
 .help {
-  width: min(1120px, 100%);
+  width: min(1200px, 100%);
   max-height: 84vh;
   overflow: auto;
   background: var(--sheet);
@@ -2045,7 +2047,7 @@ textarea.field-text {
 }
 .help-group {
   break-inside: avoid;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 .help h4 {
   font-family: var(--font-label);
@@ -2055,9 +2057,11 @@ textarea.field-text {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--rule);
+  /* The heading starts where its descriptions do; the keys hang in the gutter before it. */
+  padding-left: 96px;
 }
 @media (max-width: 900px) {
   .help-body {
@@ -2071,31 +2075,39 @@ textarea.field-text {
   }
 }
 /* Each group's keys form one column as wide as its widest key, so the words get the rest and seldom wrap. */
+/* One key column per sheet, its caps set flush right against the words: every description in a column starts at the
+   same edge, whatever its keys. A second key for the same command sits beside the first, or under it if it can't fit. */
 .help dl {
   margin: 0;
   display: grid;
-  grid-template-columns: minmax(44px, max-content) 1fr;
-  gap: 0 14px;
+  grid-template-columns: 84px 1fr;
+  gap: 5px 12px;
+  align-items: start;
 }
 .help dl div {
   display: contents;
 }
-.help dt,
-.help dd {
-  min-height: 22px;
-  padding: 2px 0;
-}
 .help dt {
   display: flex;
-  align-items: baseline;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 3px;
   margin: 0;
 }
 .help dd {
   margin: 0;
+  padding-top: 1px;
   color: var(--ink-2);
-  line-height: 1.35;
+  line-height: 18px;
+}
+.help .kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  min-width: 22px;
+  padding: 0 5px;
+  line-height: 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -3120,19 +3132,6 @@ textarea.field-text {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-}
-/* The Actions heading carries its keys like a field does: T adds a next action, W a waiting for. */
-.detail-h-key {
-  margin-left: auto;
-  display: inline-flex;
-  gap: 4px;
-}
-.field-key {
-  font-size: 11px;
-  line-height: 13px;
-  min-width: 16px;
-  padding: 0 4px;
-  color: var(--ink-3);
 }
 
 /* On a 1024-ish screen the detail pane gives up 40px, so the list beside it keeps its project column. */
@@ -4187,9 +4186,7 @@ body.is-cal-dragging {
     inset: -14px -6px;
   }
   /* Keys mean nothing without a keyboard: the caps hide, the hint lines become buttons to tap. */
-  .rail-key,
-  .field-key,
-  .detail-h-key {
+  .rail-key {
     display: none;
   }
   .key-hints {

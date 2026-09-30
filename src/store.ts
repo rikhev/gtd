@@ -419,6 +419,28 @@ export function archiveDone(ids: ID[], where = "") {
   );
 }
 
+/** Everything done but still on its list, everywhere: done actions (Inbox ones included) and completed projects. */
+function doneEverywhere() {
+  const s = getState();
+  return { actions: s.actions.filter((a) => a.status === "done" && !a.archived_at), projects: s.projects.filter((p) => p.status === "done" && !p.archived_at) };
+}
+
+/** ⇧E: every done item on every list goes to Done in one step (owner's request), one ⌘Z to undo. */
+export function archiveAllDone() {
+  const { actions, projects } = doneEverywhere();
+  const n = actions.length + projects.length;
+  if (!n) return notify("Nothing done to archive");
+  const at = stamp();
+  mutate(`${plural(n, "done item")} archived to Done`, [
+    ...actions.flatMap((a): Op[] => [
+      { type: "patch", table: "actions", id: a.id, data: { archived_at: at } },
+      // Ticked-off Inbox stuff leaves the Inbox with its action.
+      ...(a.done_from === "inbox" && find("stuff", a.id)?.status === "done" ? [{ type: "patch" as const, table: "stuff" as const, id: a.id, data: { status: "processed" } }] : []),
+    ]),
+    ...projects.map((p): Op => ({ type: "patch", table: "projects", id: p.id, data: { archived_at: at } })),
+  ]);
+}
+
 export function patchMany(table: TableName, ids: ID[], data: Record<string, unknown>, label: string) {
   mutate(
     label,
