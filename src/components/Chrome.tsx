@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from
 import { Search, Check } from "lucide-react";
 import { capture, daysSinceReview, notify, useMeta, useNotice, useTables, isStalled, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { allCommandsForPalette, activeCommands, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
+import { allCommandsForPalette, activeCommandsByLayer, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
 import { Kbd, Tag } from "./bits.tsx";
 import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
@@ -11,7 +11,7 @@ import { daysBetween, today } from "../../shared/dates.ts";
  * Control+1–8 on every system follow the rail from the top: the Inbox, the calendar, then the lists in rail order.
  * On the Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs.
  * Elsewhere the page takes Ctrl+1–9 over the browser's tab switching (Chrome and Firefox allow it).
- * Trash, at the foot, is Control+9. The Weekly Review has no number (W starts it); Settings is ⌘⇧,
+ * Trash, at the foot, is Control+9. The Weekly Review has no number (⇧R starts it); Settings is ⌘⇧,
  * (Ctrl+Shift+, elsewhere).
  */
 // Control on every system: on the Mac that is "ctrl" (⌘ is "mod"), elsewhere Ctrl is "mod".
@@ -75,7 +75,7 @@ export function Rail({ active }: { active: boolean }) {
 
   const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
     if (id === "inbox") return sig.inbox ? { text: String(sig.inbox) } : null;
-    if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : sig.flagged ? { text: `${sig.flagged} today` } : null;
+    if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : sig.flagged ? { text: `${sig.flagged} important` } : null;
     if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
     if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
@@ -117,8 +117,8 @@ export function Rail({ active }: { active: boolean }) {
   }, [active]);
 
   // Letter jump: the first letter of a stop's name moves the cursor to the next stop starting with it.
-  // W and K stay the app-wide "start the review" and "clarify" keys, as the check lines show.
-  const letters = [...new Set(entries.map((e) => e.name[0].toLowerCase()))].filter((ch) => ch !== "w" && ch !== "k");
+  // K stays the app-wide "clarify" key, as the check line shows.
+  const letters = [...new Set(entries.map((e) => e.name[0].toLowerCase()))].filter((ch) => ch !== "k");
   const jump = (ch: string) =>
     setCursor((c) => {
       for (let n = 1; n <= entries.length; n++) {
@@ -160,7 +160,7 @@ export function Rail({ active }: { active: boolean }) {
       tabIndex: cursor === i ? 0 : -1,
       "aria-current": current ? ("page" as const) : undefined,
       "aria-label": e.label,
-      "aria-keyshortcuts": keyAria(e.start ? "w" : e.key === "h-oldest" ? "k" : e.view === "settings" ? "mod+shift+," : (keyOf(e.view) ?? "")) || undefined,
+      "aria-keyshortcuts": keyAria(e.start ? "shift+r" : e.key === "h-oldest" ? "k" : e.view === "settings" ? "mod+shift+," : (keyOf(e.view) ?? "")) || undefined,
       className: `${extra} ${current ? "is-current" : ""} ${active && cursor === i ? "is-cursor" : ""}`,
       onFocus: onFocusStop(i),
       onClick: () => open(e),
@@ -206,7 +206,7 @@ export function Rail({ active }: { active: boolean }) {
                     <span className="rail-name">Weekly Review</span>
                     <span className="rail-meta">
                       <span className={`num ${reviewDue ? "is-due" : ""}`}>{reviewAge === null ? (reviewDue ? "due" : "not yet") : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
-                      <RailKey k="w" />
+                      <RailKey k="shift+r" />
                     </span>
                   </>
                 )}
@@ -628,8 +628,19 @@ export function Palette({ commands, close }: { commands: Command[]; close: () =>
   );
 }
 
+// The app-wide keys, regrouped by what they are for (their palette groups are finer than a cheat sheet needs).
+const EVERYWHERE: { title: string; groups: string[]; order?: string[] }[] = [
+  { title: "Add", groups: ["Capture", "Projects", "Actions"], order: ["g.capture", "g.paste", "g.upload", "g.newaction", "g.newwaiting", "g.newproject"] },
+  { title: "Go to", groups: ["Go to", "Clarify", "Review"] },
+  { title: "Panes", groups: ["Move", "View"] },
+  { title: "Help and undo", groups: ["Help", "Edit"] },
+];
+// A screen's own list movement is the same on every list: it goes after what the screen itself does.
+const LAST = ["Move", "Select"];
+
 export function HelpOverlay({ close }: { close: () => void }) {
-  const [snapshot] = useState(() => activeCommands().filter((c) => (c.keys?.length || c.displayKeys?.length) && !c.hidden));
+  const ui = useUI();
+  const [snapshot] = useState(() => activeCommandsByLayer().filter(({ command: c }) => (c.keys?.length || c.displayKeys?.length) && !c.hidden));
   // Take focus so a screen reader reads the dialog, and hand it back on close.
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -638,49 +649,79 @@ export function HelpOverlay({ close }: { close: () => void }) {
     return () => back?.focus?.({ preventScroll: true });
   }, []);
   useCommands("help", [{ id: "help.close", label: "Close", group: "Help", keys: ["escape", "?"], inInput: true, run: close }], { priority: 300, exclusive: true });
-  const groups = useMemo(() => {
-    const m = new Map<string, Command[]>();
+  const { here, everywhere, where } = useMemo(() => {
     // A key does one thing at a time: list only the command it would run now (the first claimant).
     const claimed = new Set<string>();
-    for (const c of snapshot) {
+    const page = new Map<string, Command[]>();
+    const global: Command[] = [];
+    for (const { layer, command: c } of snapshot) {
       const keys = c.keys?.length ? c.keys : (c.displayKeys ?? []);
       if (keys.length && keys.every((k) => claimed.has(k))) continue;
       keys.forEach((k) => claimed.add(k));
-      m.set(c.group, [...(m.get(c.group) ?? []), c]);
+      if (layer === "global") global.push(c);
+      else page.set(c.group, [...(page.get(c.group) ?? []), c]);
     }
-    return [...m.entries()];
+    const rank = (g: string) => LAST.indexOf(g);
+    const here = [...page.entries()].sort(([a], [b]) => rank(a) - rank(b));
+    const used = new Set<string>();
+    const everywhere = EVERYWHERE.map(({ title, groups, order }) => {
+      const cmds = global.filter((c) => groups.includes(c.group));
+      cmds.forEach((c) => used.add(c.id));
+      if (order) cmds.sort((x, y) => (order.indexOf(x.id) + 1 || 99) - (order.indexOf(y.id) + 1 || 99));
+      return [title, cmds] as [string, Command[]];
+    });
+    const rest = global.filter((c) => !used.has(c.id));
+    if (rest.length) everywhere.push(["More", rest]);
+    const inClarify = snapshot.some((x) => x.layer === "clarify");
+    return { here, everywhere: everywhere.filter(([, c]) => c.length), where: inClarify ? "Clarify" : (VIEW_TITLES[ui.view] ?? "This screen") };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot]);
+  // Under "Go to" the heading already says it: "Inbox", not "Go to Inbox"; "Weekly Review", not "Start the Weekly Review".
+  const label = (c: Command, section: string) => (section === "Go to" ? c.label.replace(/^(Go to|Start the) /, "").replace(/ \(.*\)$/, "") : c.label);
+  const list = (groups: [string, Command[]][]) =>
+    groups.map(([g, cmds]) => (
+      <section key={g} className="help-group" aria-label={g}>
+        <h4>{g}</h4>
+        <dl>
+          {cmds.map((c) => (
+            <div key={c.id}>
+              <dt>
+                {[...new Set([...(c.keys ?? []), ...(c.displayKeys ?? [])].map(keyLabel))].slice(0, 2).map((l) => (
+                  <kbd key={l} className="kbd">
+                    {l}
+                  </kbd>
+                ))}
+              </dt>
+              <dd>{label(c, g)}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+    ));
   return (
     <div className="overlay" onMouseDown={close}>
-      <div ref={box} className="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts on this screen" tabIndex={-1} onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={box} className="help" role="dialog" aria-modal="true" aria-labelledby="help-title" tabIndex={-1} onMouseDown={(e) => e.stopPropagation()}>
         <div className="help-head">
-          <h2 className="help-title">
-            <Tag size="md">Keys on this screen</Tag>
+          <h2 className="help-title" id="help-title">
+            <Tag size="md">Keys</Tag>
           </h2>
           <span className="muted-text small">
             <Kbd k="mod+k" /> finds every command
           </span>
         </div>
-        <div className="help-cols">
-          {groups.map(([g, cmds]) => (
-            <section key={g}>
-              <h3>{g}</h3>
-              <dl>
-                {cmds.map((c) => (
-                  <div key={c.id}>
-                    <dt>
-                      {[...new Set([...(c.keys ?? []), ...(c.displayKeys ?? [])].map(keyLabel))].slice(0, 2).map((l) => (
-                        <kbd key={l} className="kbd">
-                          {l}
-                        </kbd>
-                      ))}
-                    </dt>
-                    <dd>{c.label}</dd>
-                  </div>
-                ))}
-              </dl>
+        <div className="help-body">
+          {here.length > 0 && (
+            <section className="help-scope" aria-labelledby="help-here">
+              <h3 id="help-here">
+                On {where}
+              </h3>
+              <div className="help-cols">{list(here)}</div>
             </section>
-          ))}
+          )}
+          <section className="help-scope" aria-labelledby="help-everywhere">
+            <h3 id="help-everywhere">Everywhere</h3>
+            <div className="help-cols">{list(everywhere)}</div>
+          </section>
         </div>
       </div>
     </div>

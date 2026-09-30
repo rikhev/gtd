@@ -9,8 +9,8 @@ export function Tag({ children, size = "sm" }: { children: ReactNode; size?: "sm
 }
 
 /**
- * The row marker: an empty ring, a tick when done. Flagged for today, it becomes a red flag on a pole,
- * the mark classic Outlook uses for a task flagged for follow-up.
+ * The row marker: an empty ring, a tick when done. Marked important, it becomes a red exclamation mark, the mark
+ * classic Outlook uses for a task of high importance (owner's decision: importance, not "flagged for today").
  */
 export function Marker({ flagged, done, chase, quiet }: { flagged: boolean; done?: boolean; chase?: boolean; quiet?: boolean }) {
   const today = flagged && !done;
@@ -20,14 +20,12 @@ export function Marker({ flagged, done, chase, quiet }: { flagged: boolean; done
     <span
       className={`marker ${today ? "is-flagged" : ""} ${done ? "is-done" : ""} ${chase ? "is-chase" : ""}`}
       role={today ? "img" : undefined}
-      aria-label={today ? "Flagged for today" : undefined}
-      title={today ? "Flagged for today" : undefined}
+      aria-label={today ? "Important" : undefined}
+      title={today ? "Important" : undefined}
     >
       {today ? (
         <svg className="leaf" viewBox="0 0 22 22" width="22" height="22" aria-hidden>
-          {/* A flag on a pole, as classic Outlook flags a task for follow-up. */}
-          <path className="flag-pole" d="M6.5 4v14.5" />
-          <path className="flag-cloth" d="M7 4.6h9.2l-2.4 3.4 2.4 3.4H7z" />
+          <ImportantGlyph />
         </svg>
       ) : (
         <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden>
@@ -70,9 +68,9 @@ export function DoneBox({ done, title, onToggle }: { done: boolean; title: strin
 }
 
 /**
- * The flag column, as in classic Outlook: the row's marker is a button. One click flags the action for today
- * (the red flag drops in); clicking the flag takes it off. Unflagged, hovering shows a faint outline flag so the
- * target is findable. Mouse-only like the Complete box; the keyboard has Ins.
+ * The importance column, as in classic Outlook: the row's marker is a button. One click marks the action important
+ * (the red exclamation mark drops in); clicking it takes it off. Otherwise hovering shows a faint outline of the mark
+ * so the target is findable. Mouse-only like the Complete box; the keyboard has Ins.
  */
 export function FlagButton({ flagged, chase, title, onToggle }: { flagged: boolean; chase?: boolean; title: string; onToggle: () => void }) {
   const stop = (e: SyntheticEvent) => e.stopPropagation();
@@ -80,8 +78,8 @@ export function FlagButton({ flagged, chase, title, onToggle }: { flagged: boole
     <button
       type="button"
       aria-pressed={flagged}
-      aria-label={flagged ? `Remove the today flag from “${title}”` : `Flag “${title}” for today`}
-      title={flagged ? "Flagged for today: click to remove" : "Flag for today"}
+      aria-label={flagged ? `Mark “${title}” as not important` : `Mark “${title}” as important`}
+      title={flagged ? "Important: click to unmark" : "Mark as important"}
       tabIndex={-1}
       className={`flag-btn ${flagged ? "is-on" : ""}`}
       onMouseDown={stop}
@@ -94,11 +92,23 @@ export function FlagButton({ flagged, chase, title, onToggle }: { flagged: boole
       <Marker quiet flagged={flagged} chase={chase} />
       {!flagged && (
         <svg className="flag-ghost" viewBox="0 0 22 22" width="22" height="22" aria-hidden>
-          <path d="M6.5 4v14.5" />
-          <path d="M7 4.6h9.2l-2.4 3.4 2.4 3.4H7z" />
+          <ImportantGlyph />
         </svg>
       )}
     </button>
+  );
+}
+
+/**
+ * High importance, drawn (not a typed "!"): a tapering bar over a round dot, in a 22px box. The same shape fills the
+ * marker in alert red and, outlined, is the hover hint on an unmarked row.
+ */
+export function ImportantGlyph() {
+  return (
+    <>
+      <path className="imp-bar" d="M9.6 4.4h2.8l-0.55 9.2h-1.7z" />
+      <circle className="imp-dot" cx="11" cy="16.9" r="1.55" />
+    </>
   );
 }
 
@@ -114,8 +124,44 @@ const HEALTH_LABEL = {
 /** Traffic-light lamp for a project's health. A scheduled project's lamp names its start day. */
 export function Lamp({ health, start }: { health: keyof typeof HEALTH_LABEL; start?: string | null }) {
   const label = health === "scheduled" && start ? (start === today() ? "Starts today: give it a next action" : `Not started yet: starts ${formatLong(start)}`) : HEALTH_LABEL[health];
-  return <span className={`lamp ${health}`} role="img" aria-label={label} title={label} />;
+  return (
+    <svg className={`lamp ${health}`} viewBox="0 0 12 12" role="img" aria-label={label}>
+      <title>{label}</title>
+      {LAMP_SHAPE[health]}
+    </svg>
+  );
 }
+
+/*
+ * Drawn on a 12px grid (a 10px light with a pixel of air), so a light stays round and crisp on a 1× screen: health is
+ * told by shape as well as colour, so it reads without colour vision. On track is a solid light; waiting a dot held in
+ * a ring; stalled a no-entry sign (a light with a bar cut out of it, its edges on whole pixels); not started a ring with
+ * clock hands; someday a half-lit ring; completed a dimmed light.
+ */
+const RING = <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" />;
+const LAMP_SHAPE: Record<keyof typeof HEALTH_LABEL, ReactNode> = {
+  ok: <circle cx="6" cy="6" r="5" />,
+  done: <circle cx="6" cy="6" r="5" />,
+  waiting: (
+    <>
+      {RING}
+      <circle cx="6" cy="6" r="2" />
+    </>
+  ),
+  stalled: <path fillRule="evenodd" d="M1 6a5 5 0 1 0 10 0a5 5 0 1 0-10 0ZM3 5h6v2H3Z" />,
+  scheduled: (
+    <>
+      {RING}
+      <path d="M6 3.6V6.2H8.3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  someday: (
+    <>
+      {RING}
+      <path d="M6 1.75a4.25 4.25 0 0 0 0 8.5Z" />
+    </>
+  ),
+};
 
 /**
  * Areas and contexts read alike (owner's decision): the mark in a small tile of the item's colour, then the name in plain

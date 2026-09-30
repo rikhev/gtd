@@ -25,14 +25,14 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 |---|---|
 | `⌃1`–`8` | Inbox · Calendar · Next Actions · Waiting For · Projects · Someday · Reference · Done (rail order). Control on every system, also on the Mac (⌘1–8 are the browser's tabs) |
 | `⌃9` | Trash: everything deleted in the last week (Settings › Trash sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty the Trash clears it |
-| Calendar | `1` `2` `3` Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `T` today · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click a day for a new action |
-| `W` | Start the Weekly Review |
+| Calendar | `1` `2` `3` Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `T` today · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click an item for its details, double-click an empty day for a new action. Clicking a day or item from the next or previous month (the greyed days) picks it without turning the page |
+| `⇧R` | Start the Weekly Review |
 | `⌘⇧,` | Settings |
 | `⇧N` | Capture to the Inbox. Enter files the item and the line stays open. `⇧↵` adds a new line, Esc closes |
 | `⌥N` | New project from anywhere: name its outcome, pick its area, then give it a first next action (Esc skips that). On Projects, `N` adds one in place |
 | `⌥T` | New next action from anywhere: what to do, its context, then its project (`No project` first; type a new name to create one). On Projects, `T` adds one to the project under the cursor |
 | `⌥W` | New Waiting For item from anywhere: what you're waiting for, who or what you wait on, then its project. Waiting since today |
-| `⇧W` | On Projects (and the Weekly Review's Projects step): add a Waiting For item to the project under the cursor, as `T` adds a next action |
+| `T` `W` | On Projects, in a project's details and in the Weekly Review's Projects step: add a next action (`T`) or a Waiting For item (`W`) to the project |
 | `K` / `⌥K` | Clarify the Inbox / clarify it with Claude |
 | `↑↓` `⌘↑↓` `fn↑↓` | Move / jump to the first or last row / page |
 | `Space` `⇧↑↓` `⌘A` | Tick a row / extend the range (`⇧Home`/`⇧End` to the ends) / select all. A plain arrow, Home/End or click clears the selection, as in Finder; `⇧`-click extends, `⌘`-click ticks, and dragging from anywhere beside the rail draws a selection rectangle (`⌘`-drag adds to the selection; a click on empty space clears it) |
@@ -43,16 +43,16 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `V` `C` `P` `A` | Move to a project or list / context / project / area |
 | `D` `S` `B` `R` | Due date / start date / bring back (tickler) / repeat |
 | `T`+`1–6` `G`+`1–3` | Time estimate / energy |
-| `Ins` or `⌘I` | Flag for today |
+| `Ins` or `⌘I` | Mark as important (again to unmark) |
 | `⇧F` | Delegate to Waiting For |
 | `Del` / `⇧Del` | Trash / delete permanently |
-| `⌥↑↓` `⌥V` | Reorder by hand / group and sort the view |
+| `⌥↑↓` `⌥V` | Move the selected rows up or down one place (within their group) / group and sort the view |
 | `⌥Tab` or `⌘F6` | Cycle rail → list → details |
 | `⌘K` › "Switch to the dark theme" | Light or dark theme (or Settings › Appearance › Theme, which can also follow the system) |
-| Drag a row | Reorder it (Next Actions, Waiting For, Projects) while the list is in its own order, not sorted by a column. Dropped into another group it takes that group's value: context, waiting on, project, today's flag, area or due date. The keyboard way to reorder is `⌥↑` `⌥↓` |
+| Drag a row | Reorder it (Next Actions, Waiting For, Projects) while the list is in its own order, not sorted by a column. Dropped into another group it takes that group's value: context, waiting on, project, its importance, area or due date. The keyboard way to reorder is `⌥↑` `⌥↓` |
 | Click a column heading | Sort the list by it (again: reverse, a third time: back to the list's own order). Works the same in every list |
 | Browser Back / Forward | Move between the views you visited. Every view has its own address (`#inbox`, `#next`, `#waiting`, `#projects`, `#someday`, `#reference`, `#done`, `#review`, `#settings`), so a reload or bookmark opens the same list |
-| Click the flag area | Flag a row for today, or take the flag off. The keyboard way is `Ins` |
+| Click the marker area | Mark a row as important, or unmark it. The keyboard way is `Ins` |
 | Click the box | Mark an action done, as in classic Outlook: it stays on its list, greyed and struck through, at the bottom of its group. Click again (or `E`) to take it back |
 | `⇧E` | Archive this list's done items (the Inbox's, or completed projects on Projects). The View menu (`⌥V`) also has Show/Hide done actions |
 | `I` | On Waiting For (list or details pane): when the waiting began. New items start today; set the real day when you file one later ("20 sep" means the last 20 September; a future date is refused) |

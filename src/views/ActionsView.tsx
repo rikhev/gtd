@@ -3,7 +3,7 @@ import { Paperclip, Repeat, AlignLeft, Clock, CalendarClock } from "lucide-react
 import { archiveDone, mutate, plural, useStore, isChase, isDeferred } from "../store.ts";
 import { useUI, VIEW_TITLES } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
-import { Grid, bakeDrop, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
+import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { AreaName, ContextCode, DateCell, DoneBox, Energy, FlagButton, Marker, TimeCell, titleOr } from "../components/bits.tsx";
 import { useActionCommands } from "../actionCommands.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
@@ -20,7 +20,7 @@ const SUBJECT_HINT: Record<Mode, string> = {
   done: "Describe the action",
 };
 
-const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", due: "Due date", today: "Flagged for today", none: "No grouping" };
+const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", due: "Due date", today: "Importance", none: "No grouping" };
 /** The View menu's sorts: the same state the column headings set (null is the list's own, manual order). */
 const SORTS: [string | null, string][] = [[null, "Manual order"], ["due", "Due date"], ["subject", "Subject"], ["ctx", "Context"], ["time", "Time estimate"], ["energy", "Energy"]];
 
@@ -165,11 +165,10 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       let color: string | undefined;
       let meta: string | undefined;
       if (groupBy === "today") {
-        // What you've flagged for today comes first, under today's date; the rest follows.
+        // What you've marked important comes first; the rest follows.
         key = a.flagged ? "today" : "none";
-        label = a.flagged ? "Today" : "Everything else";
+        label = a.flagged ? "Important" : "Everything else";
         order = a.flagged ? "0" : "9";
-        meta = a.flagged ? formatLong(t) : undefined;
       } else if (groupBy === "project") {
         const p = a.project_id ? projById.get(a.project_id) : undefined;
         key = p?.id ?? "none";
@@ -240,10 +239,13 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       if (groupBy === "today" && g === "today") return { flagged: 1 };
       return {};
     },
-    neighbors: (id) => {
-      const g = groups.find((x) => x.rows.some((r) => r.id === id));
-      const i = g ? g.rows.findIndex((r) => r.id === id) : -1;
-      return { prev: g?.rows[i - 1], next: g?.rows[i + 1] };
+    step: (ids, dir) => {
+      if (mode === "done") return;
+      const moved = stepRows(groups, (a) => a.id, (a) => a.sort, (a) => a.status !== "done", ids, dir);
+      if (!moved) return;
+      mutate(sort ? "Moved · now in manual order" : "Reordered", [...moved].map(([id, at]) => ({ type: "patch" as const, table: "actions" as const, id, data: { sort: at } })), { silent: !sort });
+      // In a column sort the moved rows would not budge on screen: the list switches to its own order, as a drop does.
+      if (sort) setSort(null);
     },
     onCreated: (id) => nav.setFocus(id),
     // The cursor stays in place (on the next open row) rather than following a done row to the bottom.
@@ -301,7 +303,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   // Drag to reorder while the list is in its own (manual) order: the row takes a sort value between its new
   // neighbours, so nothing else moves. Done rows stay put at the bottom.
   // Dropped into another group, an action takes on what that group stands for (its context, who it waits on, its
-  // project, today's flag or a due date). null refuses the drop: a next action needs a context, and "Overdue" has no date to give.
+  // project, its importance or a due date). null refuses the drop: a next action needs a context, and "Overdue" has no date to give.
   const groupPatch = (groupKey: string): Partial<Action> | null => {
     const t = today();
     switch (groupBy) {

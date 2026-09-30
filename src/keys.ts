@@ -57,6 +57,17 @@ export function activeCommands(): Command[] {
   return out;
 }
 
+/** The same, each with the id of the layer it came from (the help overlay tells app-wide keys from the screen's). */
+export function activeCommandsByLayer(): { layer: string; command: Command }[] {
+  const sorted = [...layers.values()].sort((a, b) => b.priority - a.priority);
+  const out: { layer: string; command: Command }[] = [];
+  for (const l of sorted) {
+    out.push(...l.commands.filter((c) => c.enabled !== false).map((command) => ({ layer: l.id, command })));
+    if (l.exclusive) break;
+  }
+  return out;
+}
+
 /** Run whatever the key does right now, as if it were pressed: lets a tap on a key hint do the key's work. */
 export function runKey(k: string) {
   const c = activeCommands().find((x) => x.keys?.includes(k));

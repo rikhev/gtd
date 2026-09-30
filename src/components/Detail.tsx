@@ -6,8 +6,9 @@ import { isEditable, keyLabel, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
+import { NotesArea } from "./NotesArea.tsx";
 import { AreaName, ContextCode, Energy, KeyHints, Lamp, Marker } from "./bits.tsx";
-import { formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
+import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
 /** Text field that commits on blur (one undo step per edit, not per keystroke). */
@@ -81,7 +82,7 @@ function TextField({
         )}
       </span>
       {multiline ? (
-        <textarea {...common} ref={area} rows={rows} className="field-text" data-autofocus={autoFocus || undefined} aria-keyshortcuts={k} />
+        <NotesArea {...common} ref={area} rows={rows} className="field-text" data-autofocus={autoFocus || undefined} aria-keyshortcuts={k} />
       ) : (
         <input
           {...common}
@@ -304,7 +305,7 @@ function ActionDetail({ a }: { a: Action }) {
   );
   return (
     <>
-      {/* Flagged for today or done is the one thing the fields don't say, so its mark rides after the label. */}
+      {/* Important or done is the one thing the fields don't say, so its mark rides after the label. */}
       <TextField label="Subject" mark={a.flagged || done ? <Marker flagged={Boolean(a.flagged)} done={done} /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       {/* Fields in the order the item's kind asks for them: a waiting item leads with who it waits on, when to
           follow up and since when, right after its project; a next action's own fields follow. */}
@@ -340,13 +341,20 @@ function ProjectDetail({ p }: { p: Project }) {
   const ed = projectEditors(ui);
   const s = useStore((x) => x);
   const meta = useMeta();
-  const [showDone, setShowDone] = useState(false);
   const [draft, setDraft] = useState("");
   const area = s.areas.find((a) => a.id === p.area_id);
-  // T, as on the Projects list: straight into "Add a next action" while the pane has focus.
+  // T and W, as on the Projects list: T goes straight into "Add a next action" while the pane has focus, W adds a
+  // waiting for (what, then who or what it waits on).
   const active = useContext(DetailActive);
   const addInput = useRef<HTMLInputElement>(null);
-  useCommands("detail-addnext", [{ id: "detail.addnext", label: "Add a next action to this project", group: "Details", keys: ["t"], run: () => addInput.current?.focus() }], { priority: 21, active });
+  useCommands(
+    "detail-addnext",
+    [
+      { id: "detail.addnext", label: "Add a next action to this project", group: "Details", keys: ["t"], run: () => addInput.current?.focus() },
+      { id: "detail.addwaiting", label: "Add a waiting for to this project", group: "Details", keys: ["w"], run: () => ed.addWaiting(p.id) },
+    ],
+    { priority: 21, active },
+  );
   // A next action needs a context, as everywhere else: Enter asks for it, then adds the action.
   const addNext = () => {
     const title = draft.trim();
@@ -358,9 +366,11 @@ function ProjectDetail({ p }: { p: Project }) {
       window.setTimeout(() => addInput.current?.focus(), 0);
     });
   };
-  const acts = s.actions.filter((a) => a.project_id === p.id).sort((a, b) => a.sort - b.sort);
-  const open = acts.filter((a) => ["next", "waiting", "someday"].includes(a.status));
-  const done = acts.filter((a) => a.status === "done").sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
+  // The project's timeline (owner's request): every action it has had, open or done (archived to Done included), in
+  // the order they were created, oldest first, so the newest sits just above "Add a next action". Deleted ones don't show.
+  const timeline = s.actions.filter((a) => a.project_id === p.id && a.status !== "trashed").sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const open = timeline.filter((a) => ["next", "waiting", "someday"].includes(a.status));
+  const doneCount = timeline.length - open.length;
   return (
     <>
       {/* Area and status live in their own fields below; the head only carries the project's health, beside its name. */}
@@ -385,10 +395,12 @@ function ProjectDetail({ p }: { p: Project }) {
       <section className="detail-actions">
         <h3 className="detail-h">
           Actions <span className="count">{open.length}</span>
+          {doneCount > 0 && <span className="detail-h-note">{doneCount} done</span>}
           {active && (
-            <kbd className="kbd field-key detail-h-key" aria-hidden="true">
-              T
-            </kbd>
+            <span className="detail-h-key" aria-hidden="true">
+              <kbd className="kbd field-key">T</kbd>
+              <kbd className="kbd field-key">W</kbd>
+            </span>
           )}
         </h3>
         {p.status === "active" && !open.length && (notStarted(p) || startsToday(p)) && (
@@ -399,16 +411,26 @@ function ProjectDetail({ p }: { p: Project }) {
             {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Move it forward, or put it on hold.`}
           </p>
         )}
-        <ul>
-          {open.map((a) => (
-            <li key={a.id}>
-              <button type="button" className="mini-row" onClick={() => ui.openDetail({ kind: "action", id: a.id }, true)}>
-                <Marker flagged={Boolean(a.flagged)} />
-                <span className="mini-title">{a.title || "Untitled action"}</span>
-                <span className="mini-meta">{a.status === "waiting" ? `Waiting · ${a.waiting_who ?? ""}` : a.status === "someday" ? "Someday" : ""}</span>
-              </button>
-            </li>
-          ))}
+        <ul className="timeline">
+          {timeline.map((a) => {
+            const done = a.status === "done";
+            const when = done ? a.completed_at : a.created_at;
+            return (
+              <li key={a.id}>
+                <button
+                  type="button"
+                  className={`mini-row ${done ? "is-done" : ""}`}
+                  title={done ? `Done ${when ? formatLong(when.slice(0, 10)) : ""}` : `Added ${formatLong(a.created_at.slice(0, 10))}`}
+                  onClick={() => ui.openDetail({ kind: "action", id: a.id }, true)}
+                >
+                  <Marker flagged={!done && Boolean(a.flagged)} done={done} />
+                  <span className="mini-title">{a.title || "Untitled action"}</span>
+                  <span className="mini-meta">{a.status === "waiting" ? `Waiting · ${a.waiting_who ?? ""}` : a.status === "someday" ? "Someday" : ""}</span>
+                  <span className="mini-date">{when ? formatDate(when.slice(0, 10)) : ""}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
         <input
           ref={addInput}
@@ -425,24 +447,6 @@ function ProjectDetail({ p }: { p: Project }) {
             }
           }}
         />
-        {done.length > 0 && (
-          <>
-            <button type="button" className="group-toggle" aria-expanded={showDone} onClick={() => setShowDone(!showDone)}>
-              <span className={`chev ${showDone ? "open" : ""}`} aria-hidden /> Done <span className="count">{done.length}</span>
-            </button>
-            {showDone && (
-              <ul className="done-list">
-                {done.map((a) => (
-                  <li key={a.id} className="mini-row is-done">
-                    <Marker flagged={false} done />
-                    <span className="mini-title">{a.title}</span>
-                    <span className="mini-meta">{a.completed_at ? formatLong(a.completed_at.slice(0, 10)) : ""}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        )}
       </section>
       <TextField label="Support notes" value={p.notes} multiline rows={4} onCommit={(v) => patch("projects", p.id, { notes: v })} placeholder="Plans, meeting notes, phone numbers, links…" />
       <Files owner={{ kind: "project", id: p.id }} />
@@ -607,7 +611,15 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   }
 
   return (
-    <aside ref={root} className={`detail ${active ? "is-active" : ""}`} aria-label={paneName} tabIndex={-1}>
+    <aside
+      ref={root}
+      className={`detail ${active ? "is-active" : ""}`}
+      aria-label={paneName}
+      tabIndex={-1}
+      // Focus arriving in the pane by any route (a click into its notes, Tab) makes it the active region, so its
+      // keys work there: Esc leaves a field and saves it, even in a pinned pane opened from the list.
+      onFocus={() => !active && ui.setRegion("detail")}
+    >
       <div className="detail-bar">
         <h2 className="detail-title" id="detail-title">
           Details

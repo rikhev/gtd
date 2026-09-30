@@ -1159,7 +1159,7 @@ body.is-col-resizing * {
   transform: rotate(45deg) translate(-2px, -1px);
 }
 
-/* Row marker: ring, a red flag when flagged for today, tick when done. */
+/* Row marker: ring, a red exclamation mark when important, tick when done. */
 .marker {
   display: inline-flex;
   width: 22px;
@@ -1184,17 +1184,12 @@ body.is-col-resizing * {
   opacity: 0;
   transition: stroke-dashoffset 380ms var(--ease), opacity 60ms;
 }
-/* Flagged for today: an alert-red flag on an ink pole, as in classic Outlook. */
-.marker .flag-pole {
-  fill: none;
-  stroke: var(--ink-2);
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-.marker .flag-cloth {
+/* Important: an alert-red exclamation mark, as classic Outlook marks high importance. */
+.marker .imp-bar,
+.marker .imp-dot {
   fill: var(--alert);
 }
-/* Flagging drops the flag onto the row. */
+/* Marking drops the mark onto the row. */
 .marker.is-flagged .leaf {
   animation: leaf-in 220ms var(--ease) both;
 }
@@ -1225,7 +1220,7 @@ body.is-col-resizing * {
   stroke: var(--select-ink);
 }
 
-/* The flag column: the marker is a button. Unflagged, hovering it shows a faint outline flag. */
+/* The importance column: the marker is a button. Unmarked, hovering it shows a faint outline of the mark. */
 .flag-btn {
   position: relative;
   display: inline-flex;
@@ -1245,11 +1240,11 @@ body.is-col-resizing * {
   opacity: 0;
   transition: opacity 120ms var(--ease);
 }
-.flag-ghost path {
+.flag-ghost .imp-bar,
+.flag-ghost .imp-dot {
   fill: none;
   stroke: var(--ink-3);
-  stroke-width: 1.2;
-  stroke-linecap: round;
+  stroke-width: 1.1;
   stroke-linejoin: round;
 }
 .flag-btn:hover .flag-ghost {
@@ -1436,47 +1431,28 @@ body.is-col-resizing * {
   background: color-mix(in srgb, var(--select-ink) 8%, transparent);
 }
 
-/* Project health lamps: green has a next action, amber is only waiting on others, red is stalled. */
+/* Project health lamps (bits.tsx draws the shapes): green has a next action, amber is only waiting on others, red is
+   stalled. The colour is the lamp's currentColor. */
 .lamp {
   display: inline-block;
   flex: none;
-  width: 10px;
-  height: 10px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: var(--lamp, var(--ink-3));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lamp, var(--ink-3)) 70%, #000);
+  width: 12px;
+  height: 12px;
+  margin-left: 5px;
+  fill: currentColor;
+  color: var(--ink-3);
+  overflow: visible;
 }
 .lamp.ok {
-  --lamp: var(--go);
+  color: var(--go);
 }
-/* Health is told by shape as well as colour, so it reads without colour vision: on track is a solid light, waiting
-   a dot held in a ring, stalled a ring struck through (stopped). */
 .lamp.waiting {
-  --lamp: var(--wait);
-  background: radial-gradient(circle, var(--lamp) 0 2px, transparent 2.5px);
-  box-shadow: inset 0 0 0 2px var(--lamp);
+  color: var(--wait);
 }
 .lamp.stalled {
-  --lamp: var(--alert);
-  background: linear-gradient(135deg, transparent calc(50% - 1px), var(--lamp) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px));
-  box-shadow: inset 0 0 0 2px var(--lamp);
-}
-/* Someday: a half-lit lamp (parked, not off), so it can't be mistaken for an action's empty ring. */
-.lamp.someday {
-  background: linear-gradient(90deg, var(--ink-3) 50%, transparent 50%);
-  box-shadow: inset 0 0 0 1.5px var(--ink-3);
-}
-/* Not started yet (a start date still ahead): a grey ring with clock hands, neither lit nor alarmed. */
-.lamp.scheduled {
-  --lamp: var(--ink-3);
-  background:
-    linear-gradient(var(--lamp), var(--lamp)) 50% calc(50% - 1px) / 1.5px 3.5px no-repeat,
-    linear-gradient(var(--lamp), var(--lamp)) calc(50% + 1px) 50% / 3px 1.5px no-repeat;
-  box-shadow: inset 0 0 0 1.5px var(--lamp);
+  color: var(--alert);
 }
 .lamp.done {
-  --lamp: var(--ink-3);
   opacity: 0.6;
 }
 .grid-empty {
@@ -1592,10 +1568,10 @@ body.is-col-resizing * {
   margin-block: -8px;
 }
 .field-label .lamp {
-  width: 8px;
-  height: 8px;
-  margin-left: 7px;
-  vertical-align: 0;
+  width: 11px;
+  height: 11px;
+  margin-left: 6px;
+  vertical-align: -1px;
 }
 .field-label,
 .p-lbl {
@@ -1625,6 +1601,62 @@ input.field-text {
 textarea.field-text {
   resize: none;
   max-height: min(60vh, 640px);
+}
+/* Notes with a little Markdown (NotesArea): the box keeps the caret, selection and spelling marks; its letters are
+   drawn by a copy laid exactly over it. Nothing in the copy may change a character's width, or the caret drifts. */
+.md-wrap {
+  position: relative;
+  display: block;
+}
+.md-wrap > textarea {
+  display: block;
+  color: transparent;
+  caret-color: var(--ink);
+}
+.md-wrap > textarea::placeholder {
+  color: var(--ink-3);
+}
+/* WebKit paints selected letters in their own colour: keep them hidden too, so the copy's letters show once. */
+.md-wrap > textarea::selection {
+  color: transparent;
+}
+.md-mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  resize: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink);
+}
+/* Bold by a stroke, not a weight: the same widths, so the caret stays on the letters. */
+.md-mirror b {
+  font-weight: inherit;
+  -webkit-text-stroke: 0.035em currentColor;
+}
+.md-mirror .md-mark,
+.md-mirror .md-num {
+  color: var(--ink-3);
+  -webkit-text-stroke: 0;
+}
+/* A list item's dash is drawn as a round bullet in its place. */
+.md-bullet {
+  position: relative;
+  color: transparent;
+}
+.md-bullet::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-2);
+  transform: translate(-50%, -50%);
 }
 .field-text:focus {
   outline: none;
@@ -1773,6 +1805,31 @@ textarea.field-text {
 .mini-row.is-done .mini-title {
   text-decoration: line-through;
   color: var(--ink-2);
+}
+/* The project timeline: each row ends with its date (added, or done), small and tabular so the dates line up. */
+.timeline .mini-row {
+  grid-template-columns: 22px 1fr auto auto;
+}
+.mini-date {
+  min-width: 46px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.mini-row.is-done .mini-meta,
+.mini-row.is-done .mini-date {
+  color: var(--ink-3);
+}
+.detail-h-note {
+  font-family: var(--font-ui);
+  font-stretch: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-left: 4px;
 }
 .add-action {
   margin-top: 8px;
@@ -1984,15 +2041,31 @@ textarea.field-text {
   justify-content: space-between;
   margin-bottom: 14px;
 }
+/* Two scopes side by side: what this screen does, then the keys that work everywhere, split by a hairline. */
+.help-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 28px;
+}
+.help-scope + .help-scope {
+  border-left: 1px solid var(--rule);
+  padding-left: 28px;
+}
+.help-scope > h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
 .help-cols {
-  columns: 4 200px;
+  columns: 2 200px;
   column-gap: 28px;
 }
-.help section {
+.help-group {
   break-inside: avoid;
   margin-bottom: 16px;
 }
-.help h3 {
+.help h4 {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
@@ -2004,19 +2077,35 @@ textarea.field-text {
   padding-bottom: 4px;
   border-bottom: 1px solid var(--rule);
 }
+@media (max-width: 900px) {
+  .help-body {
+    grid-template-columns: 1fr;
+  }
+  .help-scope + .help-scope {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 14px;
+  }
+}
+/* Each group's keys form one column as wide as its widest key, so the words get the rest and seldom wrap. */
 .help dl {
   margin: 0;
+  display: grid;
+  grid-template-columns: minmax(44px, max-content) 1fr;
+  gap: 0 14px;
 }
 .help dl div {
-  display: grid;
-  grid-template-columns: 104px 1fr;
-  gap: 6px;
-  align-items: baseline;
+  display: contents;
+}
+.help dt,
+.help dd {
   min-height: 22px;
   padding: 2px 0;
 }
 .help dt {
   display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
   gap: 3px;
   margin: 0;
@@ -3000,7 +3089,7 @@ textarea.field-text {
   outline: none;
 }
 
-/* Flagged for today reads twice: the inked, circled marker and a bolder subject. */
+/* Important reads twice: the red mark and a bolder subject. */
 .row.is-flagged .subject-text {
   font-weight: 600;
 }
@@ -3050,9 +3139,11 @@ textarea.field-text {
   justify-content: space-between;
   gap: 6px;
 }
-/* The Actions heading carries its key like a field does: T adds a next action. */
+/* The Actions heading carries its keys like a field does: T adds a next action, W a waiting for. */
 .detail-h-key {
   margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
 }
 .field-key {
   font-size: 11px;
@@ -3613,8 +3704,8 @@ textarea.field-text {
   font-weight: 600;
 }
 .cal-bar.is-project .lamp {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   margin: 0;
 }
 /* Waiting on someone else: the same bar with a dashed edge. */

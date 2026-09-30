@@ -1,3 +1,4 @@
+import { NotesArea } from "../components/NotesArea.tsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, StickyNote, Timer } from "lucide-react";
 import { getMeta, getState, mutate, newAction, newProject, notify, plural, stamp, uid, useMeta, useStore, bareArea } from "../store.ts";
@@ -700,7 +701,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                   </label>
                   <label className="field">
                     <span className="field-label">Notes</span>
-                    <textarea
+                    <NotesArea
                       className="field-text"
                       rows={3}
                       ref={fitHeight}

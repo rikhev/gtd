@@ -416,7 +416,7 @@ export function editors(ui: UI) {
 
 /**
  * Keyboard commands for any list of actions. `status` decides where N creates
- * new rows; `neighbors` supplies visible order for ⌥↑/⌥↓.
+ * new rows; `step` moves the selected rows one place for ⌥↑/⌥↓.
  */
 export function useActionCommands(opts: {
   ui: UI;
@@ -424,7 +424,7 @@ export function useActionCommands(opts: {
   focusId: ID | null;
   status: ActionStatus;
   defaults?: () => Partial<Action>;
-  neighbors: (id: ID) => { prev?: Action; next?: Action };
+  step: (ids: ID[], dir: -1 | 1) => void;
   onCreated?: (id: ID) => void;
   /** Rows about to be marked done: the list moves its cursor off them (they stay, struck through, at the bottom). */
   onCompleting?: (ids: ID[]) => void;
@@ -472,7 +472,7 @@ export function useActionCommands(opts: {
     if (!ids.length) return;
     const acts = getState().actions.filter((a) => ids.includes(a.id));
     const on = acts.some((a) => !a.flagged) ? 1 : 0;
-    patchMany("actions", ids, { flagged: on }, on ? `${n(ids)} flagged for today` : `${n(ids)} unflagged`);
+    patchMany("actions", ids, { flagged: on }, on ? `${n(ids)} marked important` : `${n(ids)} no longer important`);
   };
 
   const trash = (permanent: boolean) => {
@@ -486,17 +486,10 @@ export function useActionCommands(opts: {
     } else patchMany("actions", ids, { status: "trashed" }, `${n(ids)} trashed`);
   };
 
+  // The whole selection moves, not just the row under the cursor.
   const reorder = (dir: -1 | 1) => {
-    const id = opts.focusId;
-    if (!id) return;
-    const me = getState().actions.find((a) => a.id === id);
-    const nb = opts.neighbors(id);
-    const other = dir < 0 ? nb.prev : nb.next;
-    if (!me || !other) return;
-    mutate("Reordered", [
-      { type: "patch", table: "actions", id: me.id, data: { sort: other.sort } },
-      { type: "patch", table: "actions", id: other.id, data: { sort: me.sort } },
-    ], { silent: true });
+    const ids = targets();
+    if (ids.length) opts.step(ids, dir);
   };
 
   const create = () => {
@@ -523,7 +516,7 @@ export function useActionCommands(opts: {
     opts.doneView
       ? { id: "act.reopen", label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
       : { id: "act.done", label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
-    { id: "act.flag", label: "Flag for today", group: "Actions", keys: ["insert", "mod+i"], run: flag },
+    { id: "act.flag", label: "Mark as important", group: "Actions", keys: ["insert", "mod+i"], run: flag },
     { id: "act.move", label: "Move to project or list", group: "Actions", keys: ["v"], run: () => ed.move(pick()) },
     { id: "act.convert", label: "Turn into a project", group: "Actions", keys: ["shift+p"], run: () => ed.convert(pick()) },
     { id: "act.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(pick()) },
@@ -574,7 +567,7 @@ export function useActionCommands(opts: {
     const a = getState().actions.find((x) => x.id === id);
     if (!a) return;
     const on = a.flagged ? 0 : 1;
-    patchMany("actions", [id], { flagged: on }, on ? `${n([id])} flagged for today` : `${n([id])} unflagged`);
+    patchMany("actions", [id], { flagged: on }, on ? `${n([id])} marked important` : `${n([id])} no longer important`);
   };
 
   return { commands, editing, setEditing, commitTitle, striking, completeOne, reopenOne, flagOne };

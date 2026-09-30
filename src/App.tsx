@@ -6,6 +6,7 @@ import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay 
 import { DropZone } from "./components/DropZone.tsx";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView } from "./views/TrashView.tsx";
+import { DoneView } from "./views/DoneView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { ActionsView } from "./views/ActionsView.tsx";
@@ -42,7 +43,8 @@ function homeOf(t: Target): ViewId {
   if (t.kind === "area") return "settings"; // areas are managed in Settings; Projects groups by them
   if (t.kind === "project") {
     const p = s.projects.find((x) => x.id === t.id);
-    return p?.status === "someday" ? "someday" : "projects";
+    // An archived completed project is in Done, with everything else that is finished.
+    return p?.status === "someday" ? "someday" : p?.status === "done" && p.archived_at ? "done" : "projects";
   }
   const a = s.actions.find((x) => x.id === t.id);
   if (!a) return "next";
@@ -303,7 +305,7 @@ export default function App() {
     // K clarifies (you decide, one item at a time); ⌥K clarifies with Claude's proposals.
     { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
     { id: "g.clarifyclaude", label: `Clarify with Claude${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["alt+k"], run: () => ui.startClarify(undefined, true) },
-    { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["w"], run: ui.startReview },
+    { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["shift+r"], run: ui.startReview },
     // A project from anywhere: its outcome, its area, its first next action (on Projects, N adds one in place).
     { id: "g.newproject", label: "New project", group: "Projects", keys: ["alt+n"], run: () => projectEditors(ui).create() },
     // A next action from anywhere: what, where (context), and its project if any (T on Projects adds to one).
@@ -376,7 +378,7 @@ export default function App() {
     waiting: plural(s.actions.filter((a) => a.status === "waiting").length, "item"),
     someday: plural(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
     reference: plural(s.refs.filter((r) => r.status === "active").length, "reference"),
-    done: plural(s.actions.filter((a) => a.status === "done").length, "action"),
+    done: plural(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done" && p.archived_at).length, "item"),
     trash: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
   };
 
@@ -392,7 +394,7 @@ export default function App() {
       body = <ActionsView key="waiting" mode="waiting" regionActive={listActive} />;
       break;
     case "done":
-      body = <ActionsView key="done" mode="done" regionActive={listActive} />;
+      body = <DoneView regionActive={listActive} />;
       break;
     case "someday":
       body = <SomedayView regionActive={listActive} />;

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { CalendarClock, ChevronLeft, ChevronRight, Flag, Hourglass } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Hourglass } from "lucide-react";
 import { completeActions, isStalled, mutate, newAction, plural, projectHealth, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
-import { Lamp } from "../components/bits.tsx";
+import { ImportantGlyph, Lamp } from "../components/bits.tsx";
 import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { addDays, addMonths, daysBetween, formatLong, fromIso, today } from "../../shared/dates.ts";
@@ -175,16 +175,19 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   }, [cursor, items]);
 
   // The period on screen follows the cursor day.
-  const weekDays = range(startOfWeek(cursor, ws), 7);
-  const monthStart = firstOfMonth(cursor);
+  // The period on screen follows the cursor when the keyboard or the arrows move it; a click on a day or item that
+  // falls outside it (October's first days at the foot of September) picks it without turning the page.
+  const [shown, setShown] = useState(t);
+  const weekDays = range(startOfWeek(shown, ws), 7);
+  const monthStart = firstOfMonth(shown);
   const gridStart = startOfWeek(monthStart, ws);
   const monthWeeks = Math.ceil((daysBetween(gridStart, addDays(addMonths(monthStart, 1), -1)) + 1) / 7);
-  const year = Number(cursor.slice(0, 4));
+  const year = Number(shown.slice(0, 4));
   const title =
     mode === "week"
       ? `Week ${isoWeek(weekDays[3])} · ${formatShort(weekDays[0])} – ${formatShort(weekDays[6])} ${weekDays[6].slice(0, 4)}`
       : mode === "month"
-        ? `${MONTH[Number(cursor.slice(5, 7)) - 1]} ${year}`
+        ? `${MONTH[Number(shown.slice(5, 7)) - 1]} ${year}`
         : String(year);
   const step = (dir: -1 | 1) => {
     setItemKey(null);
@@ -225,6 +228,14 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
+    // The second press of a double-click opens the item's details. It must be caught here: a press takes the bars out
+    // of the pointer's way (so a drag can read the day under it), which would hand the double-click to the day
+    // beneath and start a new action there instead.
+    if (e.detail >= 2) {
+      setItemKey(item.key);
+      ui.openDetail({ kind: item.kind, id: item.id }, true);
+      return;
+    }
     const dateAt = (x: number, y: number) => (document.elementFromPoint(x, y) as HTMLElement | null)?.closest<HTMLElement>("[data-date]")?.dataset.date ?? null;
     const x0 = e.clientX;
     const y0 = e.clientY;
@@ -256,7 +267,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       setDrag(null);
       if (!moved) {
         // A click picks the item (the detail pane follows it); its day becomes the cursor day.
-        setCursor(dateAt(x0, y0) ?? item.start);
+        cursorFromMouse(dateAt(x0, y0) ?? item.start);
         setItemKey(item.key);
         return;
       }
@@ -357,14 +368,27 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
 
   // Opening the month on the current one: this week goes to the top, the past a scroll away above it.
   useEffect(() => {
-    if (mode !== "month" || monthOf(cursor) !== monthOf(t)) return;
+    if (mode !== "month" || monthOf(shown) !== monthOf(t)) return;
     const row = root.current?.querySelector<HTMLElement>(".cal-row.is-this-week");
     const scroller = row?.closest<HTMLElement>(".cal-month");
     if (row && scroller) scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-  }, [mode, monthOf(cursor)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mode, monthOf(shown)]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep the cursor day in view in the week and month grids.
+  // Keep the cursor day in view in the week and month grids, when the keyboard moved it. A click already happened on
+  // screen: scrolling then would slide the item from under the pointer and send a double-click's second press elsewhere.
+  const cursorByMouse = useRef(false);
+  const cursorFromMouse = (d: string) => {
+    cursorByMouse.current = true;
+    setCursor(d);
+    // Cleared shortly after, in case the day didn't change (no effect ran): the next keyboard move scrolls as usual.
+    window.setTimeout(() => (cursorByMouse.current = false), 50);
+  };
   useEffect(() => {
+    if (cursorByMouse.current) {
+      cursorByMouse.current = false;
+      return;
+    }
+    setShown(cursor);
     root.current?.querySelector(`[data-date="${cursor}"].is-cursor`)?.scrollIntoView({ block: "nearest" });
   }, [cursor, mode]);
 
@@ -407,7 +431,11 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           {i.kind === "project" && i.health && <Lamp health={i.health} start={i.projectStart} />}
           {i.role === "followup" && <Hourglass size={11} strokeWidth={2} aria-hidden />}
           {i.role === "tickler" && <CalendarClock size={11} strokeWidth={2} aria-hidden />}
-          {i.flagged && <Flag className="cal-flag" size={10} strokeWidth={2.2} aria-label="Flagged for today" />}
+          {i.flagged && (
+            <svg className="cal-flag" viewBox="0 0 22 22" width="12" height="12" role="img" aria-label="Important">
+              <ImportantGlyph />
+            </svg>
+          )}
           <span className="cal-title">{i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.title}</span>
         </span>
         {rich && i.role === "followup" && <span className="cal-sub">{i.title}</span>}
@@ -433,7 +461,11 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           }}
         >
           <span className="cal-agenda-mark" aria-hidden="true">
-            {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? <Flag className="cal-flag" size={12} strokeWidth={2.2} /> : <span className="cal-agenda-dot" />}
+            {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? (
+              <svg className="cal-flag" viewBox="0 0 22 22" width="16" height="16" aria-hidden="true">
+                <ImportantGlyph />
+              </svg>
+            ) : <span className="cal-agenda-dot" />}
           </span>
           <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>
           <span className="cal-agenda-when">{what}</span>
@@ -464,7 +496,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         dow(d) === 0 || dow(d) === 6 ? "is-weekend" : "",
         d < t ? "is-past" : "",
       ].join(" ")}
-      onMouseDown={() => (setItemKey(null), setCursor(d))}
+      onMouseDown={() => (setItemKey(null), cursorFromMouse(d))}
       onDoubleClick={() => newOn(d)}
     >
       {opts.head ? (
@@ -522,7 +554,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                 <span className="cal-wk num" title={`Week ${isoWeek(days[3])}`}>
                   {isoWeek(days[3])}
                 </span>
-                <div className="cal-cells">{days.map((d, i) => dayCell(d, { outside: monthOf(d) !== monthOf(cursor), hidden: row.hidden[i] }))}</div>
+                <div className="cal-cells">{days.map((d, i) => dayCell(d, { outside: monthOf(d) !== monthOf(shown), hidden: row.hidden[i] }))}</div>
                 {!phone && <div className="cal-bars">{row.placed.map((p) => bar(p, false))}</div>}
               </div>
             );

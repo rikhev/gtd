@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getState, isStalled, mutate, named, newAction, newProject, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
-import { Grid, bakeDrop, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
+import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { AreaName, DateCell, DoneBox, Lamp } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
@@ -261,11 +261,11 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   const [sort, setSort] = useSort("projects");
   const sorters: Sorters<Project> = useMemo(
     () => ({
-      // Status, what needs you first: stalled, starting today with nothing to do, waiting, on track, not started yet
-      // (soonest first), someday, completed.
+      // Status, one group per lamp, what needs you first: stalled, waiting, on track, then everything with the clock
+      // (starting today or later, soonest first), someday, completed (owner's decision: the clocks sort together).
       mark: (p) => {
         const h = projectHealth(s, p);
-        const rank = h === "stalled" ? 0 : h === "scheduled" && !notStarted(p) ? 1 : h === "waiting" ? 2 : h === "ok" ? 3 : h === "scheduled" ? 4 : h === "someday" ? 5 : 6;
+        const rank = { stalled: 0, waiting: 1, ok: 2, scheduled: 3, someday: 4, done: 5 }[h];
         return `${rank}|${h === "scheduled" ? p.start ?? "" : ""}`;
       },
       subject: (p) => p.title,
@@ -349,24 +349,18 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     setEditing(p.id);
   };
 
+  // ⌥↑/⌥↓ moves the whole selection one place within its area; completed projects stay put at the bottom.
   const reorder = (dir: -1 | 1) => {
-    if (!focusId) return;
-    const g = groups.find((x) => x.rows.some((r) => r.id === focusId));
-    if (!g) return;
-    const i = g.rows.findIndex((r) => r.id === focusId);
-    const other = g.rows[i + dir];
-    const me = g.rows[i];
-    if (!other) return;
-    mutate("Reordered", [
-      { type: "patch", table: "projects", id: me.id, data: { sort: other.sort } },
-      { type: "patch", table: "projects", id: other.id, data: { sort: me.sort } },
-    ], { silent: true });
+    const moved = stepRows(groups, (p) => p.id, (p) => p.sort, (p) => p.status !== "done", nav.targets(), dir);
+    if (!moved) return;
+    mutate(sort ? "Moved · now in manual order" : "Reordered", [...moved].map(([id, at]) => ({ type: "patch" as const, table: "projects" as const, id, data: { sort: at } })), { silent: !sort });
+    if (sort) setSort(null);
   };
 
   const commands: Command[] = [
     ...nav.commands,
     { id: "proj.addnext", label: "Add a next action to the project", group: "Projects", keys: ["t"], enabled: Boolean(focusId), run: () => focusId && ed.addNextAction(focusId) },
-    { id: "proj.addwaiting", label: "Add a waiting for to the project", group: "Projects", keys: ["shift+w"], enabled: Boolean(focusId), run: () => focusId && ed.addWaiting(focusId) },
+    { id: "proj.addwaiting", label: "Add a waiting for to the project", group: "Projects", keys: ["w"], enabled: Boolean(focusId), run: () => focusId && ed.addWaiting(focusId) },
     { id: "proj.new", label: "New project", group: "Projects", keys: ["n"], run: create },
     { id: "proj.open", label: "Open project", group: "Projects", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "project", id: focusId }, true) },
     { id: "proj.jump", label: "Jump to its next action", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },

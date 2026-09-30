@@ -23,7 +23,7 @@ export interface Column<T> {
 /** On a phone the list keeps one column after the subject: the first of these it has. */
 const COMPACT_HIDE = ["done", "kind"];
 /** Names for the unlabelled lead columns, for screen readers. */
-const LEAD_NAME: Record<string, string> = { mark: "Flag or status", done: "Done", kind: "Kind" };
+const LEAD_NAME: Record<string, string> = { mark: "Importance or status", done: "Done", kind: "Kind" };
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
 
 /** Whether a point is over a glyph of text (not merely inside an element that holds text): where a press selects text. */
@@ -154,6 +154,40 @@ export function bakeDrop<T>(
   }
   const order = [...rest.slice(0, at), ...movers, ...rest.slice(at)];
   return new Map(order.map((x, i) => [keyOf(x.r), slots[i]]));
+}
+
+/**
+ * ⌥↑/⌥↓: every selected row steps one place within its own group, hopping the unselected row beside it. A block
+ * already at the group's edge stays put, and the rows behind it close up against it. Returns the new sort value of
+ * each row that changes (the open rows' existing values, reassigned in the new on-screen order), or null when
+ * nothing can move.
+ */
+export function stepRows<T>(
+  groups: GridGroup<T>[],
+  keyOf: (r: T) => string,
+  sortOf: (r: T) => number,
+  isOpen: (r: T) => boolean,
+  keys: string[],
+  dir: -1 | 1,
+): Map<string, number> | null {
+  const picked = new Set(keys);
+  let moved = false;
+  const order = groups.flatMap((g) => {
+    const rows = g.rows.filter(isOpen);
+    const idx = dir < 0 ? rows.map((_, i) => i) : rows.map((_, i) => rows.length - 1 - i);
+    for (const i of idx) {
+      const j = i + dir;
+      if (!picked.has(keyOf(rows[i])) || j < 0 || j >= rows.length || picked.has(keyOf(rows[j]))) continue;
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+      moved = true;
+    }
+    return rows;
+  });
+  if (!moved) return null;
+  const slots = order.map(sortOf).sort((a, b) => a - b);
+  const out = new Map<string, number>();
+  order.forEach((r, i) => sortOf(r) !== slots[i] && out.set(keyOf(r), slots[i]));
+  return out;
 }
 
 /** Sorts the rows inside each group (groups keep their own order). Empty values always go last, whichever way. */
