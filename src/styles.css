@@ -1580,25 +1580,48 @@ body.is-col-resizing * {
   border-bottom: 1px solid var(--rule);
 }
 /*
- * Where you are (the One Blue Rule): the active region's cursor takes Selection Blue, as the focused row does in the
- * active list. The pane has no cursor row of its own, so its header bar is its cursor, like a window's title bar when
- * it is in front. It takes only a faint wash of the blue (22% into the sheet), so the top edge still steps lighter
- * from the rail to the top bar to the pane (owner's request: the full blue band read dark, light, dark again), with
- * the title in full ink. It keys off the app's region, not the pane's key handling, so it stays lit while a picker
- * opened from the pane is up. Its lower edge keeps the pane's own rule.
+ * Where you are (the One Blue Rule): the active region's cursor takes the blue. The pane has no cursor row of its own,
+ * so its title is its marker, like the selected tab in a tab strip: "Details" (or the back link) turns `accent` and a
+ * 3px accent tab sits on the header's lower edge under it, growing in from its middle. No fill (owner's request: a full
+ * blue band broke the top edge's dark-light-lighter steps, and a faint wash was too faint to help) and no frame; the
+ * header's lower rule stays the pane's own grey. It keys off the app's region, not the pane's key handling, so it
+ * stays lit while a picker opened from the pane is up.
  */
-.detail-bar {
-  transition: background-color 120ms var(--ease), border-color 120ms var(--ease);
+.detail-title,
+.detail-back {
+  position: relative;
+  transition: color 120ms var(--ease);
 }
-.app[data-region="detail"] .detail-bar {
-  background: color-mix(in srgb, var(--select) 22%, var(--sheet));
+.detail-title::after,
+.detail-back::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* On the header's 1px lower rule: the bar is 44px, the title a line, the back link 28px. */
+  bottom: -15px;
+  height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform 160ms var(--ease);
+}
+.detail-back::after {
+  bottom: -9px;
+  left: 4px;
+  right: 8px;
 }
 .app[data-region="detail"] .detail-title,
 .app[data-region="detail"] .detail-back {
-  color: var(--ink);
+  color: var(--accent);
+}
+.app[data-region="detail"] .detail-title::after,
+.app[data-region="detail"] .detail-back::after {
+  transform: scaleX(1);
 }
 .detail-title {
   margin: 0;
+  line-height: 16px;
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
