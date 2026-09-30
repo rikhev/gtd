@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Search, Check } from "lucide-react";
-import { capture, daysSinceReview, notify, useMeta, useNotice, useTables, isStalled, isChase } from "../store.ts";
+import { Search, Check, LogOut } from "lucide-react";
+import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { allCommandsForPalette, activeCommandsByLayer, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
 import { Kbd, Tag } from "./bits.tsx";
@@ -46,7 +46,7 @@ export function Rail({ active }: { active: boolean }) {
   useHeldModifier();
   const ui = useUI();
   const s = useTables("stuff", "actions", "projects", "reviews");
-  const { stallWeeks } = useMeta(); // recount stalled projects when the threshold changes
+  const { stallWeeks, authRequired } = useMeta(); // recount stalled projects when the threshold changes
   const [cursor, setCursor] = useState(0);
   const t = today();
 
@@ -243,6 +243,16 @@ export function Rail({ active }: { active: boolean }) {
             </span>
           </button>
         </li>
+        {/* Signing out is an act, not a place: the last, quietest row, shown only where there is a login. It is not a
+            rail stop (Enter while moving through the rail never signs out by accident); ⌘K › Sign out is the key route. */}
+        {authRequired && (
+          <li>
+            <button type="button" className="rail-item rail-signout" tabIndex={-1} onClick={() => void signOut()}>
+              <span className="rail-name">Sign out</span>
+              <LogOut size={13} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          </li>
+        )}
       </ul>
     </nav>
   );
@@ -293,6 +303,7 @@ function RailKey({ k }: { k?: string }) {
 export function TabBar() {
   const ui = useUI();
   const s = useTables("stuff", "actions", "projects", "reviews");
+  const { authRequired } = useMeta();
   const [more, setMore] = useState(false);
   const inboxItems = s.stuff.filter((x) => x.status === "inbox");
   const inbox = inboxItems.length;
@@ -359,6 +370,16 @@ export function TabBar() {
               </li>
             ))}
           </ul>
+          {authRequired && (
+            <ul className="more-signout">
+              <li>
+                <button type="button" onClick={() => void signOut()}>
+                  Sign out
+                  <LogOut size={15} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              </li>
+            </ul>
+          )}
         </div>
       )}
       {tab(

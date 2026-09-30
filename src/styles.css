@@ -624,6 +624,17 @@ body.keys-held .rail .rail-meta .num {
   padding-top: 10px;
   border-top: 1px solid var(--rule-strong);
 }
+/* Sign out: the quietest row at the foot, in ink-3 with a small exit glyph; it wakes to ink on hover like any row. */
+.rail-signout {
+  color: var(--ink-3);
+}
+.rail-signout svg {
+  flex: none;
+  opacity: 0.8;
+}
+.rail-signout:hover svg {
+  opacity: 1;
+}
 
 /* The open list: the sheet pulled forward (lighter than the rail in both themes), with a hairline edge. */
 .rail-item.is-current {
@@ -2843,6 +2854,15 @@ textarea.field-text {
     padding: 0 12px;
     text-align: left;
     border-radius: 3px;
+  }
+  .more-signout {
+    border-top: 1px solid var(--rule);
+  }
+  .more-signout button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--ink-2);
   }
   .tabbar-more button.is-current {
     font-weight: 650;
