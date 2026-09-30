@@ -108,6 +108,9 @@ const STUFF_TOUCH: { k: string; label: string }[] = [
   { k: "k", label: "Clarify" },
 ];
 
+/** What the pane's cursor stops on, top to bottom: fields, the timeline's rows, the add line, the meeting link. */
+const PANE_STOPS = ".detail-body .field .field-text, .detail-body .event-title, .detail-body .field-pick, .detail-body .mini-row, .detail-body .add-action, .detail-body .event-join";
+
 /** Whether the detail pane is the active region: its fields' letter keys only work then. */
 const DetailActive = createContext(false);
 
@@ -792,9 +795,48 @@ export function Detail({ target, active }: { target: Target | null; active: bool
             ? s.appointments.find((x) => x.id === t.id)?.title
             : s.refs.find((x) => x.id === t.id)?.title;
 
+  /*
+   * The pane is a list of fields, walked like every other region (owner's decision): a cursor sits on one field, ↑↓
+   * move it, Enter opens or edits it, and the field under it takes the blue a focused row takes (grey while you are
+   * elsewhere). A field's letter key, a click, Tab or F2 moves the cursor to that field. Each new item starts it on
+   * its first field, the title.
+   */
+  const stops = () => [...(root.current?.querySelectorAll<HTMLElement>(PANE_STOPS) ?? [])].filter((el) => el.offsetParent !== null);
+  const setCursor = (el: HTMLElement | null | undefined) => {
+    root.current?.querySelectorAll("[data-cursor]").forEach((x) => x !== el && x.removeAttribute("data-cursor"));
+    if (!el) return;
+    el.setAttribute("data-cursor", "");
+    el.scrollIntoView({ block: "nearest" });
+  };
+  const cursorEl = () => root.current?.querySelector<HTMLElement>("[data-cursor]") ?? null;
+  const moveCursor = (dir: 1 | -1) => {
+    const list = stops();
+    const i = list.findIndex((x) => x.hasAttribute("data-cursor"));
+    setCursor(list[Math.max(0, Math.min(list.length - 1, i < 0 ? 0 : i + dir))]);
+  };
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setCursor(stops()[0]));
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.kind, target?.id]);
+
   useCommands(
     "detail",
     [
+      { id: "detail.down", label: "Next field", group: "Details", keys: ["arrowdown"], run: () => moveCursor(1) },
+      { id: "detail.up", label: "Previous field", group: "Details", keys: ["arrowup"], run: () => moveCursor(-1) },
+      {
+        id: "detail.open",
+        label: "Open or edit the field under the cursor",
+        group: "Details",
+        keys: ["enter"],
+        run: () => {
+          const el = cursorEl();
+          if (!el) return;
+          if (el.matches("button, a")) el.click();
+          else el.focus();
+        },
+      },
       {
         // Escape steps out one level. In a text field it only leaves the field (the edit is saved on blur) and the pane keeps
         // focus, so its field keys work again; from the pane it closes it (unless pinned) and you're back on the row.
@@ -908,7 +950,12 @@ export function Detail({ target, active }: { target: Target | null; active: bool
       tabIndex={-1}
       // Focus arriving in the pane by any route (a click into its notes, Tab) makes it the active region, so its
       // keys work there: Esc leaves a field and saves it, even in a pinned pane opened from the list.
-      onFocus={() => !active && ui.setRegion("detail")}
+      onFocus={(e) => {
+        if (!active) ui.setRegion("detail");
+        // Whatever field takes focus (a click, Tab, its letter key, F2) takes the cursor with it.
+        const stop = (e.target as HTMLElement).closest<HTMLElement>(PANE_STOPS);
+        if (stop && root.current?.contains(stop)) setCursor(stop);
+      }}
     >
       <div className="detail-bar">
         {/* Drilled in from a project: the way back, named, in place of the heading (Esc does the same). */}

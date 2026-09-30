@@ -1580,48 +1580,26 @@ body.is-col-resizing * {
   border-bottom: 1px solid var(--rule);
 }
 /*
- * Where you are (the One Blue Rule): the active region's cursor takes the blue. The pane has no cursor row of its own,
- * so its title is its marker, like the selected tab in a tab strip: "Details" (or the back link) turns `accent` and a
- * 3px accent tab sits on the header's lower edge under it, growing in from its middle. No fill (owner's request: a full
- * blue band broke the top edge's dark-light-lighter steps, and a faint wash was too faint to help) and no frame; the
- * header's lower rule stays the pane's own grey. It keys off the app's region, not the pane's key handling, so it
- * stays lit while a picker opened from the pane is up.
+ * Where you are (the One Blue Rule): the active region's cursor takes Selection Blue with the 45% accent hairline. The
+ * pane is a list of fields with a cursor of its own (Detail.tsx), so the field under it looks exactly as a focused row
+ * does: blue while you are in the pane, a grey trace while you are elsewhere. A field being typed in shows the ordinary
+ * field focus ring instead. It keys off the app's region, so a picker opened from the pane leaves its field lit.
  */
-.detail-title,
-.detail-back {
-  position: relative;
-  transition: color 120ms var(--ease);
+.detail [data-cursor]:not(:focus) {
+  background: var(--rail-2);
 }
-.detail-title::after,
-.detail-back::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  /* On the header's 1px lower rule: the bar is 44px, the title a line, the back link 28px. */
-  bottom: -15px;
-  height: 3px;
-  border-radius: 2px 2px 0 0;
-  background: var(--accent);
-  transform: scaleX(0);
-  transition: transform 160ms var(--ease);
+.app[data-region="detail"] .detail [data-cursor]:not(:focus) {
+  background: var(--select);
+  color: var(--select-ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--select));
 }
-.detail-back::after {
-  bottom: -9px;
-  left: 4px;
-  right: 8px;
-}
-.app[data-region="detail"] .detail-title,
-.app[data-region="detail"] .detail-back {
-  color: var(--accent);
-}
-.app[data-region="detail"] .detail-title::after,
-.app[data-region="detail"] .detail-back::after {
-  transform: scaleX(1);
+/* Timeline rows keep their grey rule below and take the hairline inside, as list rows do. */
+.app[data-region="detail"] .detail .mini-row[data-cursor]:not(:focus) {
+  border-bottom-color: var(--rule);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .detail-title {
   margin: 0;
-  line-height: 16px;
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
@@ -4807,8 +4785,12 @@ body.is-cal-dragging {
   flex-direction: column;
   gap: 4px;
 }
+/* Padded and bordered like a title field, so it can take the pane's cursor (see the One Blue Rule above). */
 .event-title {
   margin: 0;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 3px;
   font-size: 15px;
   font-weight: 600;
   line-height: 1.3;
