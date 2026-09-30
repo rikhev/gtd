@@ -189,6 +189,8 @@ git commit -am "What changed"
 4. **Builds and restarts**, then checks that the app answers.
 5. **Rolls back automatically** to the previous commit if the new version doesn't come up, and shows the last log lines.
 
+The service runs on Stockholm time (`Environment=TZ=Europe/Stockholm` in `gtd.service`), so the app's "today" turns at your midnight; change it there if you move. Calendar appointments are shown in your browser's time zone either way.
+
 Your data, uploads, login and API key live in `/var/lib/gtd` and are never touched by a deploy. `./deploy/deploy.sh --force` rebuilds even if nothing changed. On the server itself, `/opt/gtd/deploy/update.sh` does the same without the push.
 
 The script asks for your sudo password to restart the service. To skip that, allow just these commands without a password, with `sudo visudo -f /etc/sudoers.d/gtd` (replace `you` with your VPS username):

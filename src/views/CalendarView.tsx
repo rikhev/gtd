@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { CalendarClock, ChevronLeft, ChevronRight, Hourglass } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Hourglass, RefreshCw } from "lucide-react";
 import { completeActions, isStalled, mutate, newAction, plural, projectHealth, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
-import { toggleFeed, useEvents, useHiddenFeeds } from "../calendarFeed.ts";
+import { syncCalendars, toggleFeed, useEvents, useHiddenFeeds, useSyncing } from "../calendarFeed.ts";
 import { ImportantGlyph, Lamp } from "../components/bits.tsx";
 import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
@@ -135,6 +135,49 @@ function layoutRow(days: string[], items: Item[], cap: number) {
 
 type Drag = { key: string; start: string; end: string };
 
+/** The week's hour grid: pixels per hour, and the hour it opens on (the working day, not midnight). */
+const HOUR_PX = 44;
+const OPEN_AT = 7;
+const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+/** Timed, one-day appointments: placed in the hours. Everything else (deadlines, starts, all-day) sits in the band above. */
+const isTimed = (i: Item) => i.kind === "event" && Boolean(i.time) && i.start === i.end;
+
+interface Block {
+  item: Item;
+  top: number;
+  height: number;
+  /** Side by side when appointments overlap: which slot of how many. */
+  slot: number;
+  of: number;
+}
+/** One day's timed appointments as blocks; overlapping ones share the width, as in any calendar. */
+function layoutDay(list: Item[]): Block[] {
+  const sorted = [...list].sort((a, b) => (a.time ?? "").localeCompare(b.time ?? "") || (b.endTime ?? "").localeCompare(a.endTime ?? ""));
+  const out: Block[] = [];
+  let cluster: Block[] = [];
+  let clusterEnd = -1;
+  const flush = () => {
+    const of = Math.max(1, ...cluster.map((b) => b.slot + 1));
+    cluster.forEach((b) => (b.of = of));
+    cluster = [];
+  };
+  for (const item of sorted) {
+    const start = minutesOf(item.time!);
+    // An appointment without an end, or one ending past midnight, runs its hour (or to the end of the day).
+    const end = item.endTime && minutesOf(item.endTime) > start ? minutesOf(item.endTime) : Math.min(24 * 60, start + 60);
+    if (start >= clusterEnd) flush();
+    const taken = new Set(cluster.filter((b) => b.top + b.height > (start / 60) * HOUR_PX).map((b) => b.slot));
+    let slot = 0;
+    while (taken.has(slot)) slot++;
+    const b: Block = { item, top: (start / 60) * HOUR_PX, height: Math.max(20, ((end - start) / 60) * HOUR_PX - 2), slot, of: 1 };
+    cluster.push(b);
+    out.push(b);
+    clusterEnd = Math.max(clusterEnd, end);
+  }
+  flush();
+  return out;
+}
+
 /** A phone-width screen, where bars across seven columns can't be read: the calendar becomes dots and an agenda. */
 function usePhone() {
   const q = "(max-width: 640px)";
@@ -165,6 +208,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const [itemKey, setItemKey] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  // The hour grid opens on the working day (07:00), or an hour before the first appointment when that is earlier.
+  const hoursRef = useRef<HTMLDivElement>(null);
 
   // The hard landscape: the owner's appointments (a subscribed Outlook calendar) sit first on each day.
   const feedFrom = mode === "year" ? `${shown.slice(0, 4)}-01-01` : addDays(firstOfMonth(shown), -7);
@@ -172,6 +217,10 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const { events, feeds } = useEvents(feedFrom, feedTo);
   const feedById = useMemo(() => new Map(feeds.map((f) => [f.id, f])), [feeds]);
   const hiddenFeeds = useHiddenFeeds();
+  const syncing = useSyncing();
+  // The oldest read among the calendars: "last synced" can't claim more than that.
+  const oldest = feeds.map((f) => f.syncedAt).filter((x): x is string => Boolean(x)).sort()[0];
+  const lastSync = oldest ? new Date(oldest).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
   const all = useMemo(
     () => [
       ...events.map((e): Item => ({ key: `e:${e.key}`, kind: "event", id: e.key, title: e.title, start: e.date, end: e.endDate, role: "event", startField: null, endField: null, time: e.time, endTime: e.endTime, location: e.location, color: feedById.get(e.feed)?.color, feedName: feedById.get(e.feed)?.name })),
@@ -186,7 +235,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const focusItem = itemKey ? items.find((i) => i.key === itemKey) : undefined;
 
   useEffect(() => {
-    ui.followDetail(focusItem && focusItem.kind !== "event" ? { kind: focusItem.kind, id: focusItem.id } : null);
+    ui.followDetail(focusItem ? { kind: focusItem.kind, id: focusItem.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusItem?.key]);
   // The item cursor lets go when its item leaves the cursor day (moved, completed).
@@ -246,10 +295,11 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   /** Drag a bar to move it, or an end to change that date, as in any calendar. A press without a move is a click. */
   const startDrag = (e: ReactMouseEvent, item: Item, how: "move" | "start" | "end") => {
     if (e.button !== 0) return;
-    // An appointment belongs to Outlook: it can be pointed at, not moved or opened here.
+    // An appointment belongs to its calendar: it isn't moved here, and a click shows its details.
     if (item.kind === "event") {
       e.preventDefault();
       setItemKey(item.key);
+      ui.openDetail({ kind: "event", id: item.id });
       return;
     }
     e.preventDefault();
@@ -331,13 +381,16 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const ed = editors(ui);
   const ped = projectEditors(ui);
 
-  const inItem = Boolean(focusItem) && focusItem?.kind !== "event";
+  const inItem = Boolean(focusItem);
+  // Appointments belong to their calendar: moved, completed or re-dated only there.
+  const editable = inItem && focusItem?.kind !== "event";
   const cycle = (dir: 1 | -1) => {
     if (!cursorItems.length) return;
     const i = cursorItems.findIndex((x) => x.key === itemKey);
     setItemKey(cursorItems[(i + dir + cursorItems.length) % cursorItems.length].key);
   };
   const commands: Command[] = [
+    { id: "cal.sync", label: "Sync calendars (all of them, now)", group: "Calendar", keys: ["alt+s"], enabled: feeds.length > 0, run: () => void syncCalendars() },
     { id: "cal.week", label: "Week", group: "Calendar", keys: ["1"], run: () => setMode("week") },
     { id: "cal.month", label: "Month", group: "Calendar", keys: ["2"], run: () => setMode("month") },
     { id: "cal.year", label: "Year", group: "Calendar", keys: ["3"], run: () => setMode("year") },
@@ -354,24 +407,23 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       group: "Calendar",
       keys: ["enter"],
       run: () => {
-        if (focusItem && focusItem.kind !== "event") ui.openDetail({ kind: focusItem.kind, id: focusItem.id }, true);
-        else if (focusItem) return;
+        if (focusItem) ui.openDetail({ kind: focusItem.kind, id: focusItem.id }, true);
         else if (mode === "year") setMode("month");
         else if (cursorItems.length) setItemKey(cursorItems[0].key);
       },
     },
     { id: "cal.out", label: "Back to the day", group: "Calendar", keys: ["escape"], enabled: inItem, run: () => setItemKey(null) },
     { id: "cal.new", label: "New action due on this day", group: "Calendar", keys: ["n"], run: () => newOn(cursor) },
-    { id: "cal.later", label: "Move a day later", group: "Calendar", keys: ["alt+arrowright"], enabled: inItem, run: () => shift(focusItem, 1, "move") },
-    { id: "cal.earlier", label: "Move a day earlier", group: "Calendar", keys: ["alt+arrowleft"], enabled: inItem, run: () => shift(focusItem, -1, "move") },
-    { id: "cal.longer", label: "End a day later", group: "Calendar", keys: ["alt+shift+arrowright"], enabled: inItem, run: () => shift(focusItem, 1, "end") },
-    { id: "cal.shorter", label: "End a day earlier", group: "Calendar", keys: ["alt+shift+arrowleft"], enabled: inItem, run: () => shift(focusItem, -1, "end") },
+    { id: "cal.later", label: "Move a day later", group: "Calendar", keys: ["alt+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "move") },
+    { id: "cal.earlier", label: "Move a day earlier", group: "Calendar", keys: ["alt+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "move") },
+    { id: "cal.longer", label: "End a day later", group: "Calendar", keys: ["alt+shift+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "end") },
+    { id: "cal.shorter", label: "End a day earlier", group: "Calendar", keys: ["alt+shift+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "end") },
     {
       id: "cal.done",
       label: "Mark done",
       group: "Calendar",
       keys: ["e"],
-      enabled: inItem,
+      enabled: editable,
       run: () => focusItem && (focusItem.kind === "action" ? completeActions([focusItem.id]) : ped.complete([focusItem.id])),
     },
     {
@@ -379,7 +431,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       label: "Due date",
       group: "Fields",
       keys: ["d"],
-      enabled: inItem,
+      enabled: editable,
       run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], "due") : ped.date([focusItem.id], "due")),
     },
     {
@@ -387,7 +439,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       label: "Start date",
       group: "Fields",
       keys: ["s"],
-      enabled: inItem,
+      enabled: editable,
       run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], "defer") : ped.date([focusItem.id], "start")),
     },
   ];
@@ -451,7 +503,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         title={`${label}\n${dates}${i.overdue ? " · overdue" : ""}`}
         aria-label={`${i.kind === "project" ? "Project" : i.kind === "event" ? `Appointment${i.feedName ? `, ${i.feedName}` : ""}` : "Action"}: ${label}, ${dates}${i.overdue ? ", overdue" : ""}`}
         onMouseDown={(e) => startDrag(e, i, "move")}
-        onDoubleClick={() => i.kind !== "event" && ui.openDetail({ kind: i.kind, id: i.id }, true)}
+        onDoubleClick={() => ui.openDetail({ kind: i.kind, id: i.id }, true)}
       >
         {canStart && <span className="cal-grip is-start" onMouseDown={(e) => startDrag(e, i, "start")} aria-hidden="true" />}
         <span className="cal-line">
@@ -485,7 +537,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           onClick={() => {
             setCursor(d);
             setItemKey(i.key);
-            if (i.kind !== "event") ui.openDetail({ kind: i.kind, id: i.id }, true);
+            ui.openDetail({ kind: i.kind, id: i.id }, true);
           }}
         >
           <span className="cal-agenda-mark" aria-hidden="true">
@@ -561,6 +613,16 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     </div>
   );
 
+  const weekKey = mode === "week" && !phone ? weekDays[0] : "";
+  useEffect(() => {
+    const el = hoursRef.current;
+    if (!el || !weekKey) return;
+    const first = items.filter((i) => isTimed(i) && weekDays.includes(i.start)).map((i) => minutesOf(i.time!) / 60);
+    el.scrollTop = Math.max(0, Math.min(OPEN_AT, ...first.map((h) => Math.floor(h) - 1))) * HOUR_PX;
+    // Only when a week is opened: moving within it keeps the scroll where you left it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekKey]);
+
   let body;
   if (mode === "year") body = <YearGrid year={year} ws={ws} items={all} cursor={cursor} t={t} onPick={(d) => (setCursor(d), setMode("month"))} onCursor={setCursor} />;
   else if (mode === "month") {
@@ -617,15 +679,65 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       </div>
     );
   } else {
-    const row = layoutRow(weekDays, items, WEEK_LANES);
+    // The week with its hours, like any calendar: what has no time of day (deadlines, starts, follow-ups, projects,
+    // all-day appointments) in a band across the top; timed appointments where they fall in the day below.
+    const banded = items.filter((i) => !isTimed(i));
+    const row = layoutRow(weekDays, banded, WEEK_LANES);
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
     body = (
-      <div className="cal-week">
-        <div className="cal-row is-week">
+      <div className="cal-week is-hours">
+        <div className="cal-row is-week is-band" style={{ minHeight: 60 + Math.max(1, row.lanes) * 43 }}>
+          <span className="cal-gutter-label">All day</span>
           <div className="cal-cells">{weekDays.map((d) => dayCell(d, { head: true }))}</div>
           <div className="cal-bars" style={{ gridTemplateRows: `repeat(${Math.max(1, row.lanes)}, 40px)` }}>
             {row.placed.map((p) => bar(p, true))}
           </div>
-          {!row.placed.length && <p className="cal-empty">Nothing scheduled this week. The lists hold the rest.</p>}
+        </div>
+        <div className="cal-hours" ref={hoursRef} aria-label="Hours of the week">
+          <div className="cal-hours-grid" style={{ height: 24 * HOUR_PX }}>
+            <div className="cal-gutter" aria-hidden="true">
+              {Array.from({ length: 24 }, (_, h) => (
+                <span key={h} style={{ top: h * HOUR_PX }}>
+                  {h ? `${String(h).padStart(2, "0")}:00` : ""}
+                </span>
+              ))}
+            </div>
+            {weekDays.map((d) => (
+              <div
+                key={d}
+                data-date={d}
+                className={`cal-hourcol ${d === t ? "is-today" : ""} ${d === cursor ? "is-cursor" : ""} ${dow(d) === 0 || dow(d) === 6 ? "is-weekend" : ""}`}
+                onMouseDown={() => (setItemKey(null), cursorFromMouse(d))}
+              >
+                {layoutDay(items.filter((i) => isTimed(i) && i.start === d)).map((b) => (
+                  <div
+                    key={b.item.key}
+                    className={`cal-block ${b.height < 40 ? "is-compact" : ""} ${itemKey === b.item.key ? "is-focus" : ""}`}
+                    style={{ top: b.top, height: b.height, left: `calc(${(b.slot / b.of) * 100}% + 2px)`, width: `calc(${100 / b.of}% - 4px)`, ...(b.item.color ? { ["--feed" as string]: b.item.color } : {}) }}
+                    title={`${b.item.time}${b.item.endTime ? `–${b.item.endTime}` : ""} ${b.item.title}${b.item.location ? ` · ${b.item.location}` : ""}${b.item.feedName ? `\n${b.item.feedName}` : ""}`}
+                    aria-label={`Appointment${b.item.feedName ? `, ${b.item.feedName}` : ""}: ${b.item.title}, ${formatLong(d)} ${b.item.time}${b.item.endTime ? ` to ${b.item.endTime}` : ""}`}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      setCursor(d);
+                      setItemKey(b.item.key);
+                      ui.openDetail({ kind: "event", id: b.item.id });
+                    }}
+                  >
+                    <span className="cal-block-time">
+                      {b.item.time}
+                      {b.item.endTime && b.height >= 40 ? `–${b.item.endTime}` : ""}
+                    </span>
+                    {/* The title takes the lines the block has room for, then an ellipsis: never a half-cut line. */}
+                    <span className="cal-block-title" style={b.height >= 40 ? { WebkitLineClamp: Math.max(1, Math.floor((b.height - 24) / 15)) } : undefined}>
+                      {b.item.title}
+                    </span>
+                    {b.item.location && b.height > 56 && <span className="cal-block-sub">{b.item.location}</span>}
+                  </div>
+                ))}
+                {d === t && <div className="cal-now" style={{ top: (nowMin / 60) * HOUR_PX }} aria-hidden="true" />}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -646,6 +758,19 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
             <ChevronRight size={16} strokeWidth={2} />
           </button>
         </div>
+        {/* Sync now: every subscribed calendar read again at once; the icon turns while it runs. */}
+        {feeds.length > 0 && (
+          <button
+            type="button"
+            className={`icon-btn cal-sync ${syncing ? "is-syncing" : ""}`}
+            onClick={() => void syncCalendars()}
+            disabled={syncing}
+            aria-label="Sync calendars"
+            title={`Sync calendars (${keyLabel("alt+s")})${lastSync ? ` · last synced ${lastSync}` : ""}`}
+          >
+            <RefreshCw size={14} strokeWidth={2} aria-hidden />
+          </button>
+        )}
         {/* The subscribed calendars, each in its colour: pressing one hides it here for a while (kept in this browser). */}
         {feeds.length > 0 && (
           <div className="cal-legend" aria-label="Calendars">

@@ -1,5 +1,6 @@
+import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip, Pin } from "lucide-react";
+import { X, Paperclip, Pin, Check, CircleHelp, CircleDashed, Video } from "lucide-react";
 import { mutate, newAction, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
@@ -393,6 +394,131 @@ function ActionDetail({ a }: { a: Action }) {
   );
 }
 
+/** A description or location with its links made clickable (and Outlook's rows of underscores left out). */
+function Linked({ text }: { text: string }) {
+  const lines = text.split("\n").filter((l) => !/^[_\-=\s]{8,}$/.test(l));
+  return (
+    <>
+      {lines.map((line, i) => (
+        <span key={i} className="event-line">
+          {line.split(/(https?:\/\/[^\s<>]+)/g).map((part, j) =>
+            /^https?:\/\//.test(part) ? (
+              <a key={j} href={part} target="_blank" rel="noreferrer">
+                {part.length > 60 ? `${part.slice(0, 57)}…` : part}
+              </a>
+            ) : (
+              part
+            ),
+          )}
+        </span>
+      ))}
+    </>
+  );
+}
+
+const JOIN = /https?:\/\/[^\s<>]*(teams\.microsoft\.com\/l\/meetup-join|teams\.live\.com\/meet|zoom\.us\/j\/|meet\.google\.com\/|webex\.com\/)[^\s<>]*/i;
+const STATUS_ORDER = { accepted: 0, tentative: 1, none: 2, declined: 3 } as const;
+const STATUS_LABEL = { accepted: "Accepted", tentative: "Tentative", none: "No answer yet", declined: "Declined" } as const;
+
+/**
+ * An appointment from a subscribed calendar, read-only (owner's request): when and where, how to join, who organised
+ * it and who is coming, and what it's about. Only what the calendar's feed shares can be shown: a published Outlook
+ * calendar leaves attendees out, so the pane says so rather than showing an empty list.
+ */
+function EventDetail({ e }: { e: CalEvent }) {
+  const ui = useUI();
+  const { calendars } = useMeta();
+  const feed = calendars.find((f) => f.id === e.feed);
+  const active = useContext(DetailActive);
+  // T and W add, as in every pane: something to do, or to wait for, that came out of the meeting.
+  useCommands(
+    "detail-event",
+    [
+      { id: "detail.e.addnext", label: "Add a next action (from this appointment)", group: "Details", keys: ["t"], run: () => quickAddNextAction(ui) },
+      { id: "detail.e.addwait", label: "Add a waiting for (from this appointment)", group: "Details", keys: ["w"], run: () => quickAddWaiting(ui) },
+    ],
+    { priority: 21, active },
+  );
+  const when =
+    e.date === e.endDate
+      ? `${formatLong(e.date)}${e.time ? ` · ${e.time}${e.endTime ? `–${e.endTime}` : ""}` : " · all day"}`
+      : `${formatLong(e.date)}${e.time ? ` ${e.time}` : ""} to ${formatLong(e.endDate)}${e.endTime ? ` ${e.endTime}` : ""}`;
+  const join = [e.url, e.location, e.description].map((x) => (x ? JOIN.exec(x)?.[0] : null)).find(Boolean) ?? null;
+  const people = [...e.attendees].sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || (a.name ?? a.email ?? "").localeCompare(b.name ?? b.email ?? ""));
+  const counts = (["accepted", "tentative", "none", "declined"] as const).map((st) => [st, e.attendees.filter((a) => a.status === st).length] as const).filter(([, n]) => n);
+  const nameOf = (p: { name: string | null; email: string | null }) => p.name ?? p.email ?? "Someone";
+  return (
+    <>
+      <div className="event-head">
+        <h3 className="event-title">{e.title}</h3>
+        <span className="event-from">
+          <span className="feed-swatch" style={{ background: feed?.color }} aria-hidden="true" />
+          {feed?.name ?? "Calendar"} · read-only{e.tentative ? " · tentative" : ""}
+        </span>
+      </div>
+      <dl className="event-facts">
+        <div>
+          <dt className="field-label">When</dt>
+          <dd>{when}</dd>
+        </div>
+        {e.location && (
+          <div>
+            <dt className="field-label">Where</dt>
+            <dd>
+              <Linked text={e.location} />
+            </dd>
+          </div>
+        )}
+        {e.organizer && (
+          <div>
+            <dt className="field-label">Organizer</dt>
+            <dd>
+              {nameOf(e.organizer)}
+              {e.organizer.name && e.organizer.email && <span className="muted-text"> · {e.organizer.email}</span>}
+            </dd>
+          </div>
+        )}
+      </dl>
+      {join && (
+        <a className="event-join" href={join} target="_blank" rel="noreferrer">
+          <Video size={14} strokeWidth={2} aria-hidden /> Join the online meeting
+        </a>
+      )}
+      <section className="event-people" aria-label="Attendees">
+        <h3 className="detail-h">
+          Attendees <span className="count">{e.attendees.length || ""}</span>
+        </h3>
+        {counts.length > 0 && <p className="event-counts">{counts.map(([st, n]) => `${n} ${STATUS_LABEL[st].toLowerCase()}`).join(" · ")}</p>}
+        {people.length ? (
+          <ul>
+            {people.map((a, i) => (
+              <li key={i} className={`is-${a.status}`}>
+                <span className="event-status" role="img" aria-label={STATUS_LABEL[a.status]} title={STATUS_LABEL[a.status]}>
+                  {a.status === "accepted" ? <Check size={13} strokeWidth={2.5} /> : a.status === "declined" ? <X size={13} strokeWidth={2.5} /> : a.status === "tentative" ? <CircleHelp size={13} strokeWidth={2} /> : <CircleDashed size={13} strokeWidth={2} />}
+                </span>
+                <span className="event-person">{nameOf(a)}</span>
+                {a.optional && <span className="muted-text small">optional</span>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted-text small">This calendar's feed doesn't include who is invited (published and shared calendars usually leave that out); the full list is in the calendar itself.</p>
+        )}
+      </section>
+      {e.description ? (
+        <section className="event-about" aria-label="Description">
+          <h3 className="detail-h">Description</h3>
+          <p className="event-desc">
+            <Linked text={e.description} />
+          </p>
+        </section>
+      ) : (
+        <p className="muted-text small">{/outlook|office365/i.test(feed?.host ?? "") ? "No description shared. A published Outlook calendar includes it only with “All details”." : "No description shared by this calendar."}</p>
+      )}
+    </>
+  );
+}
+
 function ProjectDetail({ p }: { p: Project }) {
   const ui = useUI();
   const ed = projectEditors(ui);
@@ -653,10 +779,12 @@ export function Detail({ target, active }: { target: Target | null; active: bool
     if (active) root.current?.focus({ preventScroll: true });
   }, [active, target?.id]);
 
+  // An appointment isn't in the store: it comes from the calendars' feed, looked up by its key.
+  const eventHere = useEvent(target?.kind === "event" ? target.id : null);
   // The pane is announced by what it shows: "Action details: Pay the VAT for Q3".
   const paneName = (() => {
     if (!target) return "Details";
-    const kind = ({ action: "Action", project: "Project", stuff: "Inbox item", ref: "Reference" } as Record<string, string>)[target.kind] ?? "Item";
+    const kind = ({ action: "Action", project: "Project", stuff: "Inbox item", ref: "Reference", event: "Appointment" } as Record<string, string>)[target.kind] ?? "Item";
     const title =
       target.kind === "action"
         ? s.actions.find((x) => x.id === target.id)?.title
@@ -664,7 +792,9 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           ? s.projects.find((x) => x.id === target.id)?.title
           : target.kind === "stuff"
             ? s.stuff.find((x) => x.id === target.id)?.text.split("\n")[0]
-            : s.refs.find((x) => x.id === target.id)?.title;
+            : target.kind === "event"
+              ? eventHere?.title
+              : s.refs.find((x) => x.id === target.id)?.title;
     return `${kind} details${title ? `: ${title}` : ""}`;
   })();
 
@@ -682,7 +812,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   } else if (target.kind === "ref") {
     const r = s.refs.find((x) => x.id === target.id);
     body = r ? <RefDetail key={r.id} r={r} /> : null;
-  }
+  } else if (target.kind === "event") body = eventHere ? <EventDetail key={eventHere.key} e={eventHere} /> : null;
 
   return (
     <aside

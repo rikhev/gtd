@@ -4552,3 +4552,265 @@ body.is-cal-dragging {
 .cal-legend + .cal-modes {
   margin-left: 0;
 }
+
+/* The week with its hours (desktop): an all-day band on top (deadlines, starts, follow-ups, projects, all-day
+   appointments), then the day's hours, 44px each, with timed appointments where they fall. A 52px gutter carries the
+   hours and lines the two up. */
+.cal-week.is-hours {
+  flex-direction: column;
+}
+.cal-row.is-week.is-band {
+  flex: none;
+  grid-template-columns: 52px 1fr;
+}
+.cal-row.is-week.is-band .cal-bars {
+  left: 52px;
+}
+.cal-row.is-week.is-band .cal-day:first-child {
+  border-left: 1px solid var(--rule);
+}
+.cal-gutter-label {
+  align-self: end;
+  padding: 0 8px 10px 0;
+  text-align: right;
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.cal-hours {
+  height: clamp(360px, calc(100vh - 330px), 1400px);
+  overflow-y: auto;
+  border-bottom: 1px solid var(--rule);
+}
+.cal-hours-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px repeat(7, 1fr);
+  box-sizing: content-box;
+  padding: 8px 0;
+}
+.cal-gutter {
+  position: relative;
+}
+.cal-gutter span {
+  position: absolute;
+  right: 8px;
+  translate: 0 -50%;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.cal-hourcol {
+  position: relative;
+  min-width: 0;
+  border-left: 1px solid var(--rule);
+  background-image: linear-gradient(to bottom, var(--rule) 1px, transparent 1px);
+  background-size: 100% 44px;
+}
+.cal-hourcol.is-weekend {
+  background-color: color-mix(in srgb, var(--rail) 38%, transparent);
+}
+.cal-hourcol.is-today {
+  background-color: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.cal-block {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 6px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--feed, var(--accent)) 45%, var(--rule-strong));
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--feed, var(--accent)) 14%, var(--sheet));
+  font-size: 12px;
+  line-height: 1.25;
+  cursor: default;
+}
+.cal-block.is-focus {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.cal-block-time {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A short appointment (under 40px): its time and title on one line, cut with an ellipsis. */
+.cal-block.is-compact {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  padding-top: 2px;
+  padding-bottom: 0;
+}
+.cal-block.is-compact .cal-block-title {
+  display: block;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-block-title {
+  color: var(--ink);
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cal-block-sub {
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+/* Now: a red line across today, a dot at its start. */
+.cal-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--alert);
+  pointer-events: none;
+}
+.cal-now::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--alert);
+}
+
+/* Sync now, before the Calendar's legend: the arrows turn while every calendar is read again. */
+.cal-sync {
+  margin-left: auto;
+  color: var(--ink-2);
+}
+.cal-sync + .cal-legend {
+  margin-left: 4px;
+}
+.cal-sync.is-syncing svg {
+  animation: cal-spin 900ms linear infinite;
+}
+@keyframes cal-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cal-sync.is-syncing svg {
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+
+/* An appointment's details (read-only): its title, the calendar it comes from, when and where, how to join, who
+   organised it, who is invited and how they answered, and its description. */
+.event-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.event-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.event-from {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.event-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+.event-facts dt {
+  margin-bottom: 2px;
+}
+.event-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.event-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--sheet);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+}
+.event-join:hover {
+  border-color: var(--ink-2);
+}
+.event-people ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+.event-people li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+.event-status {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-3);
+}
+.event-people .is-accepted .event-status {
+  color: var(--go);
+}
+.event-people .is-declined .event-status {
+  color: var(--alert);
+}
+.event-people .is-declined .event-person {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.event-people .is-tentative .event-status {
+  color: var(--wait);
+}
+.event-person {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.event-desc {
+  margin: 6px 0 0;
+  color: var(--ink-2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.event-line {
+  display: block;
+  min-height: 1.5em;
+}
+.event-counts {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+

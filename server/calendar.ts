@@ -23,6 +23,21 @@ export interface CalEvent {
   /** Local wall-clock times ("09:30"), or null for all-day. */
   time: string | null;
   endTime: string | null;
+  /** What the feed shares beyond the time: published calendars often leave some of it out. */
+  description: string | null;
+  url: string | null;
+  organizer: Person | null;
+  attendees: Attendee[];
+  tentative: boolean;
+}
+export interface Person {
+  name: string | null;
+  email: string | null;
+}
+export interface Attendee extends Person {
+  /** accepted, declined, tentative, or none (no answer yet). */
+  status: "accepted" | "declined" | "tentative" | "none";
+  optional: boolean;
 }
 
 /** A subscribed calendar. The link is a secret: it never leaves the server (the browser gets `FeedInfo`). */
@@ -40,6 +55,8 @@ export interface FeedInfo {
   host: string;
   /** The last fetch's problem, if the calendar couldn't be read. */
   error?: string;
+  /** When it was last read (ISO), if it has been since the server started. */
+  syncedAt?: string;
 }
 
 const KEY = "calendars";
@@ -72,7 +89,30 @@ const hostOf = (u: string) => {
 };
 
 /** What the browser may know of the calendars: names, colours, where they come from. */
-export const feedInfo = (): FeedInfo[] => load().map((f) => ({ id: f.id, name: f.name, color: f.color, host: hostOf(f.url), ...(errors.has(f.id) ? { error: errors.get(f.id) } : {}) }));
+export const feedInfo = (): FeedInfo[] =>
+  load().map((f) => ({
+    id: f.id,
+    name: f.name,
+    color: f.color,
+    host: hostOf(f.url),
+    ...(errors.has(f.id) ? { error: errors.get(f.id) } : {}),
+    ...(cache.has(f.id) ? { syncedAt: new Date(cache.get(f.id)!.at).toISOString() } : {}),
+  }));
+
+/** Sync now (owner's request): read every calendar again, whatever the cache says. A failure keeps the last good copy. */
+export async function syncAll(): Promise<FeedInfo[]> {
+  await Promise.all(
+    load().map(async (f) => {
+      try {
+        cache.set(f.id, { at: Date.now(), events: (await fetchIcs(f.url)).events });
+        errors.delete(f.id);
+      } catch (e) {
+        errors.set(f.id, (e as Error).message);
+      }
+    }),
+  );
+  return feedInfo();
+}
 
 /** A pasted link, as a fetchable https URL (webcal:// is how Outlook and iCloud offer the same address to subscribe). */
 function normalise(raw: string): string {
@@ -142,7 +182,10 @@ export function removeFeed(id: string) {
 const validColor = (c: unknown) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : "#2f6fb5");
 
 async function fetchIcs(url: string): Promise<{ events: RawEvent[]; name: string | null }> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: "follow" });
+  // Network trouble is said in words, not as the runtime's "fetch failed".
+  const res = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: "follow" }).catch((e: Error) => {
+    throw new Error(e.name === "TimeoutError" ? "The calendar didn't answer in time." : "Couldn't reach the calendar. Check the link, or try again later.");
+  });
   if (!res.ok) throw new Error(`The calendar answered ${res.status}. Check the link, or share or publish the calendar again.`);
   const text = await res.text();
   if (!text.includes("BEGIN:VCALENDAR")) throw new Error("That link isn't a calendar (no ICS data). Use the calendar's subscribe (webcal) or ICS link.");
@@ -152,7 +195,7 @@ async function fetchIcs(url: string): Promise<{ events: RawEvent[]; name: string
 }
 
 /** Appointments from every calendar on the days from..to (inclusive), expanded, in local time. */
-export async function eventsBetween(from: string, to: string): Promise<{ events: CalEvent[]; feeds: FeedInfo[] }> {
+export async function eventsBetween(from: string, to: string, zone: string = SERVER): Promise<{ events: CalEvent[]; feeds: FeedInfo[] }> {
   const feeds = load();
   const out: CalEvent[] = [];
   await Promise.all(
@@ -168,7 +211,7 @@ export async function eventsBetween(from: string, to: string): Promise<{ events:
         }
       }
       const got = cache.get(f.id);
-      if (got) out.push(...expand(got.events, from, to).map((e) => ({ ...e, feed: f.id, key: `${f.id}:${e.key}` })));
+      if (got) out.push(...expand(got.events, from, to, zone).map((e) => ({ ...e, feed: f.id, key: `${f.id}:${e.key}` })));
     }),
   );
   return { events: out.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? "")), feeds: feedInfo() };
@@ -194,18 +237,61 @@ interface RawEvent {
   start: Stamp;
   end: Stamp | null;
   rrule: Record<string, string> | null;
-  exdates: string[];
-  recurrenceId: string | null;
+  /** Kept as written: they become days only once the owner's time zone is known. */
+  exdates: Stamp[];
+  recurrenceId: Stamp | null;
   cancelled: boolean;
+  description: string | null;
+  url: string | null;
+  organizer: Person | null;
+  attendees: Attendee[];
+  tentative: boolean;
 }
 
 function unfold(text: string): string[] {
   return text.replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "").split("\n");
 }
 
-function unescape(v: string) {
-  return v.replace(/\\n/gi, " ").replace(/\\([,;\\])/g, "$1").trim();
+function unescape(v: string, keepLines = false) {
+  return v.replace(/\\n/gi, keepLines ? "\n" : " ").replace(/\\([,;\\])/g, "$1").trim();
 }
+
+/** A content line's name, parameters and value; a colon inside a quoted parameter (CN="Lind, Anna: CTO") is not the split. */
+function splitLine(line: string): { name: string; params: Record<string, string>; raw: string; value: string } | null {
+  let q = false;
+  let i = -1;
+  for (let j = 0; j < line.length; j++) {
+    if (line[j] === '"') q = !q;
+    else if (line[j] === ":" && !q) {
+      i = j;
+      break;
+    }
+  }
+  if (i < 0) return null;
+  const head = line.slice(0, i);
+  const parts: string[] = [];
+  let buf = "";
+  q = false;
+  for (const ch of head) {
+    if (ch === '"') q = !q;
+    if (ch === ";" && !q) {
+      parts.push(buf);
+      buf = "";
+    } else buf += ch;
+  }
+  parts.push(buf);
+  const params: Record<string, string> = {};
+  for (const p of parts.slice(1)) {
+    const k = p.indexOf("=");
+    if (k > 0) params[p.slice(0, k).toUpperCase()] = p.slice(k + 1).replace(/^"|"$/g, "");
+  }
+  return { name: parts[0].toUpperCase(), params, raw: parts.slice(1).join(";"), value: line.slice(i + 1) };
+}
+
+const person = (params: Record<string, string>, value: string): Person => {
+  const email = /^mailto:/i.test(value.trim()) ? value.trim().slice(7) : null;
+  return { name: params.CN?.trim() || null, email };
+};
 
 function stamp(value: string, params: string): Stamp | null {
   const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?(Z)?)?$/.exec(value.trim());
@@ -216,20 +302,36 @@ function stamp(value: string, params: string): Stamp | null {
 
 function parse(text: string): RawEvent[] {
   const out: RawEvent[] = [];
-  let cur: Partial<RawEvent> & { exdates?: string[] } | null = null;
+  let cur: Partial<RawEvent> & { exdates?: Stamp[] } | null = null;
   for (const line of unfold(text)) {
-    if (line === "BEGIN:VEVENT") cur = { exdates: [], rrule: null, recurrenceId: null, cancelled: false, location: null };
+    if (line === "BEGIN:VEVENT") cur = { exdates: [], rrule: null, recurrenceId: null, cancelled: false, location: null, description: null, url: null, organizer: null, attendees: [], tentative: false };
     else if (line === "END:VEVENT") {
       if (cur?.uid && cur.start) out.push({ title: "Untitled", end: null, ...cur } as RawEvent);
       cur = null;
     } else if (cur) {
-      const i = line.indexOf(":");
-      if (i < 0) continue;
-      const head = line.slice(0, i);
-      const value = line.slice(i + 1);
-      const [name, ...rest] = head.split(";");
-      const params = rest.join(";");
-      switch (name.toUpperCase()) {
+      const parsed = splitLine(line);
+      if (!parsed) continue;
+      const { name, value, params: p } = parsed;
+      const params = parsed.raw;
+      switch (name) {
+        case "DESCRIPTION":
+          cur.description = unescape(value, true) || null;
+          break;
+        case "URL":
+          cur.url = value.trim() || null;
+          break;
+        case "ORGANIZER":
+          cur.organizer = person(p, value);
+          break;
+        case "ATTENDEE": {
+          const st = (p.PARTSTAT ?? "").toUpperCase();
+          cur.attendees!.push({
+            ...person(p, value),
+            status: st === "ACCEPTED" ? "accepted" : st === "DECLINED" ? "declined" : st === "TENTATIVE" ? "tentative" : "none",
+            optional: (p.ROLE ?? "").toUpperCase() === "OPT-PARTICIPANT",
+          });
+          break;
+        }
         case "UID":
           cur.uid = value.trim();
           break;
@@ -251,16 +353,17 @@ function parse(text: string): RawEvent[] {
         case "EXDATE":
           for (const v of value.split(",")) {
             const s = stamp(v, params);
-            if (s) cur.exdates!.push(localDay(s));
+            if (s) cur.exdates!.push(s);
           }
           break;
         case "RECURRENCE-ID": {
           const s = stamp(value, params);
-          cur.recurrenceId = s ? localDay(s) : null;
+          cur.recurrenceId = s;
           break;
         }
         case "STATUS":
           cur.cancelled = value.trim().toUpperCase() === "CANCELLED";
+          cur.tentative = value.trim().toUpperCase() === "TENTATIVE";
           break;
       }
     }
@@ -292,16 +395,32 @@ const WINDOWS: Record<string, string> = {
   UTC: "UTC",
   "Coordinated Universal Time": "UTC",
 };
-const LOCAL = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const SERVER = Intl.DateTimeFormat().resolvedOptions().timeZone;
+/**
+ * The owner's time zone, as their browser reports it, for this expansion. Not the server's: a VPS runs on UTC, and
+ * reading Outlook's 12:15 in Stockholm as UTC put lunch at 10:15 (owner's bug report). Set at the start of each
+ * (synchronous) expansion.
+ */
+let OWNER = SERVER;
+export const validZone = (z: string | undefined | null) => {
+  if (!z) return null;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: z });
+    return z;
+  } catch {
+    return null;
+  }
+};
 
 function zoneOf(tz: string | null): string {
-  if (!tz) return LOCAL;
+  // A time with no zone of its own ("floating") is the owner's local time.
+  if (!tz) return OWNER;
   const mapped = WINDOWS[tz] ?? tz;
   try {
     new Intl.DateTimeFormat("en", { timeZone: mapped });
     return mapped;
   } catch {
-    return LOCAL;
+    return OWNER;
   }
 }
 
@@ -323,7 +442,7 @@ function instant(s: Stamp): Date {
 const pad = (n: number) => String(n).padStart(2, "0");
 /** The owner's local day and time for an instant. */
 function local(at: Date): { day: string; time: string } {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: LOCAL, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(at).map((x) => [x.type, x.value]));
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: OWNER, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(at).map((x) => [x.type, x.value]));
   return { day: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
 }
 function localDay(s: Stamp): string {
@@ -392,17 +511,19 @@ function occurrences(e: RawEvent, untilDay: string): Stamp[] {
   return out;
 }
 
-function expand(raw: RawEvent[], from: string, to: string): Omit<CalEvent, "feed">[] {
+function expand(raw: RawEvent[], from: string, to: string, zone: string): Omit<CalEvent, "feed">[] {
+  OWNER = zone;
   // Moved or cancelled single occurrences replace their series' day.
   const overrides = new Map<string, Set<string>>();
-  for (const e of raw) if (e.recurrenceId) overrides.set(e.uid, (overrides.get(e.uid) ?? new Set()).add(e.recurrenceId));
+  for (const e of raw) if (e.recurrenceId) overrides.set(e.uid, (overrides.get(e.uid) ?? new Set()).add(localDay(e.recurrenceId)));
   const out: Omit<CalEvent, "feed">[] = [];
   for (const e of raw) {
     if (e.cancelled) continue;
     const lengthMs = e.end ? instant(e.end).getTime() - instant(e.start).getTime() : e.start.allDay ? 86_400_000 : 0;
+    const skipped = new Set(e.exdates.map(localDay));
     for (const s of e.recurrenceId ? [e.start] : occurrences(e, to)) {
       const startDay = localDay(s);
-      if (!e.recurrenceId && (e.exdates.includes(startDay) || overrides.get(e.uid)?.has(startDay))) continue;
+      if (!e.recurrenceId && (skipped.has(startDay) || overrides.get(e.uid)?.has(startDay))) continue;
       const begin = instant(s);
       const finish = new Date(begin.getTime() + lengthMs);
       let date: string, endDate: string, time: string | null, endTime: string | null;
@@ -422,7 +543,7 @@ function expand(raw: RawEvent[], from: string, to: string): Omit<CalEvent, "feed
         endTime = lengthMs ? b.time : null;
       }
       if (endDate < from || date > to) continue;
-      out.push({ key: `${e.uid}:${date}`, title: e.title, location: e.location, date, endDate, time, endTime });
+      out.push({ key: `${e.uid}:${date}`, title: e.title, location: e.location, date, endDate, time, endTime, description: e.description, url: e.url, organizer: e.organizer, attendees: e.attendees, tentative: e.tentative });
     }
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));

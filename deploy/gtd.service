@@ -13,6 +13,8 @@ Environment=HOST=127.0.0.1
 Environment=PORT=8787
 Environment=GTD_DATA_DIR=/var/lib/gtd
 Environment=GTD_ENV_FILE=/var/lib/gtd/.env
+# The owner's day, not the VPS's UTC one: "today" (tickler, Trash, review ages) turns at local midnight.
+Environment=TZ=Europe/Stockholm
 ExecStart=/usr/bin/node --env-file-if-exists=/var/lib/gtd/.env --import tsx server/index.ts
 Restart=on-failure
 RestartSec=3

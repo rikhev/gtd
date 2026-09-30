@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { useMeta } from "./store.ts";
+import { notify, plural, updateMeta, useMeta } from "./store.ts";
 
 /** One appointment from a subscribed calendar, in local time (server/calendar.ts). Read-only. */
 export interface CalEvent {
@@ -12,6 +12,12 @@ export interface CalEvent {
   endDate: string;
   time: string | null;
   endTime: string | null;
+  /** What the feed shares beyond the time (published calendars often leave some of it out). */
+  description: string | null;
+  url: string | null;
+  organizer: { name: string | null; email: string | null } | null;
+  attendees: { name: string | null; email: string | null; status: "accepted" | "declined" | "tentative" | "none"; optional: boolean }[];
+  tentative: boolean;
 }
 
 /** A subscribed calendar as the browser knows it: never its link. */
@@ -21,6 +27,7 @@ export interface FeedInfo {
   color: string;
   host: string;
   error?: string;
+  syncedAt?: string;
 }
 
 // Fetched per range and kept for a few minutes, so moving between weeks and views doesn't ask again.
@@ -31,8 +38,10 @@ const FRESH_MS = 5 * 60_000;
 export function useEvents(from: string, to: string): { events: CalEvent[]; feeds: FeedInfo[] } {
   const { calendars } = useMeta();
   const hidden = useHiddenFeeds();
+  // A sync (or a changed calendar) bumps the version, so every open view asks again.
+  const version = useSyncExternalStore(subscribeVersion, () => version_);
   const ids = calendars.map((c) => c.id).join(",");
-  const key = `${ids}|${from}|${to}`;
+  const key = `${ids}|${from}|${to}|${version}`;
   const hit = cache.get(key);
   const [, bump] = useState(0);
   useEffect(() => {
@@ -40,10 +49,13 @@ export function useEvents(from: string, to: string): { events: CalEvent[]; feeds
     const c = cache.get(key);
     if (c && Date.now() - c.at < FRESH_MS) return;
     let live = true;
-    fetch(`/api/calendar/events?from=${from}&to=${to}`)
+    // The server converts every appointment to this browser's time zone (it may itself run on UTC).
+    fetch(`/api/calendar/events?from=${from}&to=${to}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
       .then((r) => r.json())
       .then((j: { events?: CalEvent[] }) => {
         cache.set(key, { at: Date.now(), events: j.events ?? [] });
+        for (const e of j.events ?? []) byKey.set(e.key, e);
+        indexListeners.forEach((l) => l());
         if (live) bump((n) => n + 1);
       })
       .catch(() => undefined);
@@ -55,8 +67,75 @@ export function useEvents(from: string, to: string): { events: CalEvent[]; feeds
   return { events: (hit?.events ?? []).filter((e) => !hidden.has(e.feed) && calendars.some((c) => c.id === e.feed)), feeds: calendars };
 }
 
-/** Forget what was fetched (a calendar added, changed or removed). */
-export const clearEvents = () => cache.clear();
+/** Every appointment seen, by key, for the details pane (appointments aren't kept in the store). */
+const byKey = new Map<string, CalEvent>();
+const indexListeners = new Set<() => void>();
+export function useEvent(key: string | null): CalEvent | undefined {
+  return useSyncExternalStore(
+    (l) => {
+      indexListeners.add(l);
+      return () => indexListeners.delete(l);
+    },
+    () => (key ? byKey.get(key) : undefined),
+  );
+}
+
+let version_ = 0;
+const versionListeners = new Set<() => void>();
+const subscribeVersion = (l: () => void) => {
+  versionListeners.add(l);
+  return () => versionListeners.delete(l);
+};
+/** Forget what was fetched (a calendar added, changed or removed, or synced): open views fetch again. */
+export const clearEvents = () => {
+  cache.clear();
+  version_++;
+  versionListeners.forEach((l) => l());
+};
+
+let syncing: Promise<void> | null = null;
+/**
+ * Sync now: every subscribed calendar is read again at once (owner's request: all of them, not one), then shown.
+ * The toast says what happened, naming any calendar that couldn't be read.
+ */
+export function syncCalendars(): Promise<void> {
+  if (syncing) return syncing;
+  syncing = (async () => {
+    try {
+      const j = (await (await fetch("/api/calendars/sync", { method: "POST" })).json()) as { calendars?: FeedInfo[] };
+      const cals = j.calendars ?? [];
+      updateMeta({ calendars: cals });
+      clearEvents();
+      const failed = cals.filter((c) => c.error);
+      notify(
+        !cals.length
+          ? "No calendars to sync. Add one in Settings › General."
+          : failed.length
+            ? `Synced, but ${failed.map((c) => `“${c.name}”`).join(" and ")} couldn't be read (the last copy is kept).`
+            : `${plural(cals.length, "calendar")} synced.`,
+        failed.length ? { tone: "error" } : {},
+      );
+    } catch {
+      notify("Couldn't reach the server to sync the calendars.", { tone: "error" });
+    } finally {
+      syncing = null;
+      syncListeners.forEach((l) => l());
+    }
+  })();
+  syncListeners.forEach((l) => l());
+  return syncing;
+}
+const syncListeners = new Set<() => void>();
+/** Whether a sync is running (for the button's turning icon). */
+export function useSyncing(): boolean {
+  return useSyncExternalStore(
+    (l) => {
+      syncListeners.add(l);
+      return () => syncListeners.delete(l);
+    },
+    () => syncing !== null,
+  );
+}
 
 /*
  * Calendars can be hidden for a while in this browser (the Calendar's legend), say the private one during work.

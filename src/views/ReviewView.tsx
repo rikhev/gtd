@@ -226,7 +226,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const nav = useListNav(`review:${step.id}`, useMemo(() => [{ key: step.id, rowKeys: rows.map((r) => r.key), showHeader: false }], [rows, step.id]));
   const focusRow = rows.find((r) => r.key === nav.focus);
   useEffect(() => {
-    ui.followDetail(focusRow && focusRow.kind !== "area" && focusRow.kind !== "event" ? { kind: focusRow.kind, id: focusRow.id } : null);
+    ui.followDetail(focusRow && focusRow.kind !== "area" ? { kind: focusRow.kind, id: focusRow.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRow?.key]);
   /** ⌘↵ on any step: you've been through it; it counts as clear once nothing in it is open. Then the next step. */
@@ -361,7 +361,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
-    { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow) && focusRow?.kind !== "area" && focusRow?.kind !== "event", run: () => focusRow && focusRow.kind !== "area" && focusRow.kind !== "event" && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
+    { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow) && focusRow?.kind !== "area", run: () => focusRow && focusRow.kind !== "area" && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     {
       id: "rv.done",
       label: step.id === "someday" ? "Activate" : "Mark done",

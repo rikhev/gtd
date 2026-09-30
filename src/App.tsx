@@ -1,3 +1,4 @@
+import { syncCalendars } from "./calendarFeed.ts";
 import { fits, openFit, useFit } from "./fit.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -337,6 +338,8 @@ export default function App() {
         ui.startReview();
       },
     },
+    // Sync the subscribed calendars from anywhere (in the Calendar also ⌥S and its toolbar button).
+    { id: "g.synccal", label: "Sync calendars", group: "Calendar", enabled: meta.calendars.length > 0 && view !== "calendar", run: () => void syncCalendars() },
     { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["shift+r"], run: ui.startReview },
     // A project from anywhere: its outcome, its area, its first next action (on Projects, N adds one in place).
     { id: "g.newproject", label: "New project", group: "Projects", keys: ["alt+n"], run: () => projectEditors(ui).create() },
