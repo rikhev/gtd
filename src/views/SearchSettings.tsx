@@ -1,5 +1,6 @@
+import { clearEvents, type FeedInfo } from "../calendarFeed.ts";
 import { useEffect, useMemo, useState } from "react";
-import { mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
+import { getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { keyLabel, runKey, useCommands, type Command } from "../keys.ts";
 import { ChevronDown, Download } from "lucide-react";
@@ -109,7 +110,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: rules, contexts, Claude, export                            */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "lang" | "export"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "rule" | "context" | "area" | "apikey" | "stall" | "theme" | "trash" | "week" | "lang" | "export" | "feed" | "addfeed"; id: ID; text: string; status?: string; color?: string };
 
 /** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–5. */
 const TABS = [
@@ -155,7 +156,12 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         key: "calendar",
         label: "Calendar",
         hideCount: true,
-        rows: [{ key: "week", kind: "week" as const, id: "week", text: "Week starts on" }],
+        rows: [
+          { key: "week", kind: "week" as const, id: "week", text: "Week starts on" },
+          // Subscribed calendars (the hard landscape), each named and coloured, then the way to add one.
+          ...meta.calendars.map((f) => ({ key: `f:${f.id}`, kind: "feed" as const, id: f.id, text: f.name, color: f.color, status: f.error })),
+          { key: "addfeed", kind: "addfeed" as const, id: "addfeed", text: "Add a calendar" },
+        ],
       },
       {
         key: "review",
@@ -219,7 +225,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.clarifyLang],
+    [s.rules, s.contexts, s.areas, meta.hasKey, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.clarifyLang, meta.calendars],
   );
   const shown = useMemo(() => groups.filter((g) => TAB_OF[g.key] === tab), [groups, tab]);
   // No group headings: the tab already says what the list is (owner's decision); each tab is one plain list.
@@ -296,6 +302,64 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           current: String(meta.weekStart),
           onPick: (v) => v !== null && void saveWeekStart(v === "0" ? 0 : 1),
         }),
+    },
+    { id: "set.addfeed", label: "Add a calendar (Outlook, iCloud…)", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
+    {
+      id: "set.feedlink",
+      label: "Replace this calendar's link",
+      group: "Settings",
+      keys: ["enter"],
+      enabled: cur?.kind === "feed",
+      run: () =>
+        cur &&
+        ui.openPicker({
+          type: "text",
+          title: `${cur.text}: a new link`,
+          current: "",
+          placeholder: "webcal://… or https://….ics",
+          preview: linkPreview,
+          onPick: (v) => void patchCalendar(cur.id, { url: v.trim() }, `“${cur.text}” now reads the new link`),
+        }),
+    },
+    {
+      id: "set.feedname",
+      label: "Rename this calendar",
+      group: "Settings",
+      keys: ["f2"],
+      enabled: cur?.kind === "feed",
+      run: () =>
+        cur &&
+        ui.openPicker({
+          type: "text",
+          title: "Calendar name",
+          current: cur.text,
+          placeholder: "Work, Private, Family…",
+          onPick: (v) => v.trim() && void patchCalendar(cur.id, { name: v.trim() }, `Renamed “${v.trim()}”`),
+        }),
+    },
+    {
+      id: "set.feedcolor",
+      label: "Change this calendar's colour",
+      group: "Settings",
+      keys: ["c"],
+      enabled: cur?.kind === "feed",
+      run: () =>
+        cur &&
+        ui.openPicker({
+          type: "list",
+          title: "Colour",
+          items: CONTEXT_COLORS.map((c) => ({ id: c, label: COLOR_NAMES[c], color: c })),
+          current: cur.color,
+          onPick: (c) => c && void patchCalendar(cur.id, { color: c }, "Colour changed"),
+        }),
+    },
+    {
+      id: "set.feeddelete",
+      label: "Remove this calendar",
+      group: "Settings",
+      keys: ["backspace", "delete"],
+      enabled: cur?.kind === "feed",
+      run: () => cur && void removeCalendar(cur.id, cur.text),
     },
     {
       id: "set.lang",
@@ -510,6 +574,21 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Week starts on</span>
             <span className="subject-more">The first column of the calendar's weeks and months.</span>
           </span>
+        ) : r.kind === "feed" ? (
+          <span className="subject">
+            <span className="subject-text strong">
+              <span className="feed-swatch" style={{ background: r.color }} aria-hidden="true" />
+              {r.text}
+            </span>
+            <span className={`subject-more ${r.status ? "error-text" : ""}`}>
+              {r.status ? `Can't be read right now: ${r.status}` : `From ${meta.calendars.find((f) => f.id === r.id)?.host ?? "a link"}. Read-only; the link stays on the server.`}
+            </span>
+          </span>
+        ) : r.kind === "addfeed" ? (
+          <span className="subject">
+            <span className="subject-text strong">Add a calendar</span>
+            <span className="subject-more">Outlook: Settings › Calendar › Shared calendars › Publish a calendar, then the ICS link. iCloud: share the calendar as a public calendar, then its webcal link. Shown read-only in the Calendar, Look back and Upcoming.</span>
+          </span>
         ) : r.kind === "lang" ? (
           <span className="subject">
             <span className="subject-text strong">Clarify in</span>
@@ -551,6 +630,10 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           valueBtn(r, <span className="num">{plural(meta.trashDays, "day")}</span>)
         ) : r.kind === "week" ? (
           valueBtn(r, <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>)
+        ) : r.kind === "feed" ? (
+          valueBtn(r, <span>{r.status ? "Can't read" : "Change link"}</span>)
+        ) : r.kind === "addfeed" ? (
+          valueBtn(r, <span>Add…</span>)
         ) : r.kind === "lang" ? (
           valueBtn(r, <span>{LANG_NAME[meta.clarifyLang]}</span>)
         ) : r.kind === "export" ? (
@@ -591,7 +674,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ]
       : tab === "data"
         ? [{ k: "enter", label: "Download" }]
-        : [{ k: "enter", label: "Change" }]),
+        : cur?.kind === "feed"
+          ? [{ k: "enter", label: "Link" }, { k: "f2", label: "Rename" }, { k: "c", label: "Colour" }, { k: "delete", label: "Remove" }]
+          : cur?.kind === "addfeed"
+            ? [{ k: "enter", label: "Add a calendar" }]
+            : [{ k: "enter", label: "Change" }]),
   ];
 
   // On a phone the tabs are one sideways-scrolling strip: keep the current one in view.
@@ -668,3 +755,73 @@ async function saveWeekStart(start: 0 | 1) {
     notify(`Weeks now start on ${j.weekStart === 0 ? "Sunday" : "Monday"}.`);
   } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }
+
+const linkPreview = (v: string) => {
+  const u = v.trim();
+  if (!u) return { ok: false, text: "Paste the calendar's webcal or ICS link" };
+  if (!/^(https|webcals?|http):\/\//i.test(u)) return { ok: false, text: "A webcal or https link, from the calendar's share or publish settings" };
+  return { ok: true, text: "Checks the link first. It stays on the server; only the appointments are shown, read-only." };
+};
+
+/** Add a calendar: its link (checked first), then its name (the calendar's own as the suggestion), then its colour. */
+function addCalendar(ui: ReturnType<typeof useUI>) {
+  ui.openPicker({
+    type: "text",
+    title: "Calendar link",
+    current: "",
+    placeholder: "webcal://… or https://….ics",
+    preview: linkPreview,
+    onPick: async (v) => {
+      const url = v.trim();
+      if (!url) return;
+      const probe = (await (await fetch("/api/calendars/probe", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) })).json()) as { ok: boolean; error?: string; count?: number; name?: string | null };
+      if (!probe.ok) return notify(probe.error ?? "That link didn't work.", { tone: "error" });
+      const guess = probe.name || (/outlook|office365/i.test(url) ? "Work" : /icloud/i.test(url) ? "Private" : "Calendar");
+      window.setTimeout(() =>
+        ui.openPicker({
+          type: "text",
+          title: `Name it (${plural(probe.count ?? 0, "appointment")} found)`,
+          current: guess,
+          placeholder: "Work, Private, Family…",
+          onPick: (n) => {
+            const name = n.trim() || guess;
+            const used = new Set(getMeta().calendars.map((c) => c.color));
+            window.setTimeout(() =>
+              ui.openPicker({
+                type: "list",
+                title: `Colour for “${name}”`,
+                items: CONTEXT_COLORS.map((c) => ({ id: c, label: COLOR_NAMES[c], color: c })),
+                current: CONTEXT_COLORS.find((c) => !used.has(c)) ?? CONTEXT_COLORS[0],
+                onPick: (color) => color && void createCalendar(name, color, url),
+              }),
+            );
+          },
+        }),
+      );
+    },
+  });
+}
+
+async function createCalendar(name: string, color: string, url: string) {
+  const j = (await (await fetch("/api/calendars", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, color, url }) })).json()) as { ok: boolean; error?: string; calendars?: FeedInfo[] };
+  if (!j.ok) return notify(j.error ?? "That calendar couldn't be added.", { tone: "error" });
+  clearEvents();
+  updateMeta({ calendars: j.calendars ?? [] });
+  notify(`“${name}” added. Its appointments are in the Calendar.`);
+}
+
+async function patchCalendar(id: string, patch: { name?: string; color?: string; url?: string }, done: string) {
+  const j = (await (await fetch(`/api/calendars/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) })).json()) as { ok: boolean; error?: string; calendars?: FeedInfo[] };
+  if (!j.ok) return notify(j.error ?? "That didn't work.", { tone: "error" });
+  if (patch.url) clearEvents();
+  updateMeta({ calendars: j.calendars ?? [] });
+  notify(done);
+}
+
+async function removeCalendar(id: string, name: string) {
+  const j = (await (await fetch(`/api/calendars/${id}`, { method: "DELETE" })).json()) as { calendars?: FeedInfo[] };
+  clearEvents();
+  updateMeta({ calendars: j.calendars ?? [] });
+  notify(`“${name}” removed. Paste its link again to bring it back.`);
+}
+

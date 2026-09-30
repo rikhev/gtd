@@ -8,6 +8,7 @@ import { extract, guessMime, looksLikeEmail } from "./extract.ts";
 import { cancelClarify, clarifyLang, clearApiKey, describeError, forgetProposal, hasCredentials, jobStatus, keyHint, setApiKey, startClarify, suggestRules } from "./claude.ts";
 import { exportJson, exportZip } from "./export.ts";
 import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
+import { addFeed, eventsBetween, feedInfo, probe, removeFeed, updateFeed } from "./calendar.ts";
 import { today } from "../shared/dates.ts";
 import type { FileRow, Op } from "../shared/types.ts";
 
@@ -53,7 +54,7 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), clarifyLang: clarifyLang() } });
+  return c.json({ state: loadState(), meta: { hasKey: hasCredentials(), keyHint: keyHint(), today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), clarifyLang: clarifyLang(), calendars: feedInfo() } });
 });
 
 app.put("/api/settings/key", async (c) => {
@@ -188,6 +189,36 @@ app.post("/api/rules/suggest", async (c) => {
   } catch (e) {
     return c.json({ error: describeError(e) }, 502);
   }
+});
+
+/**
+ * Subscribed calendars (Outlook, iCloud… read-only ICS/webcal): their links stay here; the browser gets names, colours,
+ * hosts and the appointments.
+ */
+app.post("/api/calendars/probe", async (c) => {
+  const { url } = (await c.req.json().catch(() => ({}))) as { url?: string };
+  const r = await probe(String(url ?? ""));
+  return c.json(r, r.ok ? 200 : 400);
+});
+app.post("/api/calendars", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { name?: string; color?: string; url?: string };
+  const r = await addFeed(body);
+  return c.json({ ...r, calendars: feedInfo() }, r.ok ? 200 : 400);
+});
+app.patch("/api/calendars/:id", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { name?: string; color?: string; url?: string };
+  const r = await updateFeed(c.req.param("id"), body);
+  return c.json({ ...r, calendars: feedInfo() }, r.ok ? 200 : 400);
+});
+app.delete("/api/calendars/:id", (c) => {
+  removeFeed(c.req.param("id"));
+  return c.json({ ok: true, calendars: feedInfo() });
+});
+app.get("/api/calendar/events", async (c) => {
+  const from = c.req.query("from") ?? "";
+  const to = c.req.query("to") ?? "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) return c.json({ error: "from and to must be days, from first" }, 400);
+  return c.json(await eventsBetween(from, to));
 });
 
 /** Weeks without progress before a project counts as stalled (the owner can change it in Settings). */

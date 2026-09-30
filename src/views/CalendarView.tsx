@@ -4,6 +4,7 @@ import { completeActions, isStalled, mutate, newAction, plural, projectHealth, u
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
+import { toggleFeed, useEvents, useHiddenFeeds } from "../calendarFeed.ts";
 import { ImportantGlyph, Lamp } from "../components/bits.tsx";
 import { askContext, editors } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
@@ -17,11 +18,18 @@ import type { ID, State } from "../../shared/types.ts";
  */
 
 type Mode = "week" | "month" | "year";
-type Role = "span" | "due" | "start" | "followup" | "tickler";
+type Role = "span" | "due" | "start" | "followup" | "tickler" | "event";
 interface Item {
   key: string;
-  kind: "action" | "project";
+  /** An appointment from the subscribed Outlook calendar: read-only, never dragged or opened. */
+  kind: "action" | "project" | "event";
   id: ID;
+  time?: string | null;
+  endTime?: string | null;
+  location?: string | null;
+  /** The subscribed calendar's colour, and its name. */
+  color?: string;
+  feedName?: string;
   title: string;
   start: string;
   end: string;
@@ -153,11 +161,24 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const mode = phone ? phoneMode : deskMode;
   const setMode = phone ? setPhoneMode : setDeskMode;
   const [cursor, setCursor] = useState(t);
+  const [shown, setShown] = useState(t);
   const [itemKey, setItemKey] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
-  const all = useMemo(() => itemsOf(s, t), [s, t]);
+  // The hard landscape: the owner's appointments (a subscribed Outlook calendar) sit first on each day.
+  const feedFrom = mode === "year" ? `${shown.slice(0, 4)}-01-01` : addDays(firstOfMonth(shown), -7);
+  const feedTo = mode === "year" ? `${shown.slice(0, 4)}-12-31` : addDays(firstOfMonth(shown), 45);
+  const { events, feeds } = useEvents(feedFrom, feedTo);
+  const feedById = useMemo(() => new Map(feeds.map((f) => [f.id, f])), [feeds]);
+  const hiddenFeeds = useHiddenFeeds();
+  const all = useMemo(
+    () => [
+      ...events.map((e): Item => ({ key: `e:${e.key}`, kind: "event", id: e.key, title: e.title, start: e.date, end: e.endDate, role: "event", startField: null, endField: null, time: e.time, endTime: e.endTime, location: e.location, color: feedById.get(e.feed)?.color, feedName: feedById.get(e.feed)?.name })),
+      ...itemsOf(s, t),
+    ],
+    [s, t, events, feedById],
+  );
   // While a bar is dragged it is drawn where it would land.
   const items = useMemo(() => (drag ? all.map((i) => (i.key === drag.key ? { ...i, start: drag.start, end: drag.end } : i)) : all), [all, drag]);
   const onDay = (d: string) => items.filter((i) => i.start <= d && i.end >= d);
@@ -165,7 +186,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const focusItem = itemKey ? items.find((i) => i.key === itemKey) : undefined;
 
   useEffect(() => {
-    ui.followDetail(focusItem ? { kind: focusItem.kind, id: focusItem.id } : null);
+    ui.followDetail(focusItem && focusItem.kind !== "event" ? { kind: focusItem.kind, id: focusItem.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusItem?.key]);
   // The item cursor lets go when its item leaves the cursor day (moved, completed).
@@ -177,7 +198,6 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   // The period on screen follows the cursor day.
   // The period on screen follows the cursor when the keyboard or the arrows move it; a click on a day or item that
   // falls outside it (October's first days at the foot of September) picks it without turning the page.
-  const [shown, setShown] = useState(t);
   const weekDays = range(startOfWeek(shown, ws), 7);
   const monthStart = firstOfMonth(shown);
   const gridStart = startOfWeek(monthStart, ws);
@@ -226,6 +246,12 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   /** Drag a bar to move it, or an end to change that date, as in any calendar. A press without a move is a click. */
   const startDrag = (e: ReactMouseEvent, item: Item, how: "move" | "start" | "end") => {
     if (e.button !== 0) return;
+    // An appointment belongs to Outlook: it can be pointed at, not moved or opened here.
+    if (item.kind === "event") {
+      e.preventDefault();
+      setItemKey(item.key);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     // The second press of a double-click opens the item's details. It must be caught here: a press takes the bars out
@@ -305,7 +331,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const ed = editors(ui);
   const ped = projectEditors(ui);
 
-  const inItem = Boolean(focusItem);
+  const inItem = Boolean(focusItem) && focusItem?.kind !== "event";
   const cycle = (dir: 1 | -1) => {
     if (!cursorItems.length) return;
     const i = cursorItems.findIndex((x) => x.key === itemKey);
@@ -328,7 +354,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       group: "Calendar",
       keys: ["enter"],
       run: () => {
-        if (focusItem) ui.openDetail({ kind: focusItem.kind, id: focusItem.id }, true);
+        if (focusItem && focusItem.kind !== "event") ui.openDetail({ kind: focusItem.kind, id: focusItem.id }, true);
+        else if (focusItem) return;
         else if (mode === "year") setMode("month");
         else if (cursorItems.length) setItemKey(cursorItems[0].key);
       },
@@ -394,8 +421,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
 
   const bar = (p: Placed, rich: boolean) => {
     const i = p.item;
-    const single = i.role === "followup" || i.role === "tickler";
-    const quiet = single;
+    const single = i.role === "followup" || i.role === "tickler" || i.role === "event";
+    const quiet = i.role === "followup" || i.role === "tickler";
     const canStart = !single && !p.contL;
     const canEnd = !single && !p.contR;
     const cls = [
@@ -413,18 +440,18 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       drag?.key === i.key ? "is-dragging" : "",
     ].join(" ");
     const label =
-      i.role === "followup" ? `Follow up: ${i.waiting ?? ""} · ${i.title}` : i.role === "tickler" ? `Comes back: ${i.title}` : i.waiting ? `${i.title} · waiting on ${i.waiting}` : i.title;
+      i.role === "event" ? `${i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""} ` : ""}${i.title}${i.location ? ` · ${i.location}` : ""}` : i.role === "followup" ? `Follow up: ${i.waiting ?? ""} · ${i.title}` : i.role === "tickler" ? `Comes back: ${i.title}` : i.waiting ? `${i.title} · waiting on ${i.waiting}` : i.title;
     const dates =
-      i.role === "due" ? `due ${formatLong(i.end)}` : i.role === "start" ? `starts ${formatLong(i.start)}` : i.start === i.end ? formatLong(i.start) : `${formatLong(i.start)} to ${formatLong(i.end)}, due ${formatLong(i.end)}`;
+      i.role === "event" ? (i.start === i.end ? formatLong(i.start) : `${formatLong(i.start)} to ${formatLong(i.end)}`) : i.role === "due" ? `due ${formatLong(i.end)}` : i.role === "start" ? `starts ${formatLong(i.start)}` : i.start === i.end ? formatLong(i.start) : `${formatLong(i.start)} to ${formatLong(i.end)}, due ${formatLong(i.end)}`;
     return (
       <div
         key={i.key}
         className={cls}
-        style={{ gridColumn: `${p.col} / span ${p.span}`, gridRow: p.lane + 1 }}
+        style={{ gridColumn: `${p.col} / span ${p.span}`, gridRow: p.lane + 1, ...(i.color ? { ["--feed" as string]: i.color } : {}) }}
         title={`${label}\n${dates}${i.overdue ? " · overdue" : ""}`}
-        aria-label={`${i.kind === "project" ? "Project" : "Action"}: ${label}, ${dates}${i.overdue ? ", overdue" : ""}`}
+        aria-label={`${i.kind === "project" ? "Project" : i.kind === "event" ? `Appointment${i.feedName ? `, ${i.feedName}` : ""}` : "Action"}: ${label}, ${dates}${i.overdue ? ", overdue" : ""}`}
         onMouseDown={(e) => startDrag(e, i, "move")}
-        onDoubleClick={() => ui.openDetail({ kind: i.kind, id: i.id }, true)}
+        onDoubleClick={() => i.kind !== "event" && ui.openDetail({ kind: i.kind, id: i.id }, true)}
       >
         {canStart && <span className="cal-grip is-start" onMouseDown={(e) => startDrag(e, i, "start")} aria-hidden="true" />}
         <span className="cal-line">
@@ -436,6 +463,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
               <ImportantGlyph />
             </svg>
           )}
+          {i.role === "event" && i.time && <span className="cal-time">{i.time}</span>}
           <span className="cal-title">{i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.title}</span>
         </span>
         {rich && i.role === "followup" && <span className="cal-sub">{i.title}</span>}
@@ -448,7 +476,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   /** One item as an agenda line (phones): its mark, the full title, and what the date is to it. */
   const agendaRow = (i: Item, d: string) => {
     const what =
-      i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : i.role === "start" || (i.role === "span" && d === i.start && d !== i.end) ? "Starts" : i.end === d ? "Due" : `Until ${formatShort(i.end)}`;
+      i.role === "event" ? (i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""}` : "All day") : i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : i.role === "start" || (i.role === "span" && d === i.start && d !== i.end) ? "Starts" : i.end === d ? "Due" : `Until ${formatShort(i.end)}`;
     return (
       <li key={i.key}>
         <button
@@ -457,7 +485,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           onClick={() => {
             setCursor(d);
             setItemKey(i.key);
-            ui.openDetail({ kind: i.kind, id: i.id }, true);
+            if (i.kind !== "event") ui.openDetail({ kind: i.kind, id: i.id }, true);
           }}
         >
           <span className="cal-agenda-mark" aria-hidden="true">
@@ -465,7 +493,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
               <svg className="cal-flag" viewBox="0 0 22 22" width="16" height="16" aria-hidden="true">
                 <ImportantGlyph />
               </svg>
-            ) : <span className="cal-agenda-dot" />}
+            ) : <span className={`cal-agenda-dot ${i.kind === "event" ? "is-event" : ""}`} style={i.color ? { background: i.color } : undefined} />}
           </span>
           <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>
           <span className="cal-agenda-when">{what}</span>
@@ -478,7 +506,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     return on.length ? (
       <span className="cal-dots" aria-hidden="true">
         {on.map((i) => (
-          <i key={i.key} className={i.overdue || ((i.role === "due" || i.role === "span") && i.end === d) ? "is-due" : i.role === "followup" ? "is-follow" : i.kind === "project" ? "is-project" : ""} />
+          <i key={i.key} style={i.kind === "event" && i.color ? { background: i.color } : undefined} className={i.kind === "event" ? "is-event" : i.overdue || ((i.role === "due" || i.role === "span") && i.end === d) ? "is-due" : i.role === "followup" ? "is-follow" : i.kind === "project" ? "is-project" : ""} />
         ))}
       </span>
     ) : null;
@@ -618,6 +646,24 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
             <ChevronRight size={16} strokeWidth={2} />
           </button>
         </div>
+        {/* The subscribed calendars, each in its colour: pressing one hides it here for a while (kept in this browser). */}
+        {feeds.length > 0 && (
+          <div className="cal-legend" aria-label="Calendars">
+            {feeds.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className={`cal-legend-item ${hiddenFeeds.has(f.id) ? "is-off" : ""}`}
+                aria-pressed={!hiddenFeeds.has(f.id)}
+                title={hiddenFeeds.has(f.id) ? `Show ${f.name}` : `Hide ${f.name}`}
+                onClick={() => toggleFeed(f.id)}
+              >
+                <span className="cal-legend-dot" style={{ background: hiddenFeeds.has(f.id) ? "transparent" : f.color }} aria-hidden="true" />
+                {f.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="cal-modes" role="tablist" aria-label="Calendar view">
           {(["week", "month", "year"] as Mode[]).map((m, i) => (
             <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? "is-current" : ""} onClick={() => setMode(m)} title={`${m[0].toUpperCase()}${m.slice(1)} (${i + 1})`} aria-keyshortcuts={String(i + 1)}>

@@ -4461,3 +4461,94 @@ body.is-cal-dragging {
   }
 }
 
+
+/* Clarify by hand opens on GTD's question, before anything is written: the question at the size of a view title,
+   one quiet line under it, and the answers in the key line (buttons on touch). */
+.clarify-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 28px 4px;
+}
+.clarify-q {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* Get creative: one capture line above the areas, as wide as a reading line. */
+.idea-capture {
+  max-width: 520px;
+  padding: 4px 8px 12px;
+}
+
+/* Appointments (the subscribed Outlook calendar): the hard landscape, read-only. A faint accent wash and edge set
+   them apart from the system's own dates; the time leads in 600, in tabular figures; they never take the grab cursor. */
+.cal-bar.is-event {
+  background: color-mix(in srgb, var(--feed, var(--accent)) 11%, var(--sheet));
+  border-color: color-mix(in srgb, var(--feed, var(--accent)) 45%, var(--rule-strong));
+  cursor: default;
+}
+.cal-time {
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.cal-dots i.is-event,
+.cal-agenda-dot.is-event {
+  background: var(--accent);
+}
+
+/* A subscribed calendar's colour, before its name in Settings (as an area's tile carries its colour). */
+.feed-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 3px;
+  vertical-align: 0;
+}
+
+
+/* The Calendar's legend: each subscribed calendar as a dot and its name; pressed off, it fades and its appointments
+   leave the view (for this browser). */
+.cal-legend {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 12px;
+  flex-wrap: wrap;
+}
+.cal-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.cal-legend-item:hover {
+  background: var(--rail-2);
+  color: var(--ink);
+}
+.cal-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.cal-legend-item.is-off {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.cal-legend-item.is-off .cal-legend-dot {
+  box-shadow: inset 0 0 0 1.5px var(--ink-3);
+}
+.cal-legend + .cal-modes {
+  margin-left: 0;
+}

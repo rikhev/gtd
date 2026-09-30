@@ -122,6 +122,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   );
   // Actions without the estimate the filter asks about can't be judged: they are listed apart, folded, below what fits.
   const unknownRows = useMemo(() => (fit ? allRows.filter((a) => a.status !== "done" && fits(a, fit) === "unknown") : []), [allRows, fit]);
+  // Next actions for other places wait, folded, below: you are not there now.
+  const elsewhereRows = useMemo(() => (fit ? allRows.filter((a) => a.status !== "done" && fits(a, fit) === "elsewhere") : []), [allRows, fit]);
   const deferredCount = useMemo(() => (mode === "next" ? s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length : 0), [s, mode, t]);
 
   const ctxById = useMemo(() => new Map(s.contexts.map((c) => [c.id, c])), [s.contexts]);
@@ -225,8 +227,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         mode === "done" ? g : { ...g, rows: [...g.rows.filter((a) => a.status !== "done"), ...g.rows.filter((a) => a.status === "done")] },
       ),
       ...(unknownRows.length ? [{ key: "noest", label: "No estimate yet", rows: unknownRows, meta: <span className="muted-text">might fit</span> }] : []),
+      ...(elsewhereRows.length ? [{ key: "elsewhere", label: "Elsewhere", rows: elsewhereRows, meta: <span className="muted-text">other places</span> }] : []),
     ],
-    [baseGroups, sorters, sort, mode, unknownRows],
+    [baseGroups, sorters, sort, mode, unknownRows, elsewhereRows],
   );
 
   const multi = groups.length > 1 || (groupBy !== "none" && groups.length === 1 && groups[0].key !== "all");
@@ -287,9 +290,11 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
 
   // Setting the filter folds "No estimate yet", so what fits stands alone (open it to see what might).
   useEffect(() => {
-    if (fit) nav.toggleGroup("noest", false);
+    if (!fit) return;
+    nav.toggleGroup("noest", false);
+    nav.toggleGroup("elsewhere", false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fit?.time, fit?.energy]);
+  }, [fit?.time, fit?.energy, fit?.where?.join()]);
 
   // Keep the detail pane following the cursor when it is open.
   useEffect(() => {

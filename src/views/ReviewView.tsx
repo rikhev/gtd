@@ -3,6 +3,7 @@ import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
 import { capture, completeActions, isChase, isStale, isStalled, lastReview, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
+import { useEvents } from "../calendarFeed.ts";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
 import { DateCell, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
@@ -23,17 +24,21 @@ const STEPS = [
   { id: "someday", title: "Someday / Maybe", note: "Activate anything whose time has come. Drop what no longer matters." },
   { id: "lookback", title: "Look back", note: "What the last two weeks finished. Anything it left behind? Add the follow-up now." },
   { id: "upcoming", title: "Upcoming", note: "Due, starting, follow-ups and tickler dates in the next two weeks." },
+  // GTD's Get Creative: the areas you're responsible for, and anything new they bring to mind.
+  { id: "creative", title: "Get creative", note: "Walk your areas: does each have the projects it needs? Then capture anything new: projects, ideas, someday wishes." },
   { id: "finish", title: "Finish", note: "Record the review." },
 ] as const;
 type StepId = (typeof STEPS)[number]["id"];
 
 interface Row {
   key: string;
-  kind: "project" | "action" | "stuff";
+  kind: "project" | "action" | "stuff" | "area" | "event";
   id: ID;
   title: string;
   info: string;
   date: string | null;
+  /** An appointment's calendar colour. */
+  color?: string;
   /** A built-in check that needs attention: stalled, overdue, untouched, follow-up due, due back. */
   note?: string;
 }
@@ -51,10 +56,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       return next;
     });
   const { stepIdx } = sess;
-  const visited = useMemo(() => new Set(sess.visited), [sess.visited]);
   const markActed = (id: string) => !(sess.acted ?? []).includes(id) && update({ acted: [...(sess.acted ?? []), id] });
-  // The sweep is done once something was captured in this review, or you said your head is empty.
-  const swept = (sess.acted ?? []).includes("sweep") || s.stuff.some((x) => x.created_at >= sess.startedAt);
   const setStepIdx = (n: number) => update({ stepIdx: n });
   const step = STEPS[stepIdx];
   const t = today();
@@ -111,6 +113,19 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   };
   const projectTitle = (id: ID | null) => s.projects.find((p) => p.id === id)?.title ?? "";
 
+  // The subscribed Outlook calendar, two weeks either side: Look back reads what meetings left behind, Upcoming what's ahead.
+  const { events, feeds } = useEvents(addDays(t, -14), addDays(t, 14));
+  const feedOf = (id: string) => feeds.find((f) => f.id === id);
+  const eventRow = (e: (typeof events)[number]): Row => ({
+    key: `e:${e.key}`,
+    kind: "event",
+    id: e.key,
+    title: e.title,
+    // Which calendar, and when: "Work · 09:30", "Private · all day".
+    info: `${feedOf(e.feed)?.name ?? "Calendar"} · ${e.time ? `${e.time}${e.endTime ? `–${e.endTime}` : ""}` : "all day"}`,
+    date: e.date,
+    color: feedOf(e.feed)?.color,
+  });
   const stepRows: Row[] = useMemo(() => {
     switch (step.id as StepId) {
       case "clear": {
@@ -168,7 +183,15 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         return [
           ...s.projects.filter((p) => p.status === "done" && recent(p.completed_at)).map((p) => ({ key: p.id, kind: "project" as const, id: p.id, title: p.title, info: "Project completed", date: p.completed_at!.slice(0, 10) })),
           ...s.actions.filter((a) => a.status === "done" && recent(a.completed_at)).map((a) => ({ key: a.id, kind: "action" as const, id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.completed_at!.slice(0, 10) })),
+          ...events.filter((e) => e.date < t).map(eventRow),
         ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+      }
+      case "creative": {
+        // Each area with the active projects looking after it; an area with none is noted (it may be deliberate).
+        const active = (id: ID) => s.projects.filter((p) => p.status === "active" && p.area_id === id).length;
+        return [...s.areas]
+          .sort((a, b) => a.sort - b.sort)
+          .map((a) => ({ key: a.id, kind: "area" as const, id: a.id, title: `#${a.name}`, info: plural(active(a.id), "active project"), date: null, note: active(a.id) ? undefined : "No active project" }));
       }
       case "upcoming": {
         const end = addDays(t, 14);
@@ -187,13 +210,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           if (within(p.due)) out.push({ key: `${p.id}:due`, kind: "project", id: p.id, title: p.title, info: "Project due", date: p.due });
           if (within(p.bring_back)) out.push({ key: `${p.id}:back`, kind: "project", id: p.id, title: p.title, info: "Comes back", date: p.bring_back });
         }
+        for (const e of events.filter((e) => e.date >= t)) out.push(eventRow(e));
         return out.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
       }
       default:
         return [];
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, step.id, weeks]);
+  }, [s, step.id, weeks, events, feeds]);
   // Each step's list sorts from its headings too, remembered per step.
   const [sort, setSort] = useSort(`review:${step.id}`);
   const sorters: Sorters<Row> = useMemo(() => ({ subject: (r) => r.title, info: (r) => r.info, date: (r) => r.date }), []);
@@ -202,15 +226,10 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const nav = useListNav(`review:${step.id}`, useMemo(() => [{ key: step.id, rowKeys: rows.map((r) => r.key), showHeader: false }], [rows, step.id]));
   const focusRow = rows.find((r) => r.key === nav.focus);
   useEffect(() => {
-    ui.followDetail(focusRow ? { kind: focusRow.kind, id: focusRow.id } : null);
+    ui.followDetail(focusRow && focusRow.kind !== "area" && focusRow.kind !== "event" ? { kind: focusRow.kind, id: focusRow.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRow?.key]);
-  // Look back is read once the cursor reaches its last row (or at once when there is nothing to read).
-  useEffect(() => {
-    if (step.id === "lookback" && (!rows.length || nav.focus === rows[rows.length - 1].key)) markActed("lookback");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step.id, rows.length, nav.focus]);
-  /** ⌘↵ on the two steps with nothing to count: say you're done here, and move on. */
+  /** ⌘↵ on any step: you've been through it; it counts as clear once nothing in it is open. Then the next step. */
   const doneHere = () => {
     markActed(step.id);
     setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1));
@@ -271,17 +290,16 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   ]
     .filter(([n]) => (n as number) > 0)
     .map(([n, noun, verb]) => `${plural(n as number, noun as string)} ${verb}`);
-  // Visiting is not reviewing: a step is clear when nothing in it is open, and the two steps with nothing to count
-  // (Mind sweep, Look back) only once something was done in them (owner's decision after the critique).
-  const isDone = (id: StepId) =>
-    id === "finish" ? false : id === "sweep" ? swept : id === "lookback" ? (sess.acted ?? []).includes("lookback") : visited.has(id) && openCount(id) === 0;
+  // Visiting is not reviewing (owner's decision after the GTD critique): a step is clear only once you've said so with
+  // ⌘↵ "Reviewed", and while nothing in it is left open.
+  const isDone = (id: StepId) => id !== "finish" && (sess.acted ?? []).includes(id) && openCount(id) === 0;
   const notClear = STEPS.slice(0, -1)
     .map((st, i) => ({ st, i, n: openCount(st.id) }))
     .filter((x) => !isDone(x.st.id));
   const clearSteps = STEPS.length - 1 - notClear.length;
   /** Why a step is not clear yet, in a few words. */
   const whyOpen = ({ st, n }: { st: (typeof STEPS)[number]; n: number }) =>
-    n > 0 ? `${n} open` : st.id === "sweep" ? "nothing captured yet" : st.id === "lookback" ? "not read to the end" : "not visited";
+    n > 0 ? `${n} open` : "not marked reviewed";
 
   const commands: Command[] = [
     ...nav.commands,
@@ -342,14 +360,15 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.file", label: "File", group: "Review", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
-    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Looked back: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id === "sweep" || step.id === "lookback", run: doneHere },
-    { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
+    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
+    { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow) && focusRow?.kind !== "area" && focusRow?.kind !== "event", run: () => focusRow && focusRow.kind !== "area" && focusRow.kind !== "event" && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     {
       id: "rv.done",
       label: step.id === "someday" ? "Activate" : "Mark done",
       group: "Review",
-      keys: ["e"],
-      enabled: Boolean(focusRow) && step.id !== "lookback",
+      // E is Done everywhere; bringing a someday item back to life is A (Activate).
+      keys: [step.id === "someday" ? "a" : "e"],
+      enabled: Boolean(focusRow) && step.id !== "lookback" && step.id !== "creative",
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
@@ -371,7 +390,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       label: "Trash",
       group: "Review",
       keys: ["backspace", "delete"],
-      enabled: Boolean(focusRow) && step.id !== "lookback",
+      enabled: Boolean(focusRow) && step.id !== "lookback" && step.id !== "creative",
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
@@ -399,11 +418,11 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   };
 
   const columns: Column<Row>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "area" ? null : r.kind === "event" ? <span className="cal-agenda-dot is-event" style={r.color ? { background: r.color } : undefined} aria-label="Appointment" /> : r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
     {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.
-      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item" } as Record<string, string>)[step.id] ?? "",
+      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item", creative: "Area" } as Record<string, string>)[step.id] ?? "",
       width: "minmax(220px, 2fr)",
       render: (r) => (
         <span className="subject">
@@ -412,9 +431,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </span>
       ),
     },
-    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
-    { key: "date", label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" || step.id === "lookback" ? "plain" : "due"} /> },
+    { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" || step.id === "lookback" ? "plain" : "due"} /> },
   ];
   function healthOf(id: ID) {
     const p = s.projects.find((x) => x.id === id);
@@ -489,6 +508,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           </p>
         </div>
       ) : (
+        <>
+        {step.id === "creative" && <IdeaCapture since={sess.startedAt} captured={s.stuff.filter((x) => x.created_at >= sess.startedAt && x.status === "inbox").length} />}
         <Grid
           listId={`review:${step.id}`}
           sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
@@ -500,8 +521,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           active={regionActive}
           showHeaders={false}
           rowClass={(r) => (r.note ? "is-flagged-row" : "")}
-          empty={<p className="muted-text">{step.id === "clear" ? "The Inbox is empty. Move on to the next step." : step.id === "lookback" ? "Nothing was finished in the last two weeks. Move on to the next step." : "Nothing here. Move on to the next step."}</p>}
+          empty={<p className="muted-text">{step.id === "clear" ? "The Inbox is empty. Move on to the next step." : step.id === "lookback" ? "Nothing was finished in the last two weeks. Move on to the next step." : step.id === "creative" ? "No areas yet. Add them in Settings › Areas; until then, capture anything new above." : "Nothing here. Move on to the next step."}</p>}
         />
+        </>
       )}
       {!clarifying && (
         <KeyHints
@@ -513,8 +535,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "alt+k", label: "With Claude" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
-            ...(step.id === "lookback" || step.id === "sweep" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Looked back" }] : []),
-            ...(!["finish", "lookback", "sweep"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
+            ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Reviewed", primary: true }] : []),
+            ...(!["finish", "lookback", "sweep", "creative"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
           ]}
         />
       )}
@@ -558,6 +580,31 @@ const TRIGGERS: { title: string; items: [string, string][] }[] = [
     ],
   },
 ];
+
+/** Get creative's capture line: anything new goes to the Inbox, to be clarified like everything else. */
+function IdeaCapture({ captured }: { since: string; captured: number }) {
+  const [text, setText] = useState("");
+  return (
+    <label className="field idea-capture">
+      <span className="field-label">Anything new? A project, an idea, a someday wish</span>
+      <input
+        className="field-text"
+        value={text}
+        placeholder="Enter puts it in the Inbox"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.metaKey || e.ctrlKey || e.defaultPrevented) return;
+          if (e.key === "Enter" && text.trim()) {
+            e.preventDefault();
+            void capture(text);
+            setText("");
+          } else if (e.key === "Escape") e.currentTarget.blur();
+        }}
+      />
+      {captured > 0 && <span className="sweep-help">{plural(captured, "item")} captured in this review wait in the Inbox for Get clear.</span>}
+    </label>
+  );
+}
 
 /**
  * The review's first step: a capture line beside the trigger list. Each line is captured to the Inbox as it is

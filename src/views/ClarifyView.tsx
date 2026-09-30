@@ -93,6 +93,9 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
   const originals = useRef<Record<string, Proposal>>({});
   const [index, setIndex] = useState(0);
   const [handled, setHandled] = useState<Set<string>>(new Set());
+  // By hand, each item is first asked GTD's question, "is it actionable?", before any action is written (owner's
+  // decision after the GTD critique: the capture used to pass straight through as the next action).
+  const [answered, setAnswered] = useState<Set<string>>(new Set());
   const [row, setRow] = useState(0);
   const corrections = useRef(0);
   const card = useRef<HTMLDivElement>(null);
@@ -281,6 +284,13 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     if (missing >= 0) {
       notify("Who or what is this waiting on? Name it, then accept again.");
       askWaitingOn(ui, null, (who) => updateRow(missing, { waiting_who: who }));
+      return;
+    }
+    // A next action is written in words, never left blank: back to the first empty one.
+    const blank = draft.disposition === "actionable" ? draft.actions.findIndex((a) => a.kind !== "someday" && !a.done && !a.title.trim()) : -1;
+    if (blank >= 0) {
+      card.current?.querySelector<HTMLElement>(`[data-row='${blank}'] .p-title`)?.focus();
+      notify("Write the next action first: the very next physical step.");
       return;
     }
     // Every next action needs a context before it's filed (owner's rule): go to the first one without.
@@ -496,7 +506,29 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
     return el ? Number(el.dataset.row) : row;
   };
 
-  const ready = Boolean(current && draft);
+  const gating = byHand && Boolean(current && draft) && !answered.has(current!.id);
+  const ready = Boolean(current && draft) && !gating;
+  /** The answer to "is it actionable?": Yes starts an empty next action to put into words; the rest file the item. */
+  const answer = (a: "yes" | "someday" | "reference" | "trash") => {
+    if (!current || !draft) return;
+    if (a === "trash") return trashItem();
+    const title = stuffTitle(current);
+    update((d) => {
+      if (a === "yes") {
+        d.disposition = "actionable";
+        d.actions = [{ ...d.actions[0], title: "", kind: "next" }];
+      } else if (a === "someday") {
+        d.disposition = "someday";
+        d.actions = [{ ...d.actions[0], title, kind: "someday" }];
+      } else {
+        d.disposition = "reference";
+        d.reference = { title, notes: "" };
+      }
+    });
+    setAnswered((prev) => new Set(prev).add(current.id));
+    // Yes: the cursor waits in the empty action, the capture beside it as the source.
+    if (a === "yes") window.setTimeout(() => card.current?.querySelector<HTMLElement>("[data-row='0'] .p-title")?.focus(), 0);
+  };
   const err = startError ?? job?.error?.message;
   const stopped = Boolean(err && !draft);
   const backLabel = host.backLabel;
@@ -505,6 +537,9 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
   const addKey = () => promptApiKey(ui, () => void start(true));
   const fileByHand = host.fileInbox;
   const commands: Command[] = [
+    { id: "cl.yes", label: "Actionable: decide the next action", group: "Clarify", keys: ["y"], enabled: gating, run: () => answer("yes") },
+    { id: "cl.someday", label: "Not now: Someday / Maybe", group: "Clarify", keys: ["s"], enabled: gating, run: () => answer("someday") },
+    { id: "cl.reference", label: "Not actionable: keep as Reference", group: "Clarify", keys: ["r"], enabled: gating, run: () => answer("reference") },
     { id: "cl.accept", label: "Accept proposal and continue", group: "Clarify", keys: ["mod+enter"], inInput: true, enabled: ready, run: () => {
       (document.activeElement as HTMLElement | null)?.blur?.();
       window.setTimeout(accept, 0);
@@ -678,9 +713,14 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
         <section className="clarify-proposal" aria-label="Claude's proposal" aria-busy={!draft}>
           <h2 className="pane-h">
             {byHand ? "Your decision" : "Proposal"}
-            {draft && <Tag>{DISPOSITIONS[draft.disposition]}</Tag>}
+            {draft && !gating && <Tag>{DISPOSITIONS[draft.disposition]}</Tag>}
           </h2>
-          {!draft ? (
+          {gating ? (
+            <div className="clarify-ask">
+              <p className="clarify-q">Is it actionable?</p>
+              <p className="muted-text">Is there anything you, or someone, should do about it? Decide that before writing any action.</p>
+            </div>
+          ) : !draft ? (
             <div className="proposal-skeleton" aria-live="polite">
               <p className="muted-text">Claude is reading this item…</p>
               <i />
@@ -761,7 +801,7 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
                             value={a.title}
                             aria-label={`Action ${i + 1}`}
                             aria-describedby={raw ? `p-raw-${i}` : undefined}
-                            placeholder="Describe the next action"
+                            placeholder={byHand ? "What is the very next physical step?" : "Describe the next action"}
                             onFocus={(e) => raw && e.currentTarget.select()}
                             onKeyDown={(e) => e.key === "Enter" && !e.metaKey && !e.ctrlKey && e.preventDefault()}
                             onChange={(e) => {
@@ -832,7 +872,13 @@ export function ClarifyView({ regionActive, withClaude = false, host: hosted }: 
         </section>
       </div>
       <KeyHints
-        hints={[
+        hints={gating ? [
+          { k: "y", label: "Yes, actionable", primary: true },
+          { k: "s", label: "Someday" },
+          { k: "r", label: "Reference" },
+          { k: "backspace", label: "Trash" },
+          { k: "mod+.", label: "Skip", touch: "more" as const },
+        ] : [
           { k: "mod+enter", label: "Accept", primary: true },
           ...(byHand ? [{ k: "n", label: "Add action", touch: "more" as const }] : []),
           { k: "v", label: "File as" },

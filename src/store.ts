@@ -1,3 +1,4 @@
+import type { FeedInfo } from "./calendarFeed.ts";
 import { useMemo, useSyncExternalStore } from "react";
 import type { Action, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
 import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
@@ -31,7 +32,9 @@ let meta: {
   weekStart: 0 | 1;
   /** The language Claude clarifies in. */
   clarifyLang: "en" | "sv";
-} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, clarifyLang: "en" };
+  /** Subscribed calendars (Outlook, iCloud…): names, colours and hosts; their links stay on the server. */
+  calendars: FeedInfo[];
+} = { hasKey: false, keyHint: null, today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, clarifyLang: "en", calendars: [] };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
