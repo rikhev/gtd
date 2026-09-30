@@ -10,6 +10,17 @@ export interface ReviewSession {
   visited: string[];
   /** Steps with nothing to count as open (Mind sweep, Look back) are clear only once something was done in them. */
   acted?: string[];
+  /**
+   * What this review's own capture lines (the Mind sweep, Get creative) put in the Inbox. "Captured in this review"
+   * lists exactly these (owner's bug report: going by time, a review left open for days also counted everything
+   * captured elsewhere in between).
+   */
+  captured?: string[];
+  /**
+   * When the review screen was actually open (ISO from/to): the closing tally counts only what happened inside these,
+   * never ordinary work done while a review stood open for days (critique).
+   */
+  spans?: { from: string; to: string }[];
 }
 
 const KEY = "gtd:review";

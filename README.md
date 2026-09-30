@@ -26,7 +26,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `⌃⇧1`–`4` | Someday · Reference · Done · Trash (the second group and the Trash, counted from 1 again) |
 | `⌃⇧4` | Trash: everything deleted in the last week (Settings › Trash sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty the Trash clears it |
 | Calendar | `1` `2` `3` Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `T` today · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click an item for its details, double-click an empty day for a new action. Clicking a day or item from the next or previous month (the greyed days) picks it without turning the page |
-| `⇧R` | Start the Weekly Review |
+| `⇧R` | Start the Weekly Review. In it: `⌘↵` marks a step reviewed, `R` marks a flagged row "still current", `F2` rewrites a row, `N` on an area (Get creative) starts a project there |
 | `⌘⇧,` | Settings |
 | `⇧N` | Capture to the Inbox. Enter files the item and the line stays open. `⇧↵` adds a new line, Esc closes |
 | `⌥N` | New project from anywhere: name its outcome, pick its area, then give it a first next action (Esc skips that). On Projects, `N` adds one in place |

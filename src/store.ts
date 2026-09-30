@@ -553,8 +553,8 @@ function landed(n: number) {
   window.dispatchEvent(new CustomEvent("gtd:landed", { detail: n }));
 }
 
-export async function capture(text: string) {
-  const id = uid();
+/** Capture to the Inbox. A caller that must know the new item (the Weekly Review's capture lines) passes its id. */
+export async function capture(text: string, id: ID = uid()) {
   const row = {
     id,
     text: text.trim(),

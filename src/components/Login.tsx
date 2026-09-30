@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { load, useMeta } from "../store.ts";
-import { Tag } from "./bits.tsx";
+import { Pond } from "./Pond.tsx";
 
 /** The only screen a signed-out visitor can reach. Password, then authenticator or recovery code. */
 export function Login() {
@@ -47,10 +47,10 @@ export function Login() {
 
   return (
     <main className="login">
+      {/* The pond is the scene; its name on the horizon is the heading, for screen readers too (below). */}
+      <Pond scene />
+      <h1 className="visually-hidden">Stiltje</h1>
       <form className="login-sheet" onSubmit={submit} aria-label="Sign in">
-        <div className="login-head">
-          <Tag size="md">Stiltje</Tag>
-        </div>
         {!meta.authConfigured ? (
           <p className="login-note">
             Login isn't set up yet. Finish the login setup, then reload this page.

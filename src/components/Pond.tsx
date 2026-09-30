@@ -6,9 +6,15 @@ import { useEffect, useRef } from "react";
  * The calm surface is plain CSS; this canvas only draws while something is moving, then stops.
  * At rest the name stands on the horizon and the water gives it back, mirrored: dead calm, "stiltje". A drop
  * stirs the reflection until the rings have died out.
+ *
+ * As a scene (the sign-in screen, owner's request) the same pond fills the window: the horizon sits at 42% of its
+ * height, the name stands on it larger, and a light rain falls now and then, a drop or two every few seconds,
+ * anywhere across the water. It rains only while the page is visible, and not at all with reduced motion.
  */
 
 const HORIZON = 43; // px from the top: steel "air" above, water below; level with the top bar's bottom rule
+/** The scene's horizon, as a share of its height (the CSS draws it at the same 42%). */
+const SCENE_HORIZON = 0.42;
 
 interface Drop {
   x: number;
@@ -23,13 +29,14 @@ interface Splash {
 }
 
 const G = 520; // px/s², so a drop takes ~0.4s to fall
+const G_SCENE = 1600; // rain falls further, so faster: about 0.8s from the top of a window to the water
 const RINGS = [
   { delay: 0, amp: 1 },
   { delay: 0.13, amp: 0.62 },
   { delay: 0.28, amp: 0.38 },
 ];
 
-export function Pond() {
+export function Pond({ scene = false }: { scene?: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
 
@@ -48,6 +55,8 @@ export function Pond() {
     let colors = { crest: "#fff", trough: "#000", drop: "#000" };
     let w = 0;
     let h = 0;
+    const g = scene ? G_SCENE : G;
+    const horizon = () => (scene ? Math.round(h * SCENE_HORIZON) : HORIZON);
 
     const size = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -70,12 +79,14 @@ export function Pond() {
     const release = (now: number) => {
       let x = 0;
       for (let i = 0; i < 6; i++) {
-        x = w * (0.18 + Math.random() * 0.64);
+        x = scene ? w * (0.04 + Math.random() * 0.92) : w * (0.18 + Math.random() * 0.64);
         if (lastX < 0 || Math.abs(x - lastX) > 34) break;
       }
       lastX = x;
-      const hitY = HORIZON + (h - HORIZON) * (0.38 + Math.random() * 0.3);
-      if (reduce.matches) splashes.push({ x, y: hitY, t0: now, near: (hitY - HORIZON) / (h - HORIZON) });
+      const top = horizon();
+      // Across a whole window the rain lands anywhere from far out to close by; in the rail, across the middle.
+      const hitY = top + (h - top) * (scene ? 0.08 + Math.random() * 0.84 : 0.38 + Math.random() * 0.3);
+      if (reduce.matches) splashes.push({ x, y: hitY, t0: now, near: (hitY - top) / (h - top) });
       else drops.push({ x, hitY, t0: now });
     };
 
@@ -91,12 +102,13 @@ export function Pond() {
       // Falling drops: a bead that stretches into a tear as it speeds up.
       drops = drops.filter((d) => {
         const t = now - d.t0;
-        const y = -4 + 0.5 * G * t * t;
+        const y = -4 + 0.5 * g * t * t;
         if (y >= d.hitY) {
-          splashes.push({ x: d.x, y: d.hitY, t0: d.t0 + Math.sqrt((2 * (d.hitY + 4)) / G), near: (d.hitY - HORIZON) / (h - HORIZON) });
+          splashes.push({ x: d.x, y: d.hitY, t0: d.t0 + Math.sqrt((2 * (d.hitY + 4)) / g), near: (d.hitY - horizon()) / (h - horizon()) });
           return false;
         }
-        const len = 2.5 + G * t * 0.011;
+        // A bead that draws out into a short streak as it falls (capped, so rain stays drops, not lines).
+        const len = Math.min(scene ? 16 : 12, 2.5 + g * t * 0.011);
         ctx.globalAlpha = 0.9;
         ctx.fillStyle = colors.drop;
         ctx.beginPath();
@@ -111,14 +123,15 @@ export function Pond() {
       // Rings: a bright crest over a dark trough, flattened by the viewing angle, expanding and dying out.
       ctx.save();
       ctx.beginPath();
-      ctx.rect(0, HORIZON + 0.5, w, h);
+      ctx.rect(0, horizon() + 0.5, w, h);
       ctx.clip();
       ctx.lineWidth = 1;
       splashes = splashes.filter((s) => {
         const t = now - s.t0;
         if (t < 0) return true;
         const flat = 0.2 + 0.16 * s.near;
-        const reach = 54 + 46 * s.near;
+        // Seen across a window, a ring close by spreads much wider than one far out.
+        const reach = scene ? 60 + 150 * s.near : 54 + 46 * s.near;
         let alive = false;
         const rings = reduce.matches ? [{ delay: 0, amp: 0.8 }] : RINGS;
         for (const ring of rings) {
@@ -151,7 +164,7 @@ export function Pond() {
         for (const s of splashes) {
           const t = now - s.t0;
           const v0 = 62 + 20 * s.near;
-          const y = s.y - (v0 * t - 0.5 * G * t * t);
+          const y = s.y - (v0 * t - 0.5 * g * t * t);
           if (t > 0 && y <= s.y) {
             ctx.globalAlpha = 0.85;
             ctx.fillStyle = colors.drop;
@@ -193,15 +206,27 @@ export function Pond() {
       }
     };
     window.addEventListener("gtd:landed", onLanded);
+
+    // The scene's rain: now and then a drop, sometimes two close together, while the page is in view.
+    let rain = 0;
+    const nextRain = () => {
+      rain = window.setTimeout(() => {
+        if (!document.hidden) onLanded(new CustomEvent("rain", { detail: Math.random() < 0.25 ? 2 : 1 }));
+        nextRain();
+      }, 1800 + Math.random() * 5200);
+    };
+    if (scene && !reduce.matches) rain = window.setTimeout(nextRain, 900);
+
     return () => {
       window.removeEventListener("gtd:landed", onLanded);
       cancelAnimationFrame(frame);
       window.clearTimeout(settle);
+      window.clearTimeout(rain);
     };
-  }, []);
+  }, [scene]);
 
   return (
-    <div ref={box} className="pond" aria-hidden="true">
+    <div ref={box} className={`pond ${scene ? "is-scene" : ""}`} aria-hidden="true">
       <span className="pond-name">Stiltje</span>
       <span className="pond-name pond-mirror">Stiltje</span>
       <canvas ref={canvas} />

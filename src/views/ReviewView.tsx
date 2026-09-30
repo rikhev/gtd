@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { capture, completeActions, isChase, isStale, isStalled, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { capture, uid, mutate, newProject, completeActions, isChase, isStale, isStalled, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
@@ -9,6 +9,7 @@ import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from
 import { DateCell, EventMark, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
 import { editors, linkAppointment, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
+import { InlineEdit } from "./ActionsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
 import { stuffTitle } from "./InboxView.tsx";
 import { doneNow, fileStuff, trashNow } from "../fileStuff.ts";
@@ -56,6 +57,49 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       return next;
     });
   const { stepIdx } = sess;
+  // The review's own capture lines: the new item is remembered as captured in this review, and only such items are.
+  const captureHere = (text: string) => {
+    const id = uid();
+    setSess((cur) => {
+      const next = { ...cur, captured: [...(cur.captured ?? []), id] };
+      saveSession(next);
+      return next;
+    });
+    void capture(text, id);
+  };
+  const capturedHere = s.stuff.filter((x) => (sess.captured ?? []).includes(x.id));
+  // The time the review screen is open is its time: a span opens on arrival, is kept current while it stays open,
+  // and closes on leaving. The closing tally counts only inside these spans.
+  useEffect(() => {
+    const stampNow = () => new Date().toISOString();
+    const at = stampNow();
+    setSess((cur) => {
+      const next = { ...cur, spans: [...(cur.spans ?? []), { from: at, to: at }] };
+      saveSession(next);
+      return next;
+    });
+    const close = () =>
+      setSess((cur) => {
+        const spans = [...(cur.spans ?? [])];
+        if (spans.length) spans[spans.length - 1] = { ...spans[spans.length - 1], to: stampNow() };
+        const next = { ...cur, spans };
+        saveSession(next);
+        return next;
+      });
+    const tick = window.setInterval(close, 20_000);
+    return () => {
+      window.clearInterval(tick);
+      close();
+    };
+  }, []);
+  const inReview = (iso: string | null | undefined) => {
+    if (!iso) return false;
+    const spans = sess.spans ?? [];
+    // The span in progress runs to now.
+    return spans.some((sp, i) => iso >= sp.from && (i === spans.length - 1 || iso <= sp.to));
+  };
+  // F2 renames the row under the cursor in place ("Rewrite anything vague").
+  const [renaming, setRenaming] = useState<string | null>(null);
   const markActed = (id: string) => !(sess.acted ?? []).includes(id) && update({ acted: [...(sess.acted ?? []), id] });
   const setStepIdx = (n: number) => update({ stepIdx: n });
   const step = STEPS[stepIdx];
@@ -80,7 +124,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   }, [step.id, regionActive]);
 
   const startOver = () => {
-    const fresh = newSession();
+    // The screen stays open, so the new review's time starts now.
+    const now = new Date().toISOString();
+    const fresh = { ...newSession(), spans: [{ from: now, to: now }] };
     saveSession(fresh);
     setSess(fresh);
     notify("New review started.");
@@ -285,13 +331,12 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         return 0;
     }
   };
-  // What this review did, counted from its start: the closing tally.
-  const since = sess.startedAt;
+  // What this review did: the closing tally, counted only while the review screen was open (see the spans above).
   const tally = [
-    [s.stuff.filter((x) => x.processed_at && x.processed_at >= since).length, "item", "clarified"],
-    [s.actions.filter((a) => a.status === "done" && a.completed_at && a.completed_at >= since).length, "action", "done"],
-    [s.actions.filter((a) => a.created_at >= since && ["next", "waiting"].includes(a.status)).length, "new action", "added"],
-    [s.projects.filter((p) => p.status === "done" && p.completed_at && p.completed_at >= since).length, "project", "completed"],
+    [s.stuff.filter((x) => inReview(x.processed_at)).length, "item", "clarified"],
+    [s.actions.filter((a) => a.status === "done" && inReview(a.completed_at)).length, "action", "done"],
+    [s.actions.filter((a) => inReview(a.created_at) && ["next", "waiting"].includes(a.status)).length, "new action", "added"],
+    [s.projects.filter((p) => p.status === "done" && inReview(p.completed_at)).length, "project", "completed"],
   ]
     .filter(([n]) => (n as number) > 0)
     .map(([n, noun, verb]) => `${plural(n as number, noun as string)} ${verb}`);
@@ -305,6 +350,62 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   /** Why a step is not clear yet, in a few words. */
   const whyOpen = ({ st, n }: { st: (typeof STEPS)[number]; n: number }) =>
     n > 0 ? `${n} open` : "not marked reviewed";
+
+  /**
+   * "Reviewed, still current" (critique: an untouched-for-weeks flag could only be cleared by editing). It counts as
+   * touching what is under the cursor, or ticked, that carries that flag, and changes nothing else: the flag clears
+   * and the stall clock restarts. Other flags (overdue, follow-up due, no next action) are cleared by acting on them.
+   */
+  const stillCurrent = () => {
+    const now = new Date().toISOString();
+    // Only the untouched-for-weeks warning is about being current; overdue, chase and no-next-action are not.
+    const acts = targetsOf("action").filter((id) => {
+      const a = s.actions.find((x) => x.id === id);
+      return Boolean(a && isStale(a));
+    });
+    const projs = targetsOf("project").filter((id) => {
+      const p = s.projects.find((x) => x.id === id);
+      return Boolean(p && stallReason(s, p) === "idle");
+    });
+    if (!acts.length && !projs.length) {
+      notify("Nothing here is flagged as untouched: R clears that flag only. Overdue and follow-ups are cleared by acting on them.");
+      return;
+    }
+    // A stale project always has open actions (one with none is stalled for want of a next action, not staleness):
+    // it is touched through them.
+    const viaProjects = s.actions.filter((a) => a.project_id && projs.includes(a.project_id) && ["next", "waiting"].includes(a.status)).map((a) => a.id);
+    const n = acts.length + projs.length;
+    patchMany("actions", [...new Set([...acts, ...viaProjects])], { updated_at: now }, `${n === 1 ? "Still current" : `${n} still current`}: reviewed`);
+  };
+  /** A row flagged only for being untouched for the stall threshold: the one flag R ("still current") clears. */
+  function isStaleRow(r: Row) {
+    if (r.kind === "action") {
+      const a = s.actions.find((x) => x.id === r.id);
+      return Boolean(a && isStale(a));
+    }
+    if (r.kind === "project") {
+      const p = s.projects.find((x) => x.id === r.id);
+      return Boolean(p && stallReason(s, p) === "idle");
+    }
+    return false;
+  }
+  /** Get creative: an area without the project it needs gets one here, filed in it, then its first next action. */
+  const newProjectIn = (areaId: ID) => {
+    const area = s.areas.find((a) => a.id === areaId);
+    ui.openPicker({
+      type: "text",
+      title: `New project in #${area?.name ?? "area"}`,
+      current: "",
+      placeholder: "The outcome, verb first",
+      onPick: (v) => {
+        const title = (v ?? "").trim();
+        if (!title) return;
+        const p = newProject({ title, area_id: areaId });
+        mutate(`New project “${title}”`, [{ type: "create", table: "projects", row: { ...p } }]);
+        window.setTimeout(() => addNextAction(p.id), 0);
+      },
+    });
+  };
 
   const commands: Command[] = [
     ...nav.commands,
@@ -398,7 +499,31 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       },
     },
     { id: "rv.move", label: "Move", group: "Review", keys: ["v"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.move(targetsOf("action")) },
-    { id: "rv.due", label: "Due date", group: "Fields", keys: ["d"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), step.id === "waiting" ? "followup" : "due") },
+    {
+      id: "rv.current",
+      label: "Reviewed: still current",
+      group: "Review",
+      keys: ["r"],
+      enabled: ["next", "waiting", "projects"].includes(step.id) && Boolean(focusRow),
+      run: stillCurrent,
+    },
+    {
+      id: "rv.rename",
+      label: "Rename",
+      group: "Review",
+      keys: ["f2"],
+      enabled: Boolean(focusRow) && (focusRow?.kind === "action" || focusRow?.kind === "project") && !["lookback", "upcoming"].includes(step.id),
+      run: () => focusRow && setRenaming(focusRow.key),
+    },
+    {
+      id: "rv.newproject",
+      label: "New project in this area",
+      group: "Review",
+      keys: ["n"],
+      enabled: step.id === "creative" && focusRow?.kind === "area",
+      run: () => focusRow && newProjectIn(focusRow.id),
+    },
+    { id: "rv.due", label: step.id === "waiting" ? "Follow-up date" : "Due date", group: "Fields", keys: ["d"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), step.id === "waiting" ? "followup" : "due") },
     { id: "rv.back", label: "Bring back on", group: "Fields", keys: ["b"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), "bring_back") },
     {
       id: "rv.trash",
@@ -432,12 +557,23 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       // Name what the rows are; the step title is already on the tab and the heading.
       label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item", creative: "Area" } as Record<string, string>)[step.id] ?? "",
       width: "minmax(220px, 2fr)",
-      render: (r) => (
-        <span className="subject">
-          <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title || "Untitled"}</span>
-          {r.note && <span className="flag-note">{r.note}</span>}
-        </span>
-      ),
+      render: (r) =>
+        renaming === r.key ? (
+          <InlineEdit
+            value={r.title}
+            placeholder={r.kind === "project" ? "Name the project" : "Describe the next action"}
+            onDone={(v) => {
+              setRenaming(null);
+              const title = v.trim();
+              if (title && title !== r.title) mutate("Renamed", [{ type: "patch", table: r.kind === "project" ? "projects" : "actions", id: r.id, data: { title } }]);
+            }}
+          />
+        ) : (
+          <span className="subject">
+            <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title || "Untitled"}</span>
+            {r.note && <span className="flag-note">{r.note}</span>}
+          </span>
+        ),
     },
     { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
@@ -500,7 +636,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       {step.id === "clear" && clarifying ? (
         <ClarifyView key={clarifying.run} regionActive={regionActive} host={clarifyHost} />
       ) : step.id === "sweep" ? (
-        <MindSweep onDone={doneHere} captured={s.stuff.filter((x) => x.created_at >= sess.startedAt).sort((a, b) => b.created_at.localeCompare(a.created_at))} active={regionActive} />
+        <MindSweep onDone={doneHere} captured={[...capturedHere].sort((a, b) => b.created_at.localeCompare(a.created_at))} onCapture={captureHere} active={regionActive} />
       ) : step.id === "finish" ? (
         <div className="review-panel review-finish">
           {/* The end of the week leads with what you cleared, then what is still open. */}
@@ -522,7 +658,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </div>
       ) : (
         <>
-        {step.id === "creative" && <IdeaCapture since={sess.startedAt} captured={s.stuff.filter((x) => x.created_at >= sess.startedAt && x.status === "inbox").length} />}
+        {step.id === "creative" && <IdeaCapture onCapture={captureHere} captured={capturedHere.filter((x) => x.status === "inbox").length} />}
         <Grid
           listId={`review:${step.id}`}
           sort={{ state: sort, keys: Object.keys(sorters), onSort: setSort }}
@@ -545,6 +681,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id !== "finish" ? [{ k: "mod+.", label: "Next step", touch: "hide" as const }] : []),
             { k: "mod+,", label: "Previous", touch: "hide" as const },
             ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "t", label: "Add next action" }, { k: "w", label: "Add waiting for" }] : []),
+            ...(["next", "waiting", "projects"].includes(step.id) && rows.some(isStaleRow) ? [{ k: "r", label: "Still current" }] : []),
+            ...(step.id === "next" && rows.length > 0 ? [{ k: "f2", label: "Rewrite" }] : []),
+            ...(step.id === "creative" && focusRow?.kind === "area" ? [{ k: "n", label: "New project here" }] : []),
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
@@ -595,7 +734,7 @@ const TRIGGERS: { title: string; items: [string, string][] }[] = [
 ];
 
 /** Get creative's capture line: anything new goes to the Inbox, to be clarified like everything else. */
-function IdeaCapture({ captured }: { since: string; captured: number }) {
+function IdeaCapture({ captured, onCapture }: { captured: number; onCapture: (text: string) => void }) {
   const [text, setText] = useState("");
   return (
     <label className="field idea-capture">
@@ -609,7 +748,7 @@ function IdeaCapture({ captured }: { since: string; captured: number }) {
           if (e.metaKey || e.ctrlKey || e.defaultPrevented) return;
           if (e.key === "Enter" && text.trim()) {
             e.preventDefault();
-            void capture(text);
+            onCapture(text);
             setText("");
           } else if (e.key === "Escape") e.currentTarget.blur();
         }}
@@ -624,7 +763,7 @@ function IdeaCapture({ captured }: { since: string; captured: number }) {
  * entered (no deciding yet: Get clear, next, is where it is clarified), and what this review has captured is listed
  * under the line, newest first.
  */
-function MindSweep({ captured, active, onDone }: { captured: Stuff[]; active: boolean; onDone: () => void }) {
+function MindSweep({ captured, active, onDone, onCapture }: { captured: Stuff[]; active: boolean; onDone: () => void; onCapture: (text: string) => void }) {
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
   // Arriving on the step puts the cursor in the line, after the click or key that brought you here has settled.
@@ -649,7 +788,7 @@ function MindSweep({ captured, active, onDone }: { captured: Stuff[]; active: bo
               if (e.metaKey || e.ctrlKey || e.defaultPrevented) return;
               if (e.key === "Enter" && text.trim()) {
                 e.preventDefault();
-                void capture(text);
+                onCapture(text);
                 setText("");
               } else if (e.key === "Escape") {
                 e.currentTarget.blur();
@@ -659,6 +798,10 @@ function MindSweep({ captured, active, onDone }: { captured: Stuff[]; active: bo
           />
         </label>
         <p className="sweep-help">Enter puts it in the Inbox. No need to decide anything yet.</p>
+        {/* Each capture is confirmed to screen readers as it lands (critique: the list grew silently). */}
+        <span className="visually-hidden" aria-live="polite">
+          {captured.length ? `Captured: ${stuffTitle(captured[0]) || "Untitled"}. ${captured.length} in this review.` : ""}
+        </span>
         {/* Nothing captured can still be a clear head: say so, rather than the step counting as done by being passed. */}
         <button type="button" className="text-btn sweep-empty" onClick={onDone}>
           {captured.length ? "That's everything: next step" : "My head is empty: next step"}

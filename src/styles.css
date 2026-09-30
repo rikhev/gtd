@@ -69,6 +69,9 @@
   --accent-contrast: #ffffff;
   --select: #dce6f3;
   --select-ink: #0f1b2d;
+  /* The 1px edge of every "you are here" cursor (rail, list rows, group heads, the pane's field, the Calendar's day):
+     full accent, so focus reaches 3:1 against the rail and the lists (audit: the 45% mix gave 1.88:1 on the rail). */
+  --cursor-edge: var(--accent);
   --go: #1f8a4c;
   --wait: #c7890a;
   --tick: #e3e8ec;
@@ -531,6 +534,51 @@ a:hover {
   width: 100%;
   height: 100%;
 }
+/* The pond as a whole window (the sign-in screen): the rail's air above a horizon at 42%, water deepening below,
+   the name larger on the line. Fixed, so the horizon stays put when the page scrolls on a short phone. */
+.pond.is-scene {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  margin: 0;
+  background: linear-gradient(to bottom, var(--rail) 42%, var(--water-far) 42%, var(--water-near));
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.pond.is-scene::before {
+  top: 42%;
+}
+.pond.is-scene .pond-name {
+  left: 0;
+  right: 0;
+  bottom: 58%;
+  text-align: center;
+  font-size: 30px;
+  letter-spacing: 0.34em;
+  /* The tracking trails the last letter: shift back by half of it so the word sits on the centre line. */
+  text-indent: 0.34em;
+  padding-bottom: 6px;
+}
+.pond.is-scene .pond-mirror {
+  bottom: auto;
+  top: calc(42% + 1px);
+  padding-top: 6px;
+}
+/* A short window keeps the name on its horizon and lets the water go (audit: below about 650px the rail's foot,
+   Trash and Settings, scrolled out of reach). The horizon stays on the top bar's rule; the reflection and the
+   ripples leave with the water, giving the lists 40px back. */
+@media (max-height: 680px) {
+  .pond {
+    height: 44px;
+    background: none;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .pond .pond-mirror,
+  .pond canvas {
+    display: none;
+  }
+}
 
 /* Lists: two runs split by a hairline, no stage headings. */
 .rail-list {
@@ -559,6 +607,13 @@ a:hover {
 .rail-item:hover {
   background: var(--rail-2);
   color: var(--ink);
+}
+/* A touch screen wide enough for the rail (a tablet held landscape) gets finger-sized rows: 44px, as the touch
+   guidelines ask, instead of the pointer's 30px (audit). The rail still fits a tablet's height. */
+@media (pointer: coarse) {
+  .rail-item {
+    height: 44px;
+  }
 }
 .rail-name {
   font-weight: 500;
@@ -689,7 +744,7 @@ body.keys-held .rail .rail-meta .num {
 .rail-item.is-current.is-cursor {
   background: var(--select);
   color: var(--select-ink);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 
 /* The phone tab bar replaces the rail below 820px. */
@@ -1050,7 +1105,7 @@ body.is-col-resizing * {
 .grid.is-active .row.is-focus {
   background: var(--select);
   color: var(--select-ink);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .grid:not(.is-active) .row.is-focus {
   background: var(--rail-2);
@@ -1059,7 +1114,7 @@ body.is-col-resizing * {
 .list-region.is-active .grid .row.is-focus {
   background: var(--select);
   color: var(--select-ink);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .grid.is-active .row.is-focus.is-ticked,
 .list-region.is-active .grid .row.is-focus.is-ticked {
@@ -1209,12 +1264,13 @@ body.is-col-resizing * {
 .group-count {
   color: var(--ink-3);
 }
+/* An inactive list keeps a grey trace of its cursor, on a group head as on a row. */
 .group-head.is-focus {
-  box-shadow: inset 0 0 0 1px var(--ink-3);
+  background: var(--rail-2);
 }
 .grid.is-active .group-head.is-focus {
   background: var(--select);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .chev {
   width: 8px;
@@ -1605,7 +1661,7 @@ body.is-col-resizing * {
   border-bottom: 1px solid var(--rule);
 }
 /*
- * Where you are (the One Blue Rule): the active region's cursor takes Selection Blue with the 45% accent hairline. The
+ * Where you are (the One Blue Rule): the active region's cursor takes Selection Blue with the full-accent edge. The
  * pane is a list of fields with a cursor of its own (Detail.tsx), so the field under it looks exactly as a focused row
  * does: blue while you are in the pane, a grey trace while you are elsewhere. A field being typed in shows the ordinary
  * field focus ring instead. It keys off the app's region, so a picker opened from the pane leaves its field lit.
@@ -1616,12 +1672,12 @@ body.is-col-resizing * {
 .app[data-region="detail"] .detail [data-cursor]:not(:focus) {
   background: var(--select);
   color: var(--select-ink);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--select));
+  border-color: var(--cursor-edge);
 }
 /* Timeline rows keep their grey rule below and take the hairline inside, as list rows do. */
 .app[data-region="detail"] .detail .mini-row[data-cursor]:not(:focus) {
   border-bottom-color: var(--rule);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .detail-title {
   margin: 0;
@@ -1917,10 +1973,12 @@ textarea.field-text {
   border-bottom: 1px solid var(--rule);
   padding: 0 2px;
 }
+/* Reached with Tab it looks as it does under the pane's cursor (↑↓): fill, edge, and its own grey rule below. */
 .mini-row:focus-visible {
   outline: none;
   background: var(--select);
   color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .mini-title {
   overflow: hidden;
@@ -2053,10 +2111,13 @@ textarea.field-text {
   border-radius: 2px;
   cursor: default;
 }
+/* The picker's own cursor: the option Enter will choose. A cursor like any other (the One Blue Rule): the pale fill
+   with the 1px edge, never the fill alone (focus audit: fill alone was 1.2:1 on the sheet). */
 .picker-list li.is-hi,
 .palette-list li.is-hi {
   background: var(--select);
   color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .picker-list li.picker-sep {
   height: 0;
@@ -2512,7 +2573,18 @@ textarea.field-text {
   padding: 8px 10px 10px;
   transition: border-color 150ms, box-shadow 150ms;
 }
-.p-row:focus-within {
+/*
+ * Clarify's action rows are walked with ↑↓ like a list, so the row you are on takes the cursor (the edge and a pale
+ * wash of the fill: the card holds its own field chips, which a full fill would drown). Only typing in its title turns
+ * the row to the editing ring, as a text field does everywhere (focus audit: the ring had meant both).
+ */
+.p-row:focus,
+.p-row:focus-within:not(:has(.p-title:focus)) {
+  outline: none;
+  border-color: var(--cursor-edge);
+  background: color-mix(in srgb, var(--select) 55%, var(--sheet));
+}
+.p-row:has(.p-title:focus) {
   border-color: var(--ink);
   box-shadow: 0 0 0 2px var(--accent);
 }
@@ -2591,7 +2663,7 @@ textarea.field-text {
 }
 .p-field:focus-visible {
   outline: none;
-  border-color: var(--ink);
+  border-color: var(--cursor-edge);
   background: var(--select);
   color: var(--select-ink);
 }
@@ -3090,12 +3162,21 @@ textarea.field-text {
 /* Sign in                                                              */
 /* ------------------------------------------------------------------ */
 
+/* Signing in is arriving at the pond (owner's request): the window is its surface, the name stands on the horizon,
+   mirrored in the water, and the sheet floats below the reflection. A light rain falls now and then (Pond.tsx). */
 .login {
+  position: relative;
   min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The sheet starts in the water, below the horizon (42%) and the name's reflection. */
+  padding: calc(42dvh + 64px) 16px 24px;
   background: var(--rail);
+}
+.login-sheet {
+  position: relative;
+  z-index: 1;
 }
 .login-sheet {
   width: min(360px, 100%);
@@ -3107,12 +3188,6 @@ textarea.field-text {
   border: 1px solid var(--rule-strong);
   border-radius: 3px;
   box-shadow: var(--shadow);
-}
-.login-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 4px;
 }
 .login-code {
   font-variant-numeric: tabular-nums;
@@ -3547,6 +3622,7 @@ textarea.field-text {
 .cal-agenda-row.is-focus {
   background: var(--select);
   color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .cal-agenda-mark {
   flex: none;
@@ -3708,7 +3784,7 @@ textarea.field-text {
 }
 .cal-day.is-cursor {
   background: color-mix(in srgb, var(--select) 55%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 /* On today the disc already says "here": the cursor keeps only its hairline, no second fill. */
 .cal-day.is-today.is-cursor {
@@ -3861,7 +3937,7 @@ textarea.field-text {
 /* Focused, a due item keeps its diamond so the deadline never disappears under the selection. */
 .cal-bar.role-due.is-focus {
   background: var(--select);
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  border-color: var(--cursor-edge);
   color: var(--select-ink);
 }
 .cal-bar.role-due.is-focus::after {
@@ -3886,7 +3962,7 @@ textarea.field-text {
 }
 .cal-bar.is-focus {
   background: var(--select);
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  border-color: var(--cursor-edge);
   color: var(--select-ink);
 }
 .cal-bar.is-dragging {
@@ -4124,7 +4200,7 @@ body.is-cal-dragging {
   background: var(--sheet);
 }
 .cal-mini-day.is-cursor {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .cal-mini-day.is-outside {
   background: none;
