@@ -1,6 +1,6 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Plus } from "lucide-react";
+import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks } from "lucide-react";
 import { mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
@@ -13,7 +13,7 @@ import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
 import { AreaName, ContextCode, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
-import type { Action, FileRow, Op, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
+import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
 /** Text field that commits on blur (one undo step per edit, not per keystroke). */
 function TextField({
@@ -597,15 +597,6 @@ function ProjectDetail({ p }: { p: Project }) {
   // the order they were created, oldest first, so the newest sits just above "Add a next action". Deleted ones don't show.
   const timeline = s.actions.filter((a) => a.project_id === p.id && a.status !== "trashed").sort((a, b) => a.created_at.localeCompare(b.created_at));
   const open = timeline.filter((a) => ["next", "waiting", "someday", "later"].includes(a.status));
-  // Its plan: the planned (later) steps in their order; the first is offered when no next action is current.
-  const planned = timeline.filter((a) => a.status === "later").sort((a, b) => a.sort - b.sort);
-  /** The next planned step becomes a next action, with a context (asked when it has none). */
-  const makeCurrent = (a: Action) => {
-    const set = (context_id: string | null, extra: Op[] = []) =>
-      mutate(`“${a.title || "Untitled action"}” is a next action`, [...extra, { type: "patch", table: "actions", id: a.id, data: { status: "next", context_id } }]);
-    if (a.context_id) return set(a.context_id);
-    askContext(ui, `Context for “${a.title || "Untitled action"}”`, (context_id, extra) => set(context_id, extra));
-  };
   /** A later step for the plan: in words, no context yet (it is asked when the step becomes current). */
   const planLater = () =>
     ui.openPicker({
@@ -627,13 +618,18 @@ function ProjectDetail({ p }: { p: Project }) {
     <>
       {/* Area and status live in their own fields below; the head only carries the project's health, beside its name. */}
       <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} start={p.start} appt={nextAppt} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      {/* GTD's one planning question, optional and on one line (owner's rule: faithful, but no routine admin). */}
+      <TextField label="Done looks like" value={p.outcome ?? ""} onCommit={(v) => patch("projects", p.id, { outcome: v })} placeholder="Optional: what will be true when it's done" />
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
           {area ? <AreaName name={area.name} color={area.color} /> : none}
         </PickField>
-        <PickField label="Goal" k="G" onOpen={() => pickGoal(ui, [p.id])}>
-          {goal ? goal.title || "Untitled goal" : none}
-        </PickField>
+        {/* Only once there are goals to serve (Horizons); G still sets one from the keyboard. */}
+        {(goal || s.horizons.some((h) => h.kind === "goal" && h.status === "active")) && (
+          <PickField label="Goal" k="G" onOpen={() => pickGoal(ui, [p.id])}>
+            {goal ? goal.title || "Untitled goal" : none}
+          </PickField>
+        )}
         <PickField label="Status" k="V" onOpen={() => ed.move([p.id])}>
           {{ active: "Active", someday: "Someday", done: "Done", trashed: "Trash" }[p.status]}
         </PickField>
@@ -669,10 +665,6 @@ function ProjectDetail({ p }: { p: Project }) {
           );
         })()}
       </div>
-      {/* Natural planning (GTD), in Allen's order: why it matters, what done looks like, then the ideas. */}
-      <TextField label="Why" value={p.purpose ?? ""} multiline rows={2} onCommit={(v) => patch("projects", p.id, { purpose: v })} placeholder="Its purpose: why does this matter?" />
-      <TextField label="Done looks like" value={p.outcome ?? ""} multiline rows={2} onCommit={(v) => patch("projects", p.id, { outcome: v })} placeholder="What will be true when it's done?" />
-      <TextField label="Ideas" value={p.ideas ?? ""} multiline rows={3} onCommit={(v) => patch("projects", p.id, { ideas: v })} placeholder="Brainstorm: everything that comes to mind, in no order" />
       {appts.length > 0 && (
         <section className="detail-actions">
           <h3 className="detail-h">
@@ -710,15 +702,7 @@ function ProjectDetail({ p }: { p: Project }) {
             {nextAppt.time ? ` ${nextAppt.time}` : ""}. Add a next action when it has happened.
           </p>
         )}
-        {stallReason(s, p) === "no-next" && planned.length > 0 && (
-          <p className="badge-line">
-            No next action. Its next planned step: “{planned[0].title || "Untitled"}”.
-            <button type="button" className="text-btn" onClick={() => makeCurrent(planned[0])}>
-              Make it current
-            </button>
-          </p>
-        )}
-        {stallReason(s, p) && !(stallReason(s, p) === "no-next" && planned.length > 0) && (
+        {stallReason(s, p) && (
           <p className={`badge-line ${stallReason(s, p) === "idle" ? "is-quiet" : ""}`}>
             {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Is it still current? The Weekly Review asks.`}
           </p>
@@ -778,10 +762,12 @@ function SupportMaterial({ projectId }: { projectId: string }) {
   const refs = s.refs.filter((r) => r.status === "active" && r.project_id === projectId).sort((a, b) => a.title.localeCompare(b.title));
   const lists = s.checklists.filter((c) => c.status === "active" && c.project_id === projectId).sort((a, b) => a.title.localeCompare(b.title));
   const files = (id: string) => s.files.filter((f) => f.owner_kind === "ref" && f.owner_id === id).length;
+  // Shown only when something supports the project; P on a reference or checklist (or ⌘K here) links one.
+  if (!refs.length && !lists.length) return null;
   return (
     <section className="detail-actions" aria-label="Support material">
       <h3 className="detail-h">
-        Support material {refs.length + lists.length > 0 && <span className="count">{refs.length + lists.length}</span>}
+        Support material <span className="count">{refs.length + lists.length}</span>
       </h3>
       <ul className="timeline">
         {refs.map((r) => (
@@ -819,14 +805,6 @@ function SupportMaterial({ projectId }: { projectId: string }) {
             </li>
           );
         })}
-        <li>
-          <button type="button" className="mini-row mini-link" onClick={() => linkSupport(ui, projectId)}>
-            <span className="kind-icon">
-              <Plus size={14} strokeWidth={1.75} aria-hidden />
-            </span>
-            <span className="mini-title">Link a reference or checklist</span>
-          </button>
-        </li>
       </ul>
     </section>
   );

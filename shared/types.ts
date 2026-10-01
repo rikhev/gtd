@@ -32,7 +32,7 @@ export interface Action {
   /** Last edited or completed; a project with nothing touched for the stall threshold is stalled. */
   updated_at: string | null;
   /** Done but not yet archived: the list it was done on, where it stays (struck through) until archived. */
-  done_from: "next" | "waiting" | "someday" | "inbox" | null;
+  done_from: "next" | "waiting" | "someday" | "later" | "inbox" | null;
   /** When a done action was archived to the Done list; null while it still sits on its own list. */
   archived_at: string | null;
   /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
@@ -265,7 +265,8 @@ export interface ProposedAction {
 export interface Proposal {
   stuff_id: ID;
   disposition: "actionable" | "someday" | "reference" | "trash";
-  new_project: { title: string; area: string | null } | null;
+  /** A new project the item becomes part of; `outcome` is what done looks like (natural planning). */
+  new_project: { title: string; area: string | null; outcome?: string } | null;
   actions: ProposedAction[];
   /** Kept as reference, or (checklist) as a checklist whose items are the item's lines. */
   reference: { title: string; notes: string; checklist?: boolean } | null;

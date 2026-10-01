@@ -79,12 +79,9 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
       enabled: Boolean(focus),
       run: () => {
         const ids = targets();
-        // A goal's projects stay; they just no longer name it.
-        const freed = getState().projects.filter((p) => p.goal_id && ids.includes(p.goal_id));
-        mutate(ids.length === 1 ? `“${all.find((h) => h.id === ids[0])?.title || "Untitled"}” trashed` : `${plural(ids.length, "horizon")} trashed`, [
-          ...ids.map((id): Op => ({ type: "patch", table: "horizons", id, data: { status: "trashed" } })),
-          ...freed.map((p): Op => ({ type: "patch", table: "projects", id: p.id, data: { goal_id: null } })),
-        ]);
+        // A goal's projects keep naming it while it is in the Trash (nothing shows it there), so restoring it relinks
+        // them; the links go only when the Trash removes the goal for good (GTD audit).
+        mutate(ids.length === 1 ? `“${all.find((h) => h.id === ids[0])?.title || "Untitled"}” trashed` : `${plural(ids.length, "horizon")} trashed`, ids.map((id): Op => ({ type: "patch", table: "horizons", id, data: { status: "trashed" } })));
       },
     },
   ];

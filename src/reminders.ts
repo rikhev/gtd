@@ -21,7 +21,7 @@ export function reminderOf(s: Pick<State, "actions" | "projects">, st: Pick<Stuf
   return item ? { kind: "project", item } : null;
 }
 
-const LISTS: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", active: "Projects", done: "Done" };
+const LISTS: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned, in its project", active: "Projects", done: "Done" };
 
 /** Where the item lives now: "Someday / Maybe · Renew the passports", "Waiting For · Anna". */
 export function reminderWhere(s: Pick<State, "projects">, r: Reminder): string {
@@ -49,7 +49,8 @@ export function reminderChoices(ui: UI | null, st: Stuff, r: Reminder, finish: (
   const at = stamp();
   const handled: Op = { type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: at } };
   const table = r.kind === "action" ? "actions" : "projects";
-  const someday = r.item.status === "someday";
+  // Something not yet current (a someday item, or a project's planned later step) can be made current here.
+  const someday = r.item.status === "someday" || r.item.status === "later";
   const out: ReminderChoice[] = [{ k: "enter", label: "Keep it as it is", run: () => finish(`${name(r)} kept as it is`, [handled]) }];
   if (someday && ui) {
     out.push({
@@ -72,11 +73,11 @@ export function reminderChoices(ui: UI | null, st: Stuff, r: Reminder, finish: (
     run: () => {
       if (r.kind === "action") {
         const a = r.item;
-        const from = a.status === "waiting" || a.status === "someday" ? a.status : "next";
+        const from = a.status === "waiting" || a.status === "someday" || a.status === "later" ? a.status : "next";
         return finish(`${name(r)} done`, [handled, { type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, flagged: 0, done_from: from, archived_at: null } }]);
       }
       // A completed project's open actions are done with it and filed in Done, as on Projects.
-      const open = getState().actions.filter((a) => a.project_id === r.item.id && ["next", "waiting"].includes(a.status));
+      const open = getState().actions.filter((a) => a.project_id === r.item.id && ["next", "waiting", "later"].includes(a.status));
       finish(`${name(r)} complete${open.length ? ` · ${open.length} open ${open.length === 1 ? "action" : "actions"} done with it` : ""}`, [
         handled,
         { type: "patch", table: "projects", id: r.item.id, data: { status: "done", completed_at: at, archived_at: null } },

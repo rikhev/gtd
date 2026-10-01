@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getState, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
+import { getState, isCurrentStep, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -18,9 +18,9 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
   const n = (ids: ID[]) => named("projects", ids, "project");
   const api = {
     /**
-     * A new project from anywhere (⌥N): its name (the outcome, verb first); what done looks like (Enter skips); its area
-     * (or none); then its first next action, as GTD asks of every project. Esc at the last step keeps the project without
-     * one (it then shows as stalled).
+     * A new project from anywhere (⌥N): its name (the outcome, verb first); its area (or none); then its first next
+     * action, as GTD asks of every project. Esc at the last step keeps the project without one (it then shows as
+     * stalled). Nothing more is asked (owner's rule: faithful, but no routine admin).
      */
     create() {
       ui.openPicker({
@@ -31,23 +31,12 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         onPick: (v) => {
           const title = (v ?? "").trim();
           if (!title) return;
-          // Natural planning (GTD): after its name, what done looks like (Enter with nothing skips it), then its area.
-          window.setTimeout(
-            () =>
-              ui.openPicker({
-                type: "text",
-                title: `What does done look like for “${title}”?`,
-                current: "",
-                placeholder: "What will be true when it's done (Enter skips)",
-                onPick: (done) => window.setTimeout(() => askArea(title, (done ?? "").trim()), 0),
-              }),
-            0,
-          );
+          askArea(title);
         },
       });
-      const askArea = (title: string, outcome: string) => {
+      const askArea = (title: string) => {
         const make = (area_id: ID | null, extra: Op[] = []) => {
-          const p = newProject({ title, area_id, outcome });
+          const p = newProject({ title, area_id });
           mutate(`New project “${title}”`, [...extra, { type: "create", table: "projects", row: { ...p } }]);
           // Next tick, so the area picker has closed before the next-action prompt opens.
           window.setTimeout(() => api.addNextAction(p.id), 0);
@@ -145,24 +134,6 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         current: ids.length === 1 ? (getState().projects.find((p) => p.id === ids[0])?.[field] ?? null) : null,
         onPick: (d) => {
           patchMany("projects", ids, { [field]: d }, d ? `${n(ids)}: ${what} ${formatLong(d)}` : `${n(ids)}: date cleared`);
-          // A project that won't begin for a while belongs on Someday/Maybe or in the tickler (GTD): offer that, once.
-          const active = getState().projects.filter((p) => ids.includes(p.id) && p.status === "active").map((p) => p.id);
-          if (field === "start" && d && d > today() && active.length)
-            window.setTimeout(
-              () =>
-                ui.openPicker({
-                  type: "list",
-                  title: `Starts ${formatLong(d)}. Until then?`,
-                  items: [
-                    { id: "keep", label: "Keep it active, not started yet", hint: "Shown with a clock" },
-                    { id: "someday", label: "On Someday until then", hint: `Comes back ${formatLong(d)}` },
-                  ],
-                  onPick: (id) =>
-                    id === "someday" &&
-                    patchMany("projects", active, { status: "someday", bring_back: d }, `${n(active)} on Someday/Maybe until ${formatLong(d)}, then back to decide`),
-                }),
-              0,
-            );
         },
       });
     },
@@ -215,9 +186,9 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         if (s.projects.find((p) => p.id === id)?.status === "done") continue;
         // The project stays on Projects, struck through, until archived (⇧E), like a done action on its list.
         ops.push({ type: "patch", table: "projects", id, data: { status: "done", completed_at: at, archived_at: null } });
-        // A finished project's open actions go straight to Done (archived), not onto the lists struck through.
-        // They share the project's completion stamp, so unticking the project brings them back with it.
-        for (const a of s.actions.filter((a) => a.project_id === id && ["next", "waiting"].includes(a.status))) {
+        // A finished project's open actions and planned (later) steps go straight to Done (archived), not onto the lists
+        // struck through. They share the project's completion stamp, so unticking the project brings them back with it.
+        for (const a of s.actions.filter((a) => a.project_id === id && ["next", "waiting", "later"].includes(a.status))) {
           ops.push({ type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, done_from: a.status, archived_at: at } });
           closed++;
         }
@@ -293,12 +264,17 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   const firstNext = useMemo(() => {
     const m = new Map<string, string>();
     const sorted = [...s.actions].sort((a, b) => a.sort - b.sort);
+    // Only a current step is the next action (GTD audit): one deferred past today shows when it starts, after any
+    // current one has had its turn.
     sorted.forEach((a) => {
-      if (a.project_id && a.status === "next" && !m.has(a.project_id)) m.set(a.project_id, a.title);
+      if (a.project_id && a.status === "next" && isCurrentStep(a) && !m.has(a.project_id)) m.set(a.project_id, a.title);
     });
     // A project that is only waiting shows who it waits on: that explains its amber lamp.
     sorted.forEach((a) => {
       if (a.project_id && a.status === "waiting" && !m.has(a.project_id)) m.set(a.project_id, `Waiting · ${a.waiting_who ?? "someone"}`);
+    });
+    sorted.forEach((a) => {
+      if (a.project_id && a.status === "next" && a.defer && !m.has(a.project_id)) m.set(a.project_id, `Starts ${formatLong(a.defer)}: ${a.title}`);
     });
     return m;
   }, [s.actions]);

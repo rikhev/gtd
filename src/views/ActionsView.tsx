@@ -1,7 +1,7 @@
-import { fitLabel, fits, openFit, setFit, useFit } from "../fit.ts";
+import { askEnergy, askTime, fitLabel, fits, openFit, setFit, useFit } from "../fit.ts";
 import { useEffect, useMemo, useRef } from "react";
 import { Paperclip, Repeat, AlignLeft, Clock, CalendarClock } from "lucide-react";
-import { archiveDone, mutate, notify, plural, useStore, isChase, isDeferred } from "../store.ts";
+import { archiveDone, mutate, notify, plural, useStore, isChase, isDeferred, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES } from "../ui.tsx";
 import { isTouchDevice, useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -77,10 +77,11 @@ const doneHere = (a: Action, mode: Mode) => a.status === "done" && !a.archived_a
 function rowsFor(s: State, mode: Mode, showDeferred: boolean, showDone: boolean): Action[] {
   const t = today();
   if (mode === "done") return s.actions.filter((a) => a.status === "done" && a.archived_at);
+  // A Someday project's actions are on hold with it: off every action list until the project is active again.
   if (mode === "next") {
-    return s.actions.filter((a) => (a.status === "next" && (showDeferred || !isDeferred(a, t))) || isChase(a, t) || (showDone && doneHere(a, mode)));
+    return s.actions.filter((a) => (a.status === "next" && !onHold(a, s) && (showDeferred || !isDeferred(a, t))) || isChase(a, t) || (showDone && doneHere(a, mode)));
   }
-  return s.actions.filter((a) => a.status === mode || (showDone && doneHere(a, mode)));
+  return s.actions.filter((a) => (a.status === mode && !(mode === "waiting" && onHold(a, s))) || (showDone && doneHere(a, mode)));
 }
 
 function dueBucket(a: Action): [number, string] {
@@ -122,7 +123,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   );
   // Next actions for other places wait, folded, below: you are not there now.
   const elsewhereRows = useMemo(() => (fit ? allRows.filter((a) => a.status !== "done" && fits(a, fit) === "elsewhere") : []), [allRows, fit]);
-  const deferredCount = useMemo(() => (mode === "next" ? s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length : 0), [s, mode, t]);
+  const deferredCount = useMemo(() => (mode === "next" ? s.actions.filter((a) => a.status === "next" && !onHold(a, s) && isDeferred(a, t)).length : 0), [s, mode, t]);
 
   const ctxById = useMemo(() => new Map(s.contexts.map((c) => [c.id, c])), [s.contexts]);
   const projById = useMemo(() => new Map(s.projects.map((p) => [p.id, p])), [s.projects]);
@@ -307,7 +308,13 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     const items = [
       ...(mode === "done" ? [] : groupOptions(mode).map((g) => ({ id: `g:${g}`, label: g === "none" ? "No grouping" : `Group by ${GROUPS[g].toLowerCase()}`, hint: groupBy === g ? "Current" : "", section: "group" }))),
       ...(mode === "done" ? [] : SORTS.map(([k, name]) => ({ id: `s:${k ?? ""}`, label: `Sort by ${name.toLowerCase()}`, hint: (sort?.key ?? null) === k ? "Current" : "", section: "sort" }))),
-      ...(mode === "next" ? [{ id: "fit", label: fit ? `What fits now: ${fitLabel(fit)}` : "What fits now…", hint: fit ? "On" : "", section: "show" }] : []),
+      ...(mode === "next"
+        ? [
+            { id: "fit", label: fit ? `What fits now: ${fitLabel(fit)}` : "What fits now…", hint: fit ? "On" : "", section: "show" },
+            { id: "fit-time", label: fit?.minutes ? "Time you have (change)…" : "Time you have…", hint: "What fits now", section: "show" },
+            { id: "fit-energy", label: fit?.energy ? "Your energy (change)…" : "Your energy…", hint: "What fits now", section: "show" },
+          ]
+        : []),
       ...(mode === "next" ? [{ id: "deferred", label: showDeferred ? "Hide deferred actions" : `Show deferred actions (${deferredCount})`, section: "show" }] : []),
       ...(mode === "done" ? [] : [{ id: "showdone", label: showDone ? `Hide done actions${doneCount ? ` (${doneCount})` : ""}` : `Show done actions${doneCount ? ` (${doneCount})` : ""}`, section: "done" }]),
       ...(mode === "done" || !doneCount ? [] : [{ id: "archive", label: `Archive done actions to Done (${doneCount})`, section: "done" }]),
@@ -323,6 +330,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         else if (id.startsWith("s:")) setSort(id.slice(2) ? { key: id.slice(2), dir: 1 } : null);
         else if (id === "deferred") setShowDeferred(!showDeferred);
         else if (id === "fit") openFit(ui);
+        else if (id === "fit-time") window.setTimeout(() => askTime(ui), 0);
+        else if (id === "fit-energy") window.setTimeout(() => askEnergy(ui), 0);
         else if (id === "showdone") setShowDone(!showDone);
         else if (id === "archive") archiveHere();
       },
@@ -400,6 +409,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     ...(mode === "next"
       ? [
           { id: "view.fit", label: fit ? "What fits now (change or clear)" : "What fits now: the contexts where you are", group: "View", keys: ["f"], run: () => openFit(ui) },
+          // Allen's next two questions, there when wanted (no key: F asks only where you are).
+          { id: "view.fittime", label: "What fits now: the time you have", group: "View", run: () => askTime(ui) },
+          { id: "view.fitenergy", label: "What fits now: your energy", group: "View", run: () => askEnergy(ui) },
           ...(fit ? [{ id: "view.fitoff", label: "Show every next action", group: "View", run: () => setFit(null) }] : []),
         ]
       : []),

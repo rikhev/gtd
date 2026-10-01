@@ -2066,14 +2066,6 @@ textarea.field-text {
   color: var(--ink-3);
   font-size: 12px;
 }
-/* The last row of a project's support material links another: quieter than the material, no rule under it. */
-.mini-row.mini-link {
-  color: var(--ink-2);
-  border-bottom: 0;
-}
-.mini-row.mini-link:hover {
-  color: var(--ink);
-}
 .mini-row.is-done .mini-title {
   text-decoration: line-through;
   color: var(--ink-2);

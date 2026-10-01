@@ -212,7 +212,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
             ops.push({ type: "create", table: "areas", row: { id: areaId, name: bareArea(d.new_project.area), sort: st.areas.length, color: nextAreaColor() } });
           }
         }
-        const p = newProject({ title: d.new_project.title, area_id: areaId, status: d.disposition === "someday" ? "someday" : "active" });
+        const p = newProject({ title: d.new_project.title, area_id: areaId, status: d.disposition === "someday" ? "someday" : "active", outcome: d.new_project.outcome?.trim() ?? "" });
         newProjectId = p.id;
         ops.push({ type: "create", table: "projects", row: { ...p } });
       }
@@ -373,14 +373,24 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
 
   // A tickler entry ("Due back: …") isn't new stuff: it brings back an item already filed, to be decided again.
   const reminder = reminderOf(s, current);
-  const reminderPicks = current && reminder ? reminderChoices(ui, current, reminder, (label, ops) => finishItem(current.id, label, ops)) : [];
+  // A "Due back" entry whose item has since been deleted: say so, and let it be clarified afresh or trashed.
+  const orphan = Boolean(current?.back_id) && !reminder;
+  const reminderPicks =
+    current && reminder
+      ? reminderChoices(ui, current, reminder, (label, ops) => finishItem(current.id, label, ops))
+      : current && orphan
+        ? [
+            { k: "enter", label: "Clarify it as new stuff", run: () => mutate("Clarifying it afresh", [{ type: "patch", table: "stuff", id: current.id, data: { back_kind: null, back_id: null } }], { silent: true }) },
+            { k: "backspace", label: "Trash this entry", run: () => finishItem(current.id, "Trashed", [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]) },
+          ]
+        : [];
   useCommands(
     "clarify-reminder",
     reminderPicks.map((c) => ({ id: `cl.r.${c.k}`, label: c.label, group: "Clarify", keys: c.k === "backspace" ? ["backspace", "delete"] : [c.k], run: c.run })),
-    { priority: 16, active: regionActive && Boolean(reminder) },
+    { priority: 16, active: regionActive && (Boolean(reminder) || orphan) },
   );
-  const gating = Boolean(current && draft) && !answered.has(current!.id) && !reminder;
-  const ready = Boolean(current && draft) && !gating && !reminder;
+  const gating = Boolean(current && draft) && !answered.has(current!.id) && !reminder && !orphan;
+  const ready = Boolean(current && draft) && !gating && !reminder && !orphan;
   /** The answer to "is it actionable?": Yes starts an empty next action to put into words; the rest file the item. */
   const answer = (a: "yes" | "someday" | "reference" | "trash") => {
     if (!current || !draft) return;
@@ -437,7 +447,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       (document.activeElement as HTMLElement | null)?.blur?.();
       window.setTimeout(accept, 0);
     } },
-    { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current) && !reminder, run: trashItem },
+    { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current) && !reminder && !orphan, run: trashItem },
     { id: "cl.done", label: "Done it now (two-minute rule)", group: "Clarify", keys: ["e"], enabled: ready, run: () => {
       const i = rowOfFocus();
       if (draft?.actions[i]) updateRow(i, { done: !draft.actions[i].done });
@@ -556,9 +566,17 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         <section className="clarify-proposal" aria-label="Your decision">
           <h2 className="pane-h">
             Your decision
-            {draft && !gating && !reminder && <Tag>{draft.disposition === "reference" && draft.reference?.checklist ? "Checklist" : DISPOSITIONS[draft.disposition]}</Tag>}
+            {draft && !gating && !reminder && !orphan && <Tag>{draft.disposition === "reference" && draft.reference?.checklist ? "Checklist" : DISPOSITIONS[draft.disposition]}</Tag>}
           </h2>
-          {reminder ? (
+          {orphan ? (
+            <>
+              <div className="clarify-ask">
+                <p className="clarify-q">It was due back, but it's gone.</p>
+                <p className="muted-text">The item it brought back has been deleted since. Clarify this entry as new stuff, or trash it.</p>
+              </div>
+              <KeyChoices choices={reminderPicks} />
+            </>
+          ) : reminder ? (
             <>
               <div className="clarify-ask">
                 <p className="clarify-q">It's back. Is it still right?</p>
@@ -723,7 +741,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         </section>
       </div>
       <KeyHints
-        hints={reminder ? [] : gating ? [
+        hints={reminder || orphan ? [] : gating ? [
           { k: "y", label: "Yes, actionable", primary: true },
           { k: "s", label: "Someday" },
           { k: "r", label: "Reference" },

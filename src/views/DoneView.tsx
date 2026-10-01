@@ -24,7 +24,7 @@ interface Row {
   at: string;
 }
 
-const LIST_NAMES: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", inbox: "Inbox" };
+const LIST_NAMES: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned (its project)", inbox: "Inbox" };
 
 /** Everything archived to Done, newest first: actions and completed projects alike. */
 function rowsOf(s: State): Row[] {

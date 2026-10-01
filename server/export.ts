@@ -52,7 +52,7 @@ export function exportZip(): Uint8Array {
       .map((p) => {
         const area = s.areas.find((a) => a.id === p.area_id)?.name;
         const acts = s.actions.filter((a) => a.project_id === p.id && a.status !== "trashed").map((a) => actionLine(s, a));
-        const goal = s.horizons.find((h) => h.id === p.goal_id)?.title;
+        const goal = s.horizons.find((h) => h.id === p.goal_id && h.status !== "trashed")?.title;
         // Natural planning first (why, done looks like, ideas), then the notes and the actions.
         const plan = [p.purpose && `Why: ${p.purpose}`, p.outcome && `Done looks like: ${p.outcome}`, goal && `Goal: ${goal}`, p.ideas && `Ideas:\n${p.ideas}`].filter(Boolean).join("\n");
         return `## ${p.title}\n\n${area ? `Area: ${area}\n` : ""}${plan ? `${plan}\n` : ""}${

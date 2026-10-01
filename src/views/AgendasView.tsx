@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { Hourglass } from "lucide-react";
-import { completeActions, mutate, newAction, plural, useStore } from "../store.ts";
+import { completeActions, mutate, newAction, onHold, plural, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -36,6 +36,8 @@ function peopleOf(s: State) {
     people.set(k, p);
   };
   for (const a of s.actions) {
+    // A Someday project's actions are on hold with it, so they aren't raised with anyone yet.
+    if (onHold(a, s)) continue;
     if (a.status === "next") add(a.person, a, "yours");
     else if (a.status === "waiting") add(a.waiting_who, a, "theirs");
   }

@@ -369,7 +369,7 @@ export function completeActions(ids: ID[]) {
     const a = find("actions", id);
     if (!a || a.status === "done") continue;
     // Done stays on its own list, struck through, until archived to Done.
-    const from = a.status === "waiting" || a.status === "someday" ? a.status : "next";
+    const from = a.status === "waiting" || a.status === "someday" || a.status === "later" ? a.status : "next";
     ops.push({ type: "patch", table: "actions", id, data: { status: "done", completed_at: stamp(), flagged: 0, done_from: from, archived_at: null } });
     const r = a.recurrence ? parseRecurrence(a.recurrence) : null;
     if (r) {
@@ -391,18 +391,22 @@ export function completeActions(ids: ID[]) {
     }
   }
   if (!ops.length) return;
-  // Finishing a project's last current step: say what its plan has next, if anything (GTD: decide the next action).
+  // Finishing a project's last current step makes its next planned (later) step current, by itself (owner's rule:
+  // faithful, but no routine admin); it takes the finished step's context when it has none. ⌘Z undoes both.
   const done = new Set(ids);
   const projectIds = [...new Set(ids.map((id) => find("actions", id)?.project_id).filter((p): p is ID => Boolean(p)))];
   const t = today();
-  const plannedNext = projectIds
-    .map((pid) => {
-      const mine = state.actions.filter((a) => a.project_id === pid && !done.has(a.id));
-      if (mine.some((a) => isCurrentStep(a, t))) return null;
-      return mine.filter((a) => a.status === "later").sort((a, b) => a.sort - b.sort)[0] ?? null;
-    })
-    .find(Boolean);
-  mutate(`${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}${plannedNext ? ` · next planned: “${plannedNext.title}” (make it current in its project)` : ""}`, ops);
+  const promoted: Action[] = [];
+  for (const pid of projectIds) {
+    const mine = state.actions.filter((a) => a.project_id === pid && !done.has(a.id));
+    if (mine.some((a) => isCurrentStep(a, t))) continue;
+    const next = mine.filter((a) => a.status === "later").sort((a, b) => a.sort - b.sort)[0];
+    if (!next) continue;
+    const ctx = next.context_id ?? ids.map((id) => find("actions", id)).find((a) => a?.project_id === pid)?.context_id ?? null;
+    ops.push({ type: "patch", table: "actions", id: next.id, data: { status: "next", context_id: ctx } });
+    promoted.push(next);
+  }
+  mutate(`${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}${promoted.length === 1 ? ` · next up: “${promoted[0].title}”` : promoted.length ? ` · ${promoted.length} planned steps now current` : ""}`, ops);
 }
 
 /**
@@ -571,8 +575,16 @@ export function isDeferred(a: Action, t = today()) {
   return Boolean(a.defer && a.defer > t);
 }
 
+/**
+ * On hold with its project (GTD: putting a project on Someday/Maybe puts its actions on hold too; GTD audit). They
+ * keep their status and come back when the project is active again, but no action list, count or filter shows them.
+ */
+export function onHold(a: Pick<Action, "project_id">, s: Pick<State, "projects"> = state): boolean {
+  return Boolean(a.project_id && s.projects.find((p) => p.id === a.project_id)?.status === "someday");
+}
+
 export function isChase(a: Action, t = today()) {
-  return a.status === "waiting" && Boolean(a.followup && a.followup <= t);
+  return a.status === "waiting" && Boolean(a.followup && a.followup <= t) && !onHold(a);
 }
 
 /* ---------------- server helpers ---------------- */

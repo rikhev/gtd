@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight, Hourglass, RefreshCw } from "lucide-react";
-import { completeActions, isChase, isDeferred, isStalled, mutate, named, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
+import { completeActions, isChase, isDeferred, isStalled, onHold, mutate, named, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
 import { fitLabel, fits, useFit } from "../fit.ts";
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
@@ -89,7 +89,7 @@ function itemsOf(s: State, t: string, soft: boolean): Item[] {
   const proj = new Map(s.projects.map((p) => [p.id, p]));
   const ctx = new Map(s.contexts.map((c) => [c.id, c.name]));
   for (const a of s.actions) {
-    const open = a.status === "next" || a.status === "waiting";
+    const open = (a.status === "next" || a.status === "waiting") && !onHold(a, s);
     if (open) {
       const sub = [a.project_id ? proj.get(a.project_id)?.title : null, a.context_id ? ctx.get(a.context_id) : null].filter(Boolean).join(" · ");
       const base = { kind: "action" as const, id: a.id, title: a.title || "Untitled action", waiting: a.status === "waiting" ? a.waiting_who || "someone" : null, sub };
@@ -791,7 +791,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     const nextNow =
       d === t
         ? s.actions
-            .filter((a) => a.status === "next" && !isDeferred(a, t) && !(a.due && a.due <= t) && (!fitNow || fits(a, fitNow) === "fits"))
+            .filter((a) => a.status === "next" && !onHold(a, s) && !isDeferred(a, t) && !(a.due && a.due <= t) && (!fitNow || fits(a, fitNow) === "fits"))
             .sort((a, b) => a.sort - b.sort)
         : [];
     const chases = d === t ? s.actions.filter((a) => isChase(a, t)) : [];

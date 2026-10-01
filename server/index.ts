@@ -36,7 +36,7 @@ function runTickler() {
       row: { id: randomUUID(), text: `Due back: ${title || "Untitled"}`, kind: "text", status: "inbox", created_at: now(), back_kind: kind, back_id: id },
     });
   for (const a of s.actions) {
-    if (a.bring_back && a.bring_back <= t && ["next", "waiting", "someday"].includes(a.status)) {
+    if (a.bring_back && a.bring_back <= t && ["next", "waiting", "someday", "later"].includes(a.status)) {
       back(a.title, "action", a.id);
       ops.push({ type: "patch", table: "actions", id: a.id, data: { bring_back: null } });
     }
@@ -243,6 +243,8 @@ function purgeTrash() {
       db.prepare(`DELETE FROM ${t} WHERE id = ?`).run(id);
     }
   }
+  // Goals gone for good leave their projects without a goal (they kept naming it while it was in the Trash).
+  db.prepare("UPDATE projects SET goal_id = NULL WHERE goal_id IS NOT NULL AND goal_id NOT IN (SELECT id FROM horizons)").run();
   // A checklist goes for good with its items.
   const gone = db.prepare("SELECT id FROM checklists WHERE status = 'trashed' AND trashed_at IS NOT NULL AND trashed_at < ?").all(cutoff) as { id: string }[];
   for (const { id } of gone) {

@@ -4,7 +4,7 @@ import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, plural, signOut } from "./store.ts";
+import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, runKey, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
@@ -63,7 +63,7 @@ function homeOf(t: Target): ViewId {
   const a = s.actions.find((x) => x.id === t.id);
   if (!a) return "next";
   // Done but not archived yet: it is still on the list it was done on.
-  if (a.status === "done" && !a.archived_at) return a.done_from ?? "next";
+  if (a.status === "done" && !a.archived_at) return a.done_from === "later" ? "projects" : (a.done_from ?? "next");
   // A planned (later) step lives in its project, not on a list.
   return ({ next: "next", waiting: "waiting", someday: "someday", later: "projects", done: "done", trashed: "next" } as const)[a.status];
 }
@@ -511,11 +511,11 @@ export default function App() {
 
   const listActive = region === "list" && !picker && !palette && !help;
   const t = today();
-  const deferredNext = s.actions.filter((a) => a.status === "next" && isDeferred(a, t)).length;
+  const deferredNext = s.actions.filter((a) => a.status === "next" && !onHold(a, s) && isDeferred(a, t)).length;
   const fitNow = useFit();
   const areaFilter = useAreaFilter();
   const activeProjects = s.projects.filter((p) => p.status === "active");
-  const nextShown = s.actions.filter((a) => (a.status === "next" && !isDeferred(a, t)) || isChase(a, t));
+  const nextShown = s.actions.filter((a) => (a.status === "next" && !onHold(a, s) && !isDeferred(a, t)) || isChase(a, t));
   const counts: Partial<Record<ViewId, string>> = {
     inbox: plural(inboxCount, "item"),
     // Deferred actions stay out of the count; the suffix says how many wait for their start date (⌥V shows them).
@@ -530,7 +530,7 @@ export default function App() {
     projects: areaFilter
       ? `${activeProjects.filter((p) => inAreas(p.area_id, areaFilter)).length} of ${plural(activeProjects.length, "active project")}`
       : plural(activeProjects.length, "active project"),
-    waiting: plural(s.actions.filter((a) => a.status === "waiting").length, "item"),
+    waiting: plural(s.actions.filter((a) => a.status === "waiting" && !onHold(a, s)).length, "item"),
     agendas: (() => {
       const n = new Set(s.actions.flatMap((a) => (a.status === "next" ? [a.person] : a.status === "waiting" ? [a.waiting_who] : [])).filter((w): w is string => Boolean(w?.trim())).map((w) => w.trim().toLowerCase())).size;
       return `${n} ${n === 1 ? "person" : "people"}`;

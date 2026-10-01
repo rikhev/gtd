@@ -409,19 +409,7 @@ export function editors(ui: UI) {
       if (made.length !== 1) return;
       const proj = made[0];
       const ctx = acts[0].context_id;
-      // Natural planning (GTD): what done looks like (Enter skips), then the first next action.
       ui.openPicker({
-        type: "text",
-        title: `What does done look like for “${proj.title}”?`,
-        current: "",
-        placeholder: "What will be true when it's done (Enter skips)",
-        onPick: (done) => {
-          const outcome = (done ?? "").trim();
-          if (outcome) mutate("Done looks like: noted", [{ type: "patch", table: "projects", id: proj.id, data: { outcome } }], { silent: true });
-          window.setTimeout(firstNext, 0);
-        },
-      });
-      const firstNext = () => ui.openPicker({
         type: "text",
         title: `First next action for “${proj.title}”`,
         current: "",

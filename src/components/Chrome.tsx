@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Search, Check, LogOut } from "lucide-react";
-import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase } from "../store.ts";
+import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { allCommandsForPalette, activeCommandsByLayer, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
 import { Kbd, Tag } from "./bits.tsx";
@@ -65,7 +65,7 @@ export function Rail({ active }: { active: boolean }) {
   // Signals, not inventory: a number shows only where it asks for something.
   const sig = useMemo(() => {
     const inboxItems = s.stuff.filter((x) => x.status === "inbox");
-    const nextActs = s.actions.filter((a) => a.status === "next");
+    const nextActs = s.actions.filter((a) => a.status === "next" && !onHold(a, s));
     const overdue = nextActs.filter((a) => a.due && a.due < t).length;
     const chase = s.actions.filter((a) => isChase(a, t)).length;
     const stalled = s.projects.filter((p) => isStalled(s, p)).length;
@@ -75,9 +75,11 @@ export function Rail({ active }: { active: boolean }) {
     // The oldest thing in the whole system: a review is only "due" once there is a week's worth to review.
     const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
     const systemAge = firstDay ? daysBetween(firstDay.slice(0, 10), t) : 0;
+    // The hard landscape only, as the Calendar shows it by default: what is due today (day-specific actions included);
+    // starts are soft dates (GTD audit).
     const scheduled =
-      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && (a.due === t || a.defer === t)).length +
-      s.projects.filter((p) => p.status === "active" && (p.due === t || p.start === t)).length;
+      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && !onHold(a, s) && a.due === t).length +
+      s.projects.filter((p) => p.status === "active" && p.due === t).length;
     return { inbox: inboxItems.length, overdue, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);

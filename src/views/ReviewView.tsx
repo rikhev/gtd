@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, ListChecks, Mail, Paperclip, StickyNote, Target } from "lucide-react";
-import { capture, uid, mutate, newProject, completeActions, isChase, isStale, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { capture, uid, mutate, newProject, completeActions, isChase, isCurrentStep, onHold, isStale, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
@@ -159,10 +159,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
 
   const projectNext = (pid: ID) => {
     const mine = s.actions.filter((a) => a.project_id === pid).sort((a, b) => a.sort - b.sort);
-    const next = mine.find((a) => a.status === "next");
+    // A current step only (GTD audit); one deferred past today says when it starts.
+    const next = mine.find((a) => a.status === "next" && isCurrentStep(a, t));
     if (next) return next.title;
     const waiting = mine.find((a) => a.status === "waiting");
-    return waiting ? `Waiting · ${waiting.waiting_who ?? "someone"}` : "";
+    if (waiting) return `Waiting · ${waiting.waiting_who ?? "someone"}`;
+    const later = mine.find((a) => a.status === "next" && a.defer);
+    return later ? `Starts ${formatLong(later.defer!)}: ${later.title}` : "";
   };
   // The review's checks are built in: each returns a short note, or nothing when all is well.
   const weeks = meta.stallWeeks;
@@ -237,19 +240,20 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             id: p.id,
             title: p.title,
             // The GTD question for each project: what is its next action? (A waiting-only project names who.)
-            info: stallReason(s, p) === "no-next" ? "" : projectNext(p.id),
+            // Its current step, or (stalled behind a deferred one) when that starts.
+            info: projectNext(p.id),
             date: p.due,
             note: projectNote(p),
           }));
       case "next":
         return s.actions
-          .filter((a) => a.status === "next")
+          .filter((a) => a.status === "next" && !onHold(a, s))
           .sort((a, b) => Number(Boolean(actionNote(b))) - Number(Boolean(actionNote(a))) || a.sort - b.sort)
           .map((a) => ({ key: a.id, kind: "action", id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.due, note: actionNote(a) }));
       case "waiting":
         // "Chase what's overdue": items to chase first, then by follow-up date.
         return s.actions
-          .filter((a) => a.status === "waiting")
+          .filter((a) => a.status === "waiting" && !onHold(a, s))
           .sort((a, b) => Number(isChase(b, t)) - Number(isChase(a, t)) || (a.followup ?? "9999").localeCompare(b.followup ?? "9999"))
           .map((a) => ({
             key: a.id,
@@ -375,9 +379,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         // Stalled (no next action) and idle (untouched for weeks) are both open here: the review asks about each.
         return s.projects.filter((p) => stallReason(s, p) !== null).length;
       case "next":
-        return s.actions.filter((a) => a.status === "next" && actionNote(a)).length;
+        return s.actions.filter((a) => a.status === "next" && !onHold(a, s) && actionNote(a)).length;
       case "waiting":
-        return s.actions.filter((a) => a.status === "waiting" && actionNote(a)).length;
+        return s.actions.filter((a) => a.status === "waiting" && !onHold(a, s) && actionNote(a)).length;
       case "someday":
         return [...s.projects, ...s.actions].filter((x) => x.status === "someday" && dueBack(x.id, x.bring_back)).length;
       case "upcoming": {

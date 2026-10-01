@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { UI } from "./ui.tsx";
 import type { Action } from "../shared/types.ts";
-import { getState } from "./store.ts";
+import { getState, onHold } from "./store.ts";
 import { today } from "../shared/dates.ts";
 
 /**
@@ -81,18 +81,15 @@ export const fitLabel = (f: Fit) => {
 };
 
 /**
- * F: Allen's questions in his order, each a quick pick that applies at once (Esc stops and keeps what is answered).
- * Where are you? (⇧↵ adds another place), then How long do you have?, then How is your energy?
+ * F: where are you? (⇧↵ adds another place). That is all F asks (owner's decision: faithful, but no routine admin);
+ * time and energy, Allen's next two questions, are there when wanted, from the View menu and ⌘K (askTime, askEnergy).
  */
 export function openFit(ui: UI, chosen: string[] = read()?.where ?? [], at: string | null = null) {
   const prev = read();
   const ctxs = getState().contexts;
-  const open = (id: string) => getState().actions.filter((a) => a.status === "next" && a.context_id === id).length;
+  const open = (id: string) => getState().actions.filter((a) => a.status === "next" && !onHold(a) && a.context_id === id).length;
   const toggle = (cid: string) => (chosen.includes(cid) ? chosen.filter((x) => x !== cid) : [...chosen, cid]);
-  const then = (where: string[]) => {
-    setFit({ where, minutes: prev?.minutes ?? null, energy: prev?.energy ?? null, day: today() });
-    window.setTimeout(() => askTime(ui), 0);
-  };
+  const then = (where: string[]) => setFit({ where, minutes: prev?.minutes ?? null, energy: prev?.energy ?? null, day: today() });
   ui.openPicker({
     type: "list",
     title: "Where are you?",
@@ -119,9 +116,10 @@ export function openFit(ui: UI, chosen: string[] = read()?.where ?? [], at: stri
   });
 }
 
-function askTime(ui: UI) {
+/** How long do you have? Narrows What fits now to actions that fit the time (⌘K, View menu). */
+export function askTime(ui: UI) {
   const f = read();
-  const fitting = (m: number | null) => getState().actions.filter((a) => a.status === "next" && fits(a, { where: f?.where ?? [], minutes: m, energy: f?.energy ?? null, day: today() }) === "fits").length;
+  const fitting = (m: number | null) => getState().actions.filter((a) => a.status === "next" && !onHold(a) && fits(a, { where: f?.where ?? [], minutes: m, energy: f?.energy ?? null, day: today() }) === "fits").length;
   ui.openPicker({
     type: "list",
     title: "How long do you have?",
@@ -133,14 +131,14 @@ function askTime(ui: UI) {
     onPick: (id) => {
       if (id === null) return;
       setFit({ where: f?.where ?? [], minutes: Number(id) || null, energy: f?.energy ?? null, day: today() });
-      window.setTimeout(() => askEnergy(ui), 0);
     },
   });
 }
 
-function askEnergy(ui: UI) {
+/** How is your energy? Narrows What fits now to actions you have the energy for (⌘K, View menu). */
+export function askEnergy(ui: UI) {
   const f = read();
-  const fitting = (e: 1 | 2 | 3 | null) => getState().actions.filter((a) => a.status === "next" && fits(a, { where: f?.where ?? [], minutes: f?.minutes ?? null, energy: e, day: today() }) === "fits").length;
+  const fitting = (e: 1 | 2 | 3 | null) => getState().actions.filter((a) => a.status === "next" && !onHold(a) && fits(a, { where: f?.where ?? [], minutes: f?.minutes ?? null, energy: e, day: today() }) === "fits").length;
   ui.openPicker({
     type: "list",
     title: "How is your energy?",
