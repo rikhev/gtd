@@ -223,6 +223,8 @@ export default function App() {
   }, []);
   useEffect(() => {
     const onPop = () => {
+      // A picker belongs to the list it was opened on: Back or Forward to another place closes it.
+      setPicker(null);
       const v = viewFromHash() ?? "next";
       // An address that can't be shown as is (#clarify out of a run, or unknown) is rewritten to the view it lands on.
       if (hashView(window.location.hash) !== v && viewNow.current !== "clarify") window.history.replaceState(null, "", `#${v}`);
@@ -328,7 +330,7 @@ export default function App() {
         const a = s.actions.find((x) => x.id === actionId);
         const p = a?.project_id ? s.projects.find((x) => x.id === a.project_id && x.status !== "trashed") : undefined;
         if (!a || !p) {
-          notify("This action isn't part of a project. P assigns one.");
+          notify("This action isn't part of a project. P sets one.");
           return;
         }
         jumpOrigin.current = { actionId, projectId: p.id };
@@ -518,39 +520,43 @@ export default function App() {
   const areaFilter = useAreaFilter();
   const activeProjects = s.projects.filter((p) => p.status === "active");
   const nextShown = s.actions.filter((a) => (a.status === "next" && !onHold(a, s) && !isDeferred(a, t)) || isChase(a, t));
+  // A count says how many there are; none is said by the list's empty state, so the heading carries no "0 items".
+  const some = (n: number, noun: string) => (n ? plural(n, noun) : "");
   const counts: Partial<Record<ViewId, string>> = {
-    inbox: plural(inboxCount, "item"),
+    inbox: some(inboxCount, "item"),
     // Deferred actions stay out of the count; the suffix says how many wait for their start date (⌥V shows them).
     next: [
       // While What fits now is on, the count says how many of them fit.
       fitNow
         ? `${nextShown.filter((a) => fits(a, fitNow) === "fits").length} of ${plural(nextShown.length, "action")} fit`
-        : plural(nextShown.length, "action"),
+        : some(nextShown.length, "action"),
       ...(deferredNext ? [`${deferredNext} deferred`] : []),
-    ].join(" · "),
+    ]
+      .filter(Boolean)
+      .join(" · "),
     // While Projects is narrowed to areas, the count says how many of them are shown.
     projects: areaFilter
       ? `${activeProjects.filter((p) => inAreas(p.area_id, areaFilter)).length} of ${plural(activeProjects.length, "active project")}`
-      : plural(activeProjects.length, "active project"),
-    waiting: plural(s.actions.filter((a) => a.status === "waiting" && !onHold(a, s)).length, "item"),
+      : some(activeProjects.length, "active project"),
+    waiting: some(s.actions.filter((a) => a.status === "waiting" && !onHold(a, s)).length, "item"),
     agendas: (() => {
       const n = new Set(s.actions.flatMap((a) => (a.status === "next" ? [a.person] : a.status === "waiting" ? [a.waiting_who] : [])).filter((w): w is string => Boolean(w?.trim())).map((w) => w.trim().toLowerCase())).size;
-      return `${n} ${n === 1 ? "person" : "people"}`;
+      return n ? `${n} ${n === 1 ? "person" : "people"}` : "";
     })(),
-    someday: plural(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
-    reference: plural(s.refs.filter((r) => r.status === "active").length, "reference"),
+    someday: some(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
+    reference: some(s.refs.filter((r) => r.status === "active").length, "reference"),
     // Inside a checklist, how far this run has got; otherwise how many checklists there are.
     checklists: openList
       ? (() => {
           const p = progress(s, openList.id);
-          // Nothing to tick yet says so; a routine always counts its day or week ("0 of 5 today", "All 5 done this week").
-          if (!p.total) return "No items yet";
+          // Nothing to tick yet is said by the empty checklist itself; a routine always counts its day or week ("0 of 5 today", "All 5 done this week").
+          if (!p.total) return "";
           if (p.repeats) return progressLabel(p) || `0 of ${p.total} ${p.repeats === "day" ? "today" : "this week"}`;
           return !p.ticked ? plural(p.total, "item") : p.ticked === p.total ? progressLabel(p) : `${p.ticked} of ${p.total} ticked`;
         })()
-      : plural(s.checklists.filter((c) => c.status === "active").length, "checklist"),
-    horizons: plural(s.horizons.filter((h) => h.kind === "goal" && h.status === "active").length, "goal"),
-    done: plural(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done" && p.archived_at).length, "item"),
+      : some(s.checklists.filter((c) => c.status === "active").length, "checklist"),
+    horizons: some(s.horizons.filter((h) => h.kind === "goal" && h.status === "active").length, "goal"),
+    done: some(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done" && p.archived_at).length, "item"),
     trash: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
   };
 

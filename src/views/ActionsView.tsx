@@ -337,8 +337,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       ...(mode === "next"
         ? [
             { id: "fit", label: fit ? `What fits now: ${fitLabel(fit)}` : "What fits now…", hint: fit ? "On" : "", section: "show" },
-            { id: "fit-time", label: fit?.minutes ? "Time you have (change)…" : "Time you have…", hint: "What fits now", section: "show" },
-            { id: "fit-energy", label: fit?.energy ? "Your energy (change)…" : "Your energy…", hint: "What fits now", section: "show" },
+            { id: "fit-time", label: fit?.minutes ? "How long do you have? (change)…" : "How long do you have?…", hint: "What fits now", section: "show" },
+            { id: "fit-energy", label: fit?.energy ? "How is your energy? (change)…" : "How is your energy?…", hint: "What fits now", section: "show" },
           ]
         : []),
       ...(mode === "next" ? [{ id: "deferred", label: showDeferred ? "Hide deferred actions" : `Show deferred actions (${deferredCount})`, section: "show" }] : []),
@@ -491,9 +491,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
             {a.recurrence && <Repeat size={12} strokeWidth={2} aria-label="Repeats" />}
             {a.notes && <AlignLeft className="ind-notes" size={12} strokeWidth={2} aria-label="Has notes" />}
             {filesByOwner.has(a.id) && <Paperclip className="ind-files" size={12} strokeWidth={2} aria-label="Has files" />}
-            {a.defer && a.defer > t && <Clock size={12} strokeWidth={2} aria-label={`Starts ${a.defer}`} />}
+            {a.defer && a.defer > t && <Clock size={12} strokeWidth={2} aria-label={`Starts ${formatLong(a.defer)}`} />}
             {a.bring_back && (
-              <span className="back-on" title={`Comes back to the Inbox on ${a.bring_back}`}>
+              <span className="back-on" title={`Comes back to the Inbox on ${formatLong(a.bring_back)}`}>
                 <CalendarClock size={12} strokeWidth={2} aria-hidden /> {formatDate(a.bring_back)}
               </span>
             )}
@@ -591,11 +591,11 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
 
   const empty =
     mode === "next" ? (
-      <EmptyState title="No next actions yet" lines={["Add an action here, or capture to the Inbox and clarify what you have captured."]} />
+      <EmptyState title="No next actions yet" lines={["Add an action here, or capture to the Inbox and clarify what you have captured."]} action={{ label: "New action", run: act.create }} />
     ) : mode === "waiting" ? (
-      <EmptyState title="Nothing delegated" lines={["Delegate any action and it waits here, with who and since when."]} />
+      <EmptyState title="Nothing delegated" lines={["Delegate any action and it waits here, with who and since when."]} action={{ label: "New waiting for", run: act.create }} />
     ) : mode === "someday" ? (
-      <EmptyState title="No someday items" lines={["Move any action or project here when it can wait."]} />
+      <EmptyState title="No someday items" lines={["Move any action or project here when it can wait."]} action={{ label: "New someday action", run: act.create }} />
     ) : (
       <EmptyState title="Nothing done yet" lines={["Completed actions are logged here by day."]} />
     );

@@ -1,6 +1,6 @@
 import { clearEvents, type FeedInfo } from "../calendarFeed.ts";
 import { useEffect, useMemo, useState } from "react";
-import { getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
+import { LIST_NAMES, quote, getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
 import { today } from "../../shared/dates.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { runKey, useCommands, type Command } from "../keys.ts";
@@ -50,7 +50,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
     }
     const filesOf = (kind: string, id: ID) => fileWords.get(`${kind}:${id}`) ?? [];
     const projectOf = (id: ID | null) => (id ? s.projects.find((p) => p.id === id)?.title : undefined);
-    const where = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned, in its project", done: "Done", trashed: "" } as const;
+    const where: Record<string, string> = { ...LIST_NAMES, trashed: "" };
     const home = { next: "next", waiting: "waiting", someday: "someday", later: "projects", done: "done", trashed: "next" } as const;
     const actions = s.actions
       .filter((a) => a.status !== "trashed" && match(a.title, a.notes, a.waiting_who, ...filesOf("action", a.id)))
@@ -114,7 +114,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
   useCommands("list:search", commands, { priority: 10, active: regionActive });
 
   const columns: Column<Hit>[] = [
-    { key: "subject", label: "Result", width: "minmax(240px, 1fr)", render: (h) => <span className="subject-text">{h.title || "Untitled"}</span> },
+    { key: "subject", label: "Item", width: "minmax(240px, 1fr)", render: (h) => <span className="subject-text">{h.title || "Untitled"}</span> },
     { key: "where", label: "In", width: "160px", render: (h) => <span className="muted-text">{h.where}</span> },
   ];
 
@@ -193,7 +193,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         key: "review",
         label: "Weekly Review",
         hideCount: true,
-        rows: [{ key: "stall", kind: "stall" as const, id: "stall", text: "Stalled after" }],
+        rows: [{ key: "stall", kind: "stall" as const, id: "stall", text: "Idle after" }],
       },
       {
         key: "trash",
@@ -263,7 +263,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.stall",
-      label: "Change when projects count as stalled",
+      label: "Change when projects count as idle",
       group: "Settings",
       keys: ["enter", "f2"],
       enabled: cur?.kind === "stall",
@@ -271,14 +271,14 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         // A number is typed, not picked from a list: any whole number of weeks from 1 to 52.
         ui.openPicker({
           type: "text",
-          title: "Stalled after (weeks)",
+          title: "Idle after (weeks)",
           current: String(meta.stallWeeks),
           placeholder: "Number of weeks",
           preview: (v) => {
             const n = Number(v.trim());
             if (!v.trim()) return { ok: false, text: "Type a number of weeks" };
             if (!Number.isInteger(n) || n < 1 || n > 52) return { ok: false, text: "A whole number from 1 to 52" };
-            return { ok: true, text: `Stalled after ${plural(n, "week")} without progress` };
+            return { ok: true, text: `Idle after ${plural(n, "week")} untouched` };
           },
           onPick: (v) => void saveStallWeeks(Number(v.trim())),
         }),
@@ -534,7 +534,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
               if (r.kind === "context" && val && !val.startsWith("@")) val = `@${val}`;
               if (r.kind === "area") val = bareArea(val);
               if (!val || val === "@") mutate("Discarded", [{ type: "delete", table, id: r.id }], { silent: true });
-              else if (val !== r.text) mutate("Saved", [{ type: "patch", table, id: r.id, data: { [field]: val } }]);
+              else if (val !== r.text) mutate(`Renamed ${quote(val)}`, [{ type: "patch", table, id: r.id, data: { [field]: val } }]);
             }}
           />
         ) : r.kind === "theme" ? (
@@ -579,8 +579,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           </span>
         ) : r.kind === "stall" ? (
           <span className="subject">
-            <span className="subject-text strong">Stalled after</span>
-            <span className="subject-more">A project with a next action counts as stalled when nothing in it has been touched for this long.</span>
+            <span className="subject-text strong">Idle after</span>
+            <span className="subject-more">A project untouched this long is marked idle, and the Weekly Review asks whether it is still current. Stalled means no current next action, however recent.</span>
           </span>
         ) : r.kind === "area" ? (
           <AreaName name={r.text} color={r.color} />
@@ -680,7 +680,7 @@ async function saveStallWeeks(weeks: number) {
   const j = (await res.json()) as { stallWeeks?: number; error?: string };
   if (j.stallWeeks) {
     updateMeta({ stallWeeks: j.stallWeeks });
-    notify(`Projects now count as stalled after ${plural(j.stallWeeks, "week")} without progress.`);
+    notify(`Projects now count as idle after ${plural(j.stallWeeks, "week")} untouched.`);
   } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }
 

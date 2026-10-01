@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
-import { mutate, newAction, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
+import { quote, completeActions, getState, mutate, named, newAction, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { DateCell, Lamp, Marker } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { editors, setProject } from "../actionCommands.tsx";
+import { actionRowCommands, editors, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { formatDate } from "../../shared/dates.ts";
 import type { ID, Op, Ref } from "../../shared/types.ts";
@@ -81,7 +81,33 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       ...a.map((id) => ({ type: "patch" as const, table: "actions" as const, id, data: { status: "next" } })),
       ...p.map((id) => ({ type: "patch" as const, table: "projects" as const, id, data: { status: "active" } })),
     ];
-    mutate(`${plural(ops.length, "item")} activated`, ops);
+    mutate(`${someName(a, p)} activated`, ops);
+  };
+  const newSomeday = () => {
+    const a = newAction({ status: "someday" });
+    mutate("New someday action", [{ type: "create", table: "actions", row: { ...a } }], { silent: true });
+    nav.setFocus(`a:${a.id}`);
+    setEditing(`a:${a.id}`);
+  };
+  /** One item by its name ("“Learn Italian”"), several by their count. */
+  const someName = (a: ID[], p: ID[]) => (a.length + p.length === 1 ? (a.length ? named("actions", a, "action") : named("projects", p, "project")) : plural(a.length + p.length, "item"));
+  /** E is Done here as everywhere: a someday action is done, a someday project complete. */
+  const done = () => {
+    const a = pick("action");
+    const p = pick("project");
+    if (a.length) completeActions(a);
+    if (p.length) pEd.complete(p);
+  };
+  const trash = (permanent: boolean) => {
+    const a = pick("action");
+    const p = pick("project");
+    if (!a.length && !p.length) return;
+    // A project goes with the actions in it, as on Projects.
+    const projectActions = getState().actions.filter((x) => x.project_id && p.includes(x.project_id) && x.status !== "done" && !a.includes(x.id)).map((x) => x.id);
+    mutate(`${someName(a, p)} ${permanent ? "deleted permanently" : "trashed"}`, [
+      ...[...a, ...projectActions].map((id): Op => (permanent && a.includes(id) ? { type: "delete", table: "actions", id } : { type: "patch", table: "actions", id, data: { status: "trashed" } })),
+      ...p.map((id): Op => (permanent ? { type: "delete", table: "projects", id } : { type: "patch", table: "projects", id, data: { status: "trashed" } })),
+    ]);
   };
 
   const commands: Command[] = [
@@ -91,12 +117,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       label: "New someday action",
       group: "Someday",
       keys: ["n"],
-      run: () => {
-        const a = newAction({ status: "someday" });
-        mutate("New someday action", [{ type: "create", table: "actions", row: { ...a } }], { silent: true });
-        nav.setFocus(`a:${a.id}`);
-        setEditing(`a:${a.id}`);
-      },
+      run: newSomeday,
     },
     {
       id: "some.jump",
@@ -108,25 +129,20 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
     },
     { id: "some.open", label: "Open details", group: "Someday", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     { id: "some.rename", label: "Rename", group: "Someday", keys: ["f2"], enabled: Boolean(focusRow), run: () => focusRow && setEditing(focusRow.key) },
-    { id: "some.activate", label: "Activate (make it current)", group: "Someday", keys: ["e"], enabled: has, run: activate },
+    // A activates, as on the Weekly Review's Someday step; E is Done, as everywhere.
+    { id: "some.activate", label: "Activate (make it current)", group: "Someday", keys: ["a"], enabled: has, run: activate },
+    { id: "some.done", label: "Mark done (a project: complete it)", group: "Someday", keys: ["e"], enabled: has, run: done },
     { id: "some.back", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], enabled: has, run: () => (pick("action").length ? aEd.date(pick("action"), "bring_back") : pEd.date(pick("project"), "bring_back")) },
     { id: "some.move", label: "Move", group: "Someday", keys: ["v"], enabled: has, run: () => (pick("action").length ? aEd.move(pick("action")) : pEd.move(pick("project"))) },
-    { id: "some.project", label: "Set project", group: "Fields", keys: ["p"], enabled: pick("action").length > 0, run: () => aEd.project(pick("action")) },
-    {
-      id: "some.trash",
-      label: "Trash",
+    { id: "some.trash", label: "Trash", group: "Someday", keys: ["backspace", "delete"], enabled: has, run: () => trash(false) },
+    { id: "some.delete", label: "Delete permanently", group: "Someday", keys: ["shift+backspace", "shift+delete"], enabled: has, run: () => trash(true) },
+    // A someday action takes the same field keys as anywhere else (C, P, D, S, M, G, R, H, ⇧P, ⇧F).
+    ...actionRowCommands(ui, {
+      targets: () => pick("action"),
+      focusId: focusRow?.kind === "action" ? focusRow.id : null,
       group: "Someday",
-      keys: ["backspace", "delete"],
-      enabled: has,
-      run: () => {
-        const a = pick("action");
-        const p = pick("project");
-        mutate(`${plural(a.length + p.length, "item")} trashed`, [
-          ...a.map((id) => ({ type: "patch" as const, table: "actions" as const, id, data: { status: "trashed" } })),
-          ...p.map((id) => ({ type: "patch" as const, table: "projects" as const, id, data: { status: "trashed" } })),
-        ]);
-      },
-    },
+      skip: ["row.open", "row.jump", "row.rename", "row.move", "row.bringback", "row.trash", "row.delete"],
+    }),
   ];
   useCommands("list:someday", commands, { priority: 10, active: regionActive });
 
@@ -134,7 +150,8 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
     { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health="someday" /> : <Marker />) },
     {
       key: "subject",
-      label: "Someday / Maybe",
+      // Mixed rows (actions and projects) are items, as in Done and the Trash.
+      label: "Item",
       width: "minmax(240px, 2fr)",
       render: (r) =>
         editing === r.key ? (
@@ -145,7 +162,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
               setEditing(null);
               const table = r.kind === "project" ? "projects" : "actions";
               if (!v.trim() && !r.title) mutate("Discarded", [{ type: "delete", table, id: r.id }], { silent: true });
-              else if (v.trim() !== r.title) mutate("Renamed", [{ type: "patch", table, id: r.id, data: { title: v.trim() } }]);
+              else if (v.trim() !== r.title) mutate(`Renamed ${quote(v)}`, [{ type: "patch", table, id: r.id, data: { title: v.trim() } }]);
             }}
           />
         ) : (
@@ -169,7 +186,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       active={regionActive}
       showHeaders
       onOpen={() => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true)}
-      empty={<EmptyState title="Nothing on Someday / Maybe" lines={["Move actions or projects here when they can wait."]} />}
+      empty={<EmptyState title="Nothing on Someday / Maybe" lines={["Move actions or projects here when they can wait."]} action={{ label: "New someday action", run: newSomeday }} />}
     />
   );
 }
@@ -263,7 +280,15 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
       group: "Reference",
       keys: ["backspace", "delete"],
       enabled: Boolean(focusId),
-      run: () => patchMany("refs", nav.targets(), { status: "trashed" }, `${plural(nav.targets().length, "reference")} trashed`),
+      run: () => patchMany("refs", nav.targets(), { status: "trashed" }, `${named("refs", nav.targets(), "reference")} trashed`),
+    },
+    {
+      id: "ref.delete",
+      label: "Delete permanently",
+      group: "Reference",
+      keys: ["shift+backspace", "shift+delete"],
+      enabled: Boolean(focusId),
+      run: () => mutate(`${named("refs", nav.targets(), "reference")} deleted permanently`, nav.targets().map((id): Op => ({ type: "delete", table: "refs", id }))),
     },
   ];
   useCommands("list:reference", commands, { priority: 10, active: regionActive });
@@ -281,7 +306,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !r.title) mutate("Discarded", [{ type: "delete", table: "refs", id: r.id }], { silent: true });
-              else if (v.trim() !== r.title) mutate("Renamed", [{ type: "patch", table: "refs", id: r.id, data: { title: v.trim() } }]);
+              else if (v.trim() !== r.title) mutate(`Renamed ${quote(v)}`, [{ type: "patch", table: "refs", id: r.id, data: { title: v.trim() } }]);
             }}
           />
         ) : (

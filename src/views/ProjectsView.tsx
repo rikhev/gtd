@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getState, isCurrentStep, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
+import { quote, getState, isCurrentStep, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -48,7 +48,7 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
           items: areaItems(),
           current: null,
           noneLabel: "No area",
-          createLabel: (q) => `Create area “${q}”`,
+          createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
           onCreate: (q) => {
             const { id, op } = createAreaOp(q);
             make(id, [op]);
@@ -112,11 +112,11 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       const one = ids.length === 1 ? getState().projects.find((p) => p.id === ids[0]) : undefined;
       ui.openPicker({
         type: "list",
-        title: "Area of focus",
+        title: "Area",
         items: areaItems(),
         current: one?.area_id ?? null,
         noneLabel: "No area",
-        createLabel: (q) => `Create area “${q}”`,
+        createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
         onCreate: (q) => {
           const { id, op } = createAreaOp(q);
           mutate(`${n(ids)} → ${q}`, [op, ...ids.map((p) => ({ type: "patch" as const, table: "projects" as const, id: p, data: { area_id: id } }))]);
@@ -141,7 +141,7 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       if (!ids.length) return;
       ui.openPicker({
         type: "list",
-        title: "Move project to",
+        title: "Move to",
         items: [
           { id: "active", label: "Active projects" },
           { id: "someday", label: "Someday / Maybe" },
@@ -219,13 +219,16 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       if (!ids.length) return;
       const s = getState();
       const ops: Op[] = [];
+      let open = 0;
       for (const id of ids) {
         ops.push(permanent ? { type: "delete", table: "projects", id } : { type: "patch", table: "projects", id, data: { status: "trashed" } });
         for (const a of s.actions.filter((a) => a.project_id === id && a.status !== "done")) {
           ops.push({ type: "patch", table: "actions", id: a.id, data: { status: "trashed" } });
+          open++;
         }
       }
-      mutate(permanent ? `${n(ids)} deleted permanently` : `${n(ids)} and their actions trashed`, ops);
+      const withActions = open ? ` and ${ids.length === 1 ? "its" : "their"} ${open === 1 ? "action" : "actions"}` : "";
+      mutate(permanent ? `${n(ids)} deleted permanently` : `${n(ids)}${withActions} trashed`, ops);
     },
   };
   return api;
@@ -464,7 +467,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !p.title) mutate("Discarded empty project", [{ type: "delete", table: "projects", id: p.id }], { silent: true });
-              else if (v.trim() !== p.title) mutate("Renamed", [{ type: "patch", table: "projects", id: p.id, data: { title: v.trim() } }]);
+              else if (v.trim() !== p.title) mutate(`Renamed ${quote(v)}`, [{ type: "patch", table: "projects", id: p.id, data: { title: v.trim() } }]);
             }}
           />
         ) : (
@@ -505,7 +508,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           // With no next action, a linked appointment is the next step: what, and when.
           <span className="muted-text">{apptLine(nextAppointment(s, p)!)}</span>
         ) : startsToday(p) && p.status === "active" ? (
-          <span className="starts-today">Starts today · add a next action</span>
+          <span className="starts-today">Starts today: add a next action</span>
         ) : (
           <span className="dash" aria-hidden="true">–</span>
         ),
@@ -573,9 +576,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       swipe={{ right: { label: "Done", run: (id) => toggleDone([id]) }, left: { label: "Trash", run: (id) => ed.trash([id], false) } }}
       empty={
         areas ? (
-          <EmptyState title={`No projects in ${areaFilterLabel(areas)}`} lines={["Press F to choose other areas, or show every area."]} />
+          <EmptyState title={`No projects in ${areaFilterLabel(areas)}`} lines={["Choose other areas, or show every area."]} action={{ label: "Show every area", run: () => setAreaFilter([]) }} />
         ) : (
-          <EmptyState title="No projects yet" lines={["Start one here, or make one when you clarify your Inbox (⇧P)."]} />
+          <EmptyState title="No projects yet" lines={["Start one here, or make one when you clarify your Inbox."]} action={{ label: "New project", run: create }} />
         )
       }
     />

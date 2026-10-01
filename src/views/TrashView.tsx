@@ -1,12 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { BookOpen, Circle, FileText, Layers, ListChecks, Mail, StickyNote, Target } from "lucide-react";
-import { mutate, plural, useMeta, useStore } from "../store.ts";
+import { LIST_NAMES, mutate, plural, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { stuffTitle } from "./InboxView.tsx";
-import { daysBetween, formatDate, today } from "../../shared/dates.ts";
+import { clockOf, dayHeading, localDay } from "../../shared/dates.ts";
 import type { ID, Op, State, TableName } from "../../shared/types.ts";
 
 type Kind = "action" | "project" | "stuff" | "ref" | "checklist" | "horizon";
@@ -24,7 +24,6 @@ interface Row {
 }
 
 const TABLE: Record<Kind, TableName> = { action: "actions", project: "projects", stuff: "stuff", ref: "refs", checklist: "checklists", horizon: "horizons" };
-const LIST_NAMES: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned (its project)", done: "Done" };
 /** What a restored item goes back to when it doesn't know what it was (deleted before this was tracked). */
 const HOME: Record<Kind, string> = { action: "next", project: "active", stuff: "inbox", ref: "active", checklist: "active", horizon: "active" };
 /** Checklists have no details pane: in the Trash they are restored or deleted, not opened. */
@@ -64,14 +63,8 @@ function rowsOf(s: State, keepDays: number): Row[] {
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
 
-const clock = (at: string) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-
-/** "Today", "Yesterday", then the date: when things were deleted is how they are remembered. */
-function dayLabel(at: string) {
-  const d = at.slice(0, 10);
-  const ago = daysBetween(d, today());
-  return ago <= 0 ? "Today" : ago === 1 ? "Yesterday" : formatDate(d);
-}
+/** The day something was deleted, headed as Done heads the day something was done. */
+const dayLabel = (at: string) => dayHeading(localDay(at));
 
 /**
  * Trash: everything trashed in the keep period, newest first, grouped by the day it went. R puts it back
@@ -172,7 +165,8 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
     { key: "kind", label: "", width: "30px", render: (r) => <span className="kind-icon">{icon(r)}</span> },
     { key: "subject", label: "Item", width: "minmax(220px, 1.3fr)", render: (r) => <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title}</span> },
     { key: "from", label: "Was in", width: "minmax(140px, 1fr)", drop: 2, render: (r) => <span className="muted-text">{r.from}</span> },
-    { key: "at", label: "Deleted", width: "84px", drop: 1, render: (r) => <span className="date">{dayLabel(r.at) === "Today" || dayLabel(r.at) === "Yesterday" ? clock(r.at) : formatDate(r.at.slice(0, 10))}</span> },
+    { key: "at", label: "Deleted", width: "84px", drop: 1, // The heading has the day, so the row gives the time.
+      render: (r) => <span className="date">{clockOf(r.at)}</span> },
     {
       key: "left",
       label: "Gone in",

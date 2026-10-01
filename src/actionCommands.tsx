@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
 import type { CalEvent } from "./calendarFeed.ts";
 import type { UI } from "./ui.tsx";
-import { completeActions, getState, isChase, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
+import { quote, completeActions, getState, isChase, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { addMonths, daysBetween, formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
@@ -153,7 +153,7 @@ function askProjectThenCreate(ui: UI, title: string, extra: Op[], make: (project
         // Offered first when the words come from something that supports a project (a checklist's item).
         current: project && getState().projects.some((p) => p.id === project && p.status !== "trashed") ? project : null,
         noneLabel: "No project",
-        createLabel: (q) => `Create project “${q}”`,
+        createLabel: (q) => `New project “${q}”`,
         onCreate: (q) => {
           const p = newProject({ title: q });
           mutate(`${what} in new project “${q}”`, [...extra, { type: "create", table: "projects", row: { ...p } }, { type: "create", table: "actions", row: { ...make(p.id) } }]);
@@ -239,7 +239,7 @@ export function linkAppointment(ui: UI, e: Pick<CalEvent, "key" | "title" | "dat
     items: projectItems(),
     current: cur?.project_id ?? null,
     noneLabel: "No project",
-    createLabel: (q) => `Create project “${q}”`,
+    createLabel: (q) => `New project “${q}”`,
     onCreate: (q) => {
       const p = newProject({ title: q });
       link(p.id, [{ type: "create", table: "projects", row: { ...p } }], q);
@@ -276,7 +276,7 @@ export function editors(ui: UI) {
         items: contextItems(),
         current: one(ids)?.context_id ?? null,
         noneLabel: "No context",
-        createLabel: (q) => `Create “${q.startsWith("@") ? q : "@" + q}”`,
+        createLabel: (q) => `New context “${q.startsWith("@") ? q : "@" + q}”`,
         onCreate: (q) => {
           const { id, op } = createContextOp(q);
           mutate(`${n(ids)} → new context`, [op, ...ids.map((a) => ({ type: "patch" as const, table: "actions" as const, id: a, data: { context_id: id } }))]);
@@ -430,7 +430,7 @@ export function editors(ui: UI) {
             ? [{ id: "convert", label: ids.length === 1 ? "Turn into a project" : "Turn each into a project", hint: "Needs more than one step", section: "now" }]
             : []),
         ],
-        createLabel: (q) => `Create project “${q}” and move`,
+        createLabel: (q) => `New project “${q}”, and move there`,
         onCreate: (q) => {
           const p = newProject({ title: q });
           mutate(`${n(ids)} → new project “${q}”`, [
@@ -484,6 +484,69 @@ export function editors(ui: UI) {
  * Keyboard commands for any list of actions. `status` decides where N creates
  * new rows; `step` moves the selected rows one place for ⌥↑/⌥↓.
  */
+/**
+ * The keys a row that is an action answers to, the same on every list that shows actions (Next Actions, Waiting For,
+ * Someday, Agendas, Done, the Calendar, the Weekly Review's steps), so a letter means one thing wherever the action
+ * is: Enter opens it, J jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P D S M G R B H set its
+ * fields (D is the follow-up on a waiting item, the due date otherwise), ⇧F delegates, Delete trashes and ⇧Delete
+ * deletes for good. Each list adds its own verbs (new, done, reorder) and leaves out with `skip` what it does its
+ * own way. `targets` names the actions to act on: a heading under the cursor says so instead of doing nothing.
+ */
+export function actionRowCommands(
+  ui: UI,
+  o: { targets: () => ID[]; focusId: ID | null; group: string; rename?: (id: ID) => void; waiting?: boolean; skip?: string[]; enabled?: boolean },
+): Command[] {
+  const ed = editors(ui);
+  const ids = () => o.targets();
+  const has = (o.enabled ?? true) && Boolean(o.focusId);
+  const focus = o.focusId ? getState().actions.find((a) => a.id === o.focusId) : undefined;
+  // D is the follow-up on a waiting item (what the list shows), the due date on anything else.
+  const waiting = o.waiting ?? focus?.status === "waiting";
+  const rename = (id: ID) =>
+    o.rename
+      ? o.rename(id)
+      : ui.openPicker({
+          type: "text",
+          title: "Rename",
+          current: getState().actions.find((a) => a.id === id)?.title ?? "",
+          onPick: (v) => {
+            const title = (v ?? "").trim();
+            const a = getState().actions.find((x) => x.id === id);
+            if (a && title && title !== a.title) mutate(`Renamed ${quote(title)}`, [{ type: "patch", table: "actions", id, data: { title } }]);
+          },
+        });
+  const trash = (permanent: boolean) => {
+    const t = ids();
+    if (!t.length) return;
+    if (permanent) mutate(`${n(t)} deleted permanently`, t.map((id): Op => ({ type: "delete", table: "actions", id })));
+    else patchMany("actions", t, { status: "trashed" }, `${n(t)} trashed`);
+  };
+  const all: Command[] = [
+    { id: "row.open", label: "Open details", group: o.group, keys: ["enter"], run: () => o.focusId && ui.openDetail({ kind: "action", id: o.focusId }, true) },
+    { id: "row.jump", label: "Jump to its project", group: o.group, keys: ["j"], run: () => o.focusId && ui.jumpToProject(o.focusId) },
+    { id: "row.rename", label: "Rename", group: o.group, keys: ["f2"], run: () => o.focusId && rename(o.focusId) },
+    { id: "row.move", label: "Move to project or list", group: o.group, keys: ["v"], run: () => ed.move(ids()) },
+    { id: "row.convert", label: "Turn into a project", group: o.group, keys: ["shift+p"], run: () => ed.convert(ids()) },
+    { id: "row.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(ids()) },
+    { id: "row.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(ids()) },
+    waiting
+      ? { id: "row.date", label: "Follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "followup") }
+      : { id: "row.date", label: "Due date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "due") },
+    ...(waiting ? [{ id: "row.since", label: "Waiting since", group: "Fields", keys: ["i"], run: () => ed.date(ids(), "waiting_since") }] : []),
+    { id: "row.defer", label: "Start date", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "defer") },
+    // M for minutes: T and W add, everywhere (owner's decision after the critique found T editing here and adding elsewhere).
+    { id: "row.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["m"], run: () => ed.time(ids()) },
+    { id: "row.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(ids()) },
+    { id: "row.repeat", label: "Repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(ids()) },
+    { id: "row.bringback", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], run: () => ed.date(ids(), "bring_back") },
+    { id: "row.person", label: "Who it's with (their agenda)", group: "Fields", keys: ["h"], run: () => ed.person(ids()) },
+    { id: "row.delegate", label: "Delegate → Waiting For", group: o.group, keys: ["shift+f"], run: () => ed.delegate(ids()) },
+    { id: "row.trash", label: "Trash", group: o.group, keys: ["backspace", "delete"], run: () => trash(false) },
+    { id: "row.delete", label: "Delete permanently", group: o.group, keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },
+  ];
+  return all.filter((c) => !o.skip?.includes(c.id)).map((c) => ({ ...c, enabled: has }));
+}
+
 export function useActionCommands(opts: {
   ui: UI;
   targets: () => ID[];
@@ -501,7 +564,6 @@ export function useActionCommands(opts: {
   const [editing, setEditing] = useState<ID | null>(null);
   const [striking, setStriking] = useState<Set<ID>>(new Set());
   const timer = useRef<number | undefined>(undefined);
-  const ed = editors(ui);
 
   // A command on a group heading has nothing to act on: say so instead of doing nothing.
   const pick = () => {
@@ -531,17 +593,6 @@ export function useActionCommands(opts: {
     const ids = targets();
     if (!ids.length) return;
     reopenActions(ids);
-  };
-
-  const trash = (permanent: boolean) => {
-    const ids = targets();
-    if (!ids.length) return;
-    if (permanent) {
-      mutate(
-        `${n(ids)} deleted permanently`,
-        ids.map((id) => ({ type: "delete", table: "actions", id })),
-      );
-    } else patchMany("actions", ids, { status: "trashed" }, `${n(ids)} trashed`);
   };
 
   // The whole selection moves, not just the row under the cursor.
@@ -589,33 +640,13 @@ export function useActionCommands(opts: {
       run: () => addBeside("next"),
     },
     { id: "act.addwait", label: "Add a waiting for (to this row's project)", group: "Actions", keys: ["w"], run: () => addBeside("waiting") },
-    { id: "act.open", label: "Open details", group: "Actions", keys: ["enter"], run: () => opts.focusId && ui.openDetail({ kind: "action", id: opts.focusId }, true) },
-    { id: "act.jump", label: "Jump to its project", group: "Actions", keys: ["j"], run: () => opts.focusId && ui.jumpToProject(opts.focusId) },
-    { id: "act.rename", label: "Edit subject", group: "Actions", keys: ["f2"], run: () => opts.focusId && setEditing(opts.focusId) },
     opts.doneView
       ? { id: "act.reopen", label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
       : { id: "act.done", label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
-    { id: "act.move", label: "Move to project or list", group: "Actions", keys: ["v"], run: () => ed.move(pick()) },
-    { id: "act.convert", label: "Turn into a project", group: "Actions", keys: ["shift+p"], run: () => ed.convert(pick()) },
-    { id: "act.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(pick()) },
-    { id: "act.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(pick()) },
-    opts.waitingView
-      ? { id: "act.followup", label: "Follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(pick(), "followup") }
-      : { id: "act.due", label: "Due date", group: "Fields", keys: ["d"], run: () => ed.date(pick(), "due") },
-    ...(opts.waitingView ? [{ id: "act.since", label: "Waiting since", group: "Fields", keys: ["i"], run: () => ed.date(pick(), "waiting_since") }] : []),
-    { id: "act.defer", label: "Start date", group: "Fields", keys: ["s"], run: () => ed.date(pick(), "defer") },
-    // M for minutes: T and W add, everywhere (owner's decision after the critique found T editing here and adding elsewhere).
-    { id: "act.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["m"], run: () => ed.time(pick()) },
-    { id: "act.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(pick()) },
-    { id: "act.repeat", label: "Repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(pick()) },
-    { id: "act.bringback", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], run: () => ed.date(pick(), "bring_back") },
-    { id: "act.person", label: "Who it's with (their agenda)", group: "Fields", keys: ["h"], run: () => ed.person(pick()) },
-    { id: "act.delegate", label: "Delegate → Waiting For", group: "Actions", keys: ["shift+f"], run: () => ed.delegate(pick()) },
-    { id: "act.trash", label: "Trash", group: "Actions", keys: ["backspace", "delete"], run: () => trash(false) },
-    { id: "act.delete", label: "Delete permanently", group: "Actions", keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },
+    ...actionRowCommands(ui, { targets: pick, focusId: opts.focusId, group: "Actions", rename: setEditing, waiting: opts.waitingView }),
     { id: "act.up", label: "Move row up", group: "Actions", keys: ["alt+arrowup"], run: () => reorder(-1) },
     { id: "act.down", label: "Move row down", group: "Actions", keys: ["alt+arrowdown"], run: () => reorder(1) },
-  ].map((c) => (["act.new", "act.open", "act.addnext", "act.addwait"].includes(c.id) ? c : { ...c, enabled: c.enabled ?? has() }));
+  ].map((c) => (["act.new", "act.addnext", "act.addwait"].includes(c.id) || c.id.startsWith("row.") ? c : { ...c, enabled: c.enabled ?? has() }));
 
   const commitTitle = (id: ID, title: string) => {
     setEditing(null);
@@ -625,7 +656,7 @@ export function useActionCommands(opts: {
       mutate("Discarded empty action", [{ type: "delete", table: "actions", id }], { silent: true });
       return;
     }
-    if (title.trim() !== a.title) mutate("Renamed", [{ type: "patch", table: "actions", id, data: { title: title.trim() } }]);
+    if (title.trim() !== a.title) mutate(`Renamed ${quote(title)}`, [{ type: "patch", table: "actions", id, data: { title: title.trim() } }]);
   };
 
   // The Complete box acts on its own row, not on the selection: strike through and complete, or bring back.
@@ -643,7 +674,7 @@ export function useActionCommands(opts: {
   };
   const reopenOne = (id: ID) => reopenActions([id]);
 
-  return { commands, editing, setEditing, commitTitle, striking, completeOne, reopenOne };
+  return { commands, create, editing, setEditing, commitTitle, striking, completeOne, reopenOne };
 }
 
 /**
@@ -690,7 +721,7 @@ export function setProject(ui: UI, table: "actions" | "refs" | "checklists", ids
     items: projectItems(),
     current: rows.length === 1 ? (rows[0].project_id ?? null) : null,
     noneLabel: "No project",
-    createLabel: (q) => `Create project “${q}”`,
+    createLabel: (q) => `New project “${q}”`,
     onCreate: (q) => {
       const p = newProject({ title: q });
       mutate(`${what} → new project “${q}”`, [{ type: "create", table: "projects", row: { ...p } }, ...patch(p.id)]);

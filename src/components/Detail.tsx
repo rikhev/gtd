@@ -331,7 +331,8 @@ function ActionDetail({ a }: { a: Action }) {
     ],
     [
       "due",
-      <PickField key="due" label="Due" k="D" onOpen={() => ed.date([a.id], "due")}>
+      // D is the follow-up on a waiting item, as on Waiting For's rows; its due date is a click or Tab away.
+      <PickField key="due" label="Due" k={waiting ? undefined : "D"} onOpen={() => ed.date([a.id], "due")}>
         {a.due ? <DueLong date={a.due} done={done} /> : none}
       </PickField>,
     ],
@@ -391,7 +392,7 @@ function ActionDetail({ a }: { a: Action }) {
     ],
     [
       "followup",
-      <PickField key="followup" label="Follow up" onOpen={() => ed.date([a.id], "followup")}>
+      <PickField key="followup" label="Follow up" k={waiting ? "D" : undefined} onOpen={() => ed.date([a.id], "followup")}>
         {a.followup ? <DueLong date={a.followup} done={a.status !== "waiting"} /> : none}
       </PickField>,
     ],
@@ -717,7 +718,7 @@ function ProjectDetail({ p }: { p: Project }) {
           {doneCount > 0 && <span className="detail-h-note">{doneCount} done</span>}
         </h3>
         {p.status === "active" && !open.length && (notStarted(p) || startsToday(p)) && (
-          <p className="badge-line is-quiet">{notStarted(p) ? `Starts ${formatLong(p.start!)}. No next action needed before then.` : "Starts today. Add its first next action below."}</p>
+          <p className="badge-line is-quiet">{notStarted(p) ? `Starts ${formatLong(p.start!)}. No next action needed before then.` : "Starts today: add a next action below."}</p>
         )}
         {p.status === "active" && !open.some((a) => a.status === "next" || a.status === "waiting") && nextAppt && !notStarted(p) && (
           <p className="badge-line is-quiet">

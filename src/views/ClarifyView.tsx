@@ -1,7 +1,7 @@
 import { NotesArea } from "../components/NotesArea.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, StickyNote } from "lucide-react";
-import { getState, mutate, newAction, newProject, notify, plural, stamp, uid, useStore, bareArea } from "../store.ts";
+import { quote, getState, mutate, newAction, newProject, notify, plural, stamp, uid, useStore, bareArea } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { RAIL } from "../components/Chrome.tsx";
@@ -169,7 +169,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
 
     if (d.disposition === "trash") {
       ops.push({ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } });
-      label = "Trashed";
+      label = `${quote(current.text)} trashed`;
     } else if (d.disposition === "reference" && d.reference?.checklist) {
       // A checklist (non-actionable, but its own category in GTD, not reference): the item's lines under its first become the items to tick.
       if (filesHere.length) {
@@ -269,7 +269,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
 
   const trashItem = () => {
     if (!current) return;
-    finishItem(current.id, "Trashed", [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]);
+    finishItem(current.id, `${quote(current.text)} trashed`, [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]);
   };
 
   const pickFor = (i: number, field: "context" | "project" | "due" | "defer" | "back" | "time" | "energy" | "kind" | "who") => {
@@ -284,7 +284,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         // A next action must have a context, so "No context" is only offered for other kinds.
         noneLabel: a.kind === "next" && !a.done ? undefined : "No context",
         mustChoose: !a.context,
-        createLabel: (q) => `Use new context “${q.startsWith("@") ? q : "@" + q}”`,
+        createLabel: (q) => `New context “${q.startsWith("@") ? q : "@" + q}”`,
         onCreate: (q) => updateRow(i, { context: q.startsWith("@") ? q : `@${q}` }),
         onPick: (name) => updateRow(i, { context: name }),
       });
@@ -386,7 +386,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       : current && orphan
         ? [
             { k: "enter", label: "Clarify it as new stuff", run: () => mutate("Clarifying it afresh", [{ type: "patch", table: "stuff", id: current.id, data: { back_kind: null, back_id: null } }], { silent: true }) },
-            { k: "backspace", label: "Trash this entry", run: () => finishItem(current.id, "Trashed", [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]) },
+            { k: "backspace", label: "Trash this entry", run: () => finishItem(current.id, `${quote(current.text)} trashed`, [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]) },
           ]
         : [];
   useCommands(
@@ -646,7 +646,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                             items: areaItems().map((a) => ({ ...a, id: bareArea(a.label) })),
                             current: draft.new_project?.area ?? null,
                             noneLabel: "No area",
-                            createLabel: (q) => `New area “${q}”`,
+                            createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
                             onCreate: (q) => update((d) => (d.new_project = { ...d.new_project!, area: bareArea(q) })),
                             onPick: (a) => update((d) => (d.new_project = { ...d.new_project!, area: a })),
                           })

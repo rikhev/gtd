@@ -97,7 +97,7 @@ export function Lamp({ health, start, appt }: { health: keyof typeof HEALTH_LABE
         : appt
           ? `Next: ${appt.title}, ${appt.date === today() ? "today" : formatLong(appt.date)}${appt.time ? ` ${appt.time}` : ""}`
           : start === today()
-            ? "Starts today: give it a next action"
+            ? "Starts today: add a next action"
             : HEALTH_LABEL.scheduled;
   return (
     <svg className={`lamp ${health}`} viewBox="0 0 12 12" role="img" aria-label={label}>
@@ -170,7 +170,7 @@ export function DateCell({ date, kind = "due" }: { date: string | null; kind?: "
   const overdue = kind === "due" && d < 0;
   const soon = kind === "due" && d >= 0 && d <= 1;
   return (
-    <span className={`date ${overdue ? "is-overdue" : ""} ${soon ? "is-soon" : ""}`} title={overdue ? `${date}, overdue` : date}>
+    <span className={`date ${overdue ? "is-overdue" : ""} ${soon ? "is-soon" : ""}`} title={overdue ? `${formatLong(date)}, overdue` : formatLong(date)}>
       {formatDate(date)}
       {/* Colour alone doesn't reach a screen reader. */}
       {overdue && <span className="visually-hidden">, overdue</span>}

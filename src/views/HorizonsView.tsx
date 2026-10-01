@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Compass, Eye, Target } from "lucide-react";
-import { getState, mutate, patchMany, plural, stamp, useTables } from "../store.ts";
+import { quote, getState, mutate, patchMany, plural, stamp, useTables } from "../store.ts";
 import { useUI, type UI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, stepRows, useListNav, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
@@ -35,6 +35,8 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
   const nav = useListNav("horizons", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((h) => h.id), showHeader: true })), [groups]));
   const focus = all.find((h) => h.id === nav.focus);
   const targets = () => nav.targets().filter((k) => !isGroupKey(k));
+  /** One horizon by its name, several by their count. */
+  const hName = (ids: ID[]) => (ids.length === 1 ? `“${all.find((h) => h.id === ids[0])?.title || "Untitled"}”` : plural(ids.length, "horizon"));
   const serving = (id: ID) => s.projects.filter((p) => p.goal_id === id && p.status === "active").length;
 
   useEffect(() => {
@@ -81,7 +83,23 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
         const ids = targets();
         // A goal's projects keep naming it while it is in the Trash (nothing shows it there), so restoring it relinks
         // them; the links go only when the Trash removes the goal for good (GTD audit).
-        mutate(ids.length === 1 ? `“${all.find((h) => h.id === ids[0])?.title || "Untitled"}” trashed` : `${plural(ids.length, "horizon")} trashed`, ids.map((id): Op => ({ type: "patch", table: "horizons", id, data: { status: "trashed" } })));
+        mutate(`${hName(ids)} trashed`, ids.map((id): Op => ({ type: "patch", table: "horizons", id, data: { status: "trashed" } })));
+      },
+    },
+    {
+      id: "hz.delete",
+      label: "Delete permanently",
+      group: "Horizons",
+      keys: ["shift+backspace", "shift+delete"],
+      enabled: Boolean(focus),
+      run: () => {
+        const ids = targets();
+        // Gone for good, a goal's projects stop naming it (⌘Z brings both back).
+        const linked = getState().projects.filter((p) => p.goal_id && ids.includes(p.goal_id));
+        mutate(`${hName(ids)} deleted permanently`, [
+          ...linked.map((p): Op => ({ type: "patch", table: "projects", id: p.id, data: { goal_id: null } })),
+          ...ids.map((id): Op => ({ type: "delete", table: "horizons", id })),
+        ]);
       },
     },
   ];
@@ -114,7 +132,7 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
               setEditing(null);
               const title = v.trim();
               if (!title && !h.title) return mutate("Discarded", [{ type: "delete", table: "horizons", id: h.id }], { silent: true });
-              if (title && title !== h.title) mutate("Renamed", [{ type: "patch", table: "horizons", id: h.id, data: { title } }]);
+              if (title && title !== h.title) mutate(`Renamed ${quote(title)}`, [{ type: "patch", table: "horizons", id: h.id, data: { title } }]);
             }}
           />
         ) : (

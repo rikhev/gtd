@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, ListChecks, Mail, Paperclip, StickyNote, Target } from "lucide-react";
-import { capture, uid, mutate, newProject, completeActions, isChase, isCurrentStep, onHold, isStale, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { quote, capture, uid, mutate, newProject, completeActions, isChase, isCurrentStep, onHold, isStale, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, named, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
 import { DateCell, EventMark, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
-import { editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
+import { actionRowCommands, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
@@ -137,7 +137,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     if (!sess.visited.includes(step.id)) update({ visited: [...sess.visited, step.id] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step.id]);
-  const ed = editors(ui);
   // Clarify runs inside the Get clear step, so the review never goes away underneath it.
   const [clarifying, setClarifying] = useState<{ run: number } | null>(null);
   const clarify = () => setClarifying((c) => ({ run: (c?.run ?? 0) + 1 }));
@@ -527,13 +526,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       enabled: step.id === "projects" && focusRow?.kind === "project",
       run: () => focusRow && projectEditors(ui).addWaiting(focusRow.id),
     },
-    // Look back: a finished item's loose end becomes a next action or a waiting for, in the same project.
+    // Look back: a finished item's loose end becomes a next action or a waiting for, in the same project. On the
+    // Next actions and Waiting for steps T and W add beside the row, in its project, as they do on those lists.
     {
       id: "rv.followup",
-      label: "Add a follow-up next action",
+      label: step.id === "lookback" ? "Add a follow-up next action" : "Add a next action (to this row's project)",
       group: "Review",
       keys: ["t"],
-      enabled: step.id === "lookback",
+      enabled: ["lookback", "next", "waiting"].includes(step.id),
       run: () => {
         const pid = focusRow ? (focusRow.kind === "project" ? focusRow.id : s.actions.find((a) => a.id === focusRow.id)?.project_id) : null;
         if (pid) addNextAction(pid);
@@ -542,10 +542,10 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.followwait",
-      label: "Add a follow-up waiting for",
+      label: step.id === "lookback" ? "Add a follow-up waiting for" : "Add a waiting for (to this row's project)",
       group: "Review",
       keys: ["w"],
-      enabled: step.id === "lookback",
+      enabled: ["lookback", "next", "waiting"].includes(step.id),
       run: () => {
         const pid = focusRow ? (focusRow.kind === "project" ? focusRow.id : s.actions.find((a) => a.id === focusRow.id)?.project_id) : null;
         if (pid) projectEditors(ui).addWaiting(pid);
@@ -617,15 +617,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         const p = targetsOf("project");
         if (targetsOf("stuff").length) doneNow(targetsOf("stuff"));
         if (step.id === "someday") {
-          if (a.length) patchMany("actions", a, { status: "next" }, `${plural(a.length, "action")} activated`);
-          if (p.length) patchMany("projects", p, { status: "active" }, `${plural(p.length, "project")} activated`);
+          if (a.length) patchMany("actions", a, { status: "next" }, `${named("actions", a, "action")} activated`);
+          if (p.length) patchMany("projects", p, { status: "active" }, `${named("projects", p, "project")} activated`);
         } else {
           if (a.length) completeActions(a);
           if (p.length) projectEditors(ui).complete(p);
         }
       },
     },
-    { id: "rv.move", label: "Move", group: "Review", keys: ["v"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.move(targetsOf("action")) },
     {
       id: "rv.current",
       label: "Reviewed: still current",
@@ -650,8 +649,15 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       enabled: step.id === "creative" && (focusRow?.kind === "area" || focusRow?.kind === "goal"),
       run: () => focusRow && (focusRow.kind === "goal" ? newProjectFor(focusRow.id) : newProjectIn(focusRow.id)),
     },
-    { id: "rv.due", label: step.id === "waiting" ? "Follow-up date" : "Due date", group: "Fields", keys: ["d"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), step.id === "waiting" ? "followup" : "due") },
-    { id: "rv.back", label: "Bring back on", group: "Fields", keys: ["b"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), "bring_back") },
+    // An action in a step takes the keys it takes on its list (V, C, D, S, M, G, B, H, ⇧P, ⇧F, ⇧Delete); R stays
+    // "still current" here (owner's decision), and Enter, J, F2, P and Delete are the review's own, for every kind of row.
+    ...actionRowCommands(ui, {
+      targets: () => targetsOf("action"),
+      focusId: focusRow?.kind === "action" ? focusRow.id : null,
+      group: "Review",
+      enabled: !["lookback", "upcoming"].includes(step.id),
+      skip: ["row.open", "row.jump", "row.rename", "row.project", "row.repeat", "row.trash"],
+    }),
     {
       id: "rv.trash",
       label: "Trash",
@@ -662,8 +668,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         const a = targetsOf("action");
         const p = targetsOf("project");
         if (targetsOf("stuff").length) trashNow(targetsOf("stuff"));
-        if (a.length) patchMany("actions", a, { status: "trashed" }, `${plural(a.length, "action")} trashed`);
-        if (p.length) patchMany("projects", p, { status: "trashed" }, `${plural(p.length, "project")} trashed`);
+        if (a.length) patchMany("actions", a, { status: "trashed" }, `${named("actions", a, "action")} trashed`);
+        if (p.length) projectEditors(ui).trash(p, false);
       },
     },
   ];
@@ -692,7 +698,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             onDone={(v) => {
               setRenaming(null);
               const title = v.trim();
-              if (title && title !== r.title) mutate("Renamed", [{ type: "patch", table: r.kind === "project" ? "projects" : "actions", id: r.id, data: { title } }]);
+              if (title && title !== r.title) mutate(`Renamed ${quote(title)}`, [{ type: "patch", table: r.kind === "project" ? "projects" : "actions", id: r.id, data: { title } }]);
             }}
           />
         ) : (

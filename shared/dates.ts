@@ -143,10 +143,24 @@ export function formatDate(s: string | null, base = today()): string {
   return `${d.getDate()} ${SHORT_MON[d.getMonth()]}${sameYear ? "" : ` ${d.getFullYear()}`}`;
 }
 
-export function formatLong(s: string | null): string {
+/** The local day a timestamp falls on (a stored stamp is UTC: its first ten characters can be another day). */
+export const localDay = (stamp: string) => iso(new Date(stamp));
+
+/** A timestamp's time of day, 24-hour ("09:30"). */
+export const clockOf = (stamp: string) => new Date(stamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/** A day as a group heading, the same in Done and the Trash: "Today · Thu 1 Oct", "Yesterday · Wed 30 Sep", "Mon 28 Sep". */
+export function dayHeading(d: string, base = today()): string {
+  if (!d) return "Undated";
+  return Math.abs(daysBetween(base, d)) <= 1 ? `${formatDate(d, base)} · ${formatLong(d, base)}` : formatLong(d, base);
+}
+
+/** "Mon 28 Sep", with the year only outside the current one ("Fri 8 Jan 2027"), as the short form keeps it. */
+export function formatLong(s: string | null, base = today()): string {
   if (!s) return "";
   const d = fromIso(s);
-  return `${SHORT_DAY[d.getDay()]} ${d.getDate()} ${SHORT_MON[d.getMonth()]} ${d.getFullYear()}`;
+  const sameYear = d.getFullYear() === fromIso(base).getFullYear();
+  return `${SHORT_DAY[d.getDay()]} ${d.getDate()} ${SHORT_MON[d.getMonth()]}${sameYear ? "" : ` ${d.getFullYear()}`}`;
 }
 
 /* ---------------- Recurrence ---------------- */

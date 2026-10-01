@@ -1,4 +1,4 @@
-import { getState, stamp } from "./store.ts";
+import { LIST_NAMES, getState, stamp } from "./store.ts";
 import type { UI } from "./ui.tsx";
 import { askContext } from "./actionCommands.tsx";
 import type { Action, ID, Op, Project, State, Stuff } from "../shared/types.ts";
@@ -21,7 +21,7 @@ export function reminderOf(s: Pick<State, "actions" | "projects">, st: Pick<Stuf
   return item ? { kind: "project", item } : null;
 }
 
-const LISTS: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned, in its project", active: "Projects", done: "Done" };
+const LISTS = LIST_NAMES;
 
 /** Where the item lives now: "Someday / Maybe · Renew the passports", "Waiting For · Anna". */
 export function reminderWhere(s: Pick<State, "projects">, r: Reminder): string {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
-import { archiveDone, mutate, reopenActions, upload, useTables } from "../store.ts";
+import { quote, archiveDone, mutate, reopenActions, upload, useTables } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
@@ -163,7 +163,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
             placeholder="Capture anything"
             onDone={(v) => {
               setEditing(null);
-              if (v.trim() && v !== st.text) mutate("Edited", [{ type: "patch", table: "stuff", id: st.id, data: { text: v } }]);
+              if (v.trim() && v !== st.text) mutate(`Edited ${quote(v)}`, [{ type: "patch", table: "stuff", id: st.id, data: { text: v } }]);
             }}
           />
         ) : (

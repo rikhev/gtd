@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ListChecks } from "lucide-react";
-import { forgetUndo, getMeta, getState, mutate, notify, patchMany, plural, stamp, uid, useTables } from "../store.ts";
+import { quote, forgetUndo, getMeta, getState, mutate, notify, patchMany, plural, stamp, uid, useTables } from "../store.ts";
 import { useUI, type UI } from "../ui.tsx";
 import { pressedByTouch, useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -127,6 +127,16 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     if (sort) setSort(null);
   };
   const trash = (ids: ID[]) => ids.length && patchMany("checklists", ids, { status: "trashed" }, `${checklistNamed(ids)} trashed`);
+  /** Gone for good, with its items and their record (⌘Z brings them all back). */
+  const purge = (ids: ID[]) => {
+    if (!ids.length) return;
+    const st = getState();
+    mutate(`${checklistNamed(ids)} deleted permanently`, [
+      ...st.checklist_ticks.filter((k) => ids.includes(k.checklist_id)).map((k): Op => ({ type: "delete", table: "checklist_ticks", id: k.id })),
+      ...st.checklist_items.filter((i) => ids.includes(i.checklist_id)).map((i): Op => ({ type: "delete", table: "checklist_items", id: i.id })),
+      ...ids.map((id): Op => ({ type: "delete", table: "checklists", id })),
+    ]);
+  };
 
   const commands: Command[] = [
     ...nav.commands,
@@ -139,6 +149,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     { id: "cl.repeat", label: "Repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], enabled: Boolean(focusId), run: () => pickRepeats(ui, targets()) },
     { id: "cl.over", label: "Start over (clear the ticks)", group: "Checklists", enabled: anyTicked(targets()), run: () => startOver(targets()) },
     { id: "cl.trash", label: "Trash checklist", group: "Checklists", keys: ["backspace", "delete"], enabled: Boolean(focusId), run: () => trash(targets()) },
+    { id: "cl.delete", label: "Delete permanently", group: "Checklists", keys: ["shift+backspace", "shift+delete"], enabled: Boolean(focusId), run: () => purge(targets()) },
     { id: "cl.up", label: "Move row up", group: "Checklists", keys: ["alt+arrowup"], enabled: Boolean(focusId), run: () => reorder(-1) },
     { id: "cl.down", label: "Move row down", group: "Checklists", keys: ["alt+arrowdown"], enabled: Boolean(focusId), run: () => reorder(1) },
     {
@@ -310,7 +321,7 @@ function setArea(ui: UI, ids: ID[]) {
     items: areaItems(),
     current: cur ?? null,
     noneLabel: "No area",
-    createLabel: (q) => `Create area “${q}”`,
+    createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
     onCreate: (q) => {
       const { id, op } = createAreaOp(q);
       apply(id, [op], `#${q.replace(/^#+\s*/, "")}`);
@@ -478,7 +489,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       current: list.title,
       onPick: (v) => {
         const title = (v ?? "").trim();
-        if (title && title !== list.title) mutate("Renamed", [{ type: "patch", table: "checklists", id: list.id, data: { title, updated_at: stamp() } }]);
+        if (title && title !== list.title) mutate(`Renamed ${quote(title)}`, [{ type: "patch", table: "checklists", id: list.id, data: { title, updated_at: stamp() } }]);
       },
     });
   const back = () => openChecklist(null);

@@ -7,7 +7,7 @@ import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
 import { syncCalendars, toggleFeed, useEvents, useHiddenFeeds, useSyncing } from "../calendarFeed.ts";
 import { EventMark, Lamp, Marker } from "../components/bits.tsx";
-import { askContext, askWaitingOn, editors, linkAppointment, setProject } from "../actionCommands.tsx";
+import { actionRowCommands, askContext, askWaitingOn, editors, linkAppointment, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { addDays, addMonths, daysBetween, formatLong, fromIso, today } from "../../shared/dates.ts";
 import type { Appointment, ID, State } from "../../shared/types.ts";
@@ -257,7 +257,9 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   // Follow-ups already past their day (today's are in the day's landscape): chases to make, on today only.
   const lateFollowups = (d: string) => (d === t ? items.filter((i) => i.role === "followup" && i.end < d) : []);
   const fitNow = useFit();
-  const overdueCount = items.filter((i) => i.kind !== "event" && i.overdue && i.end < t).length;
+  // "Overdue" means one thing everywhere: a due date passed. Follow-ups past their day are chases (the rail's "to
+  // chase"), counted on Waiting For, not here; the count is what the Day tab's Overdue section lists.
+  const overdueCount = overdueBefore(t).length;
   // The Day tab's next actions (what fits now, else anywhere) as items too, so the keyboard reaches every row.
   const nextNow: Item[] = useMemo(() => {
     if (mode !== "day" || cursor !== t) return [];
@@ -450,6 +452,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const ped = projectEditors(ui);
 
   const inItem = Boolean(focusItem);
+  const focusWaiting = focusItem?.kind === "action" && s.actions.find((a) => a.id === focusItem.id)?.status === "waiting";
   // Appointments belong to their calendar: moved, completed or re-dated only there.
   const editable = inItem && focusItem?.kind !== "event";
   /**
@@ -521,12 +524,13 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       run: () => trashItem(focusItem),
     },
     {
+      // D is the follow-up on a waiting item, the due date on anything else, as on the lists.
       id: "cal.due",
-      label: "Due date",
+      label: focusWaiting ? "Follow-up date" : "Due date",
       group: "Fields",
       keys: ["d"],
       enabled: editable,
-      run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], "due") : ped.date([focusItem.id], "due")),
+      run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], focusWaiting ? "followup" : "due") : ped.date([focusItem.id], "due")),
     },
     {
       id: "cal.start",
@@ -547,7 +551,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     {
       id: "cal.project",
       label: focusItem?.kind === "event" ? "Link the appointment to a project" : "Set project",
-      group: "Calendar",
+      group: "Fields",
       keys: ["p"],
       // P as on every list: an appointment is linked to a project, an action set in one (a project has none).
       enabled: focusItem?.kind === "event" || focusItem?.kind === "action",
@@ -556,6 +560,13 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           ? linkAppointment(ui, { key: focusItem.id, title: focusItem.title, date: focusItem.start, time: focusItem.time ?? null, endTime: focusItem.endTime ?? null, feed: focusItem.feed ?? "" })
           : focusItem?.kind === "action" && setProject(ui, "actions", [focusItem.id]),
     },
+    // An action under the cursor takes the rest of the keys an action takes on its list (F2, V, ⇧P, C, M, G, R, B, H, ⇧F).
+    ...actionRowCommands(ui, {
+      targets: () => (focusItem?.kind === "action" ? [focusItem.id] : []),
+      focusId: focusItem?.kind === "action" ? focusItem.id : null,
+      group: "Calendar",
+      skip: ["row.open", "row.jump", "row.project", "row.date", "row.defer", "row.trash", "row.delete"],
+    }),
   ];
   useCommands("list:calendar", commands, { priority: 10, active: regionActive });
   // While the calendar is the active region it holds focus (as a list's grid does), so a screen reader is inside the
@@ -697,7 +708,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     return on.length ? (
       <span className="cal-dots" aria-hidden="true">
         {on.map((i) => (
-          <i key={i.key} style={i.kind === "event" && i.color ? { background: i.color } : undefined} className={i.kind === "event" ? "is-event" : i.overdue || ((i.role === "due" || i.role === "span") && i.end === d) ? "is-due" : i.role === "followup" ? "is-follow" : i.kind === "project" ? "is-project" : ""} />
+          <i key={i.key} style={i.kind === "event" && i.color ? { background: i.color } : undefined} className={i.kind === "event" ? "is-event" : i.overdue ? "is-due" : (i.role === "due" || i.role === "span") && i.end === d ? "is-deadline" : i.role === "followup" ? "is-follow" : i.kind === "project" ? "is-project" : ""} />
         ))}
       </span>
     ) : null;

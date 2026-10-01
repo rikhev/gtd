@@ -1,13 +1,13 @@
 import { useEffect, useMemo } from "react";
 import { Circle, Layers } from "lucide-react";
-import { mutate, plural, reopenActions, useStore } from "../store.ts";
+import { LIST_NAMES, quote, mutate, plural, reopenActions, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { setProject } from "../actionCommands.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
-import { daysBetween, formatDate, formatLong, today } from "../../shared/dates.ts";
+import { clockOf, dayHeading, formatDate, localDay } from "../../shared/dates.ts";
 import type { ID, Op, State } from "../../shared/types.ts";
 
 type Kind = "action" | "project";
@@ -25,7 +25,6 @@ interface Row {
   at: string;
 }
 
-const LIST_NAMES: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned (its project)", inbox: "Inbox" };
 
 /** Everything archived to Done, newest first: actions and completed projects alike. */
 function rowsOf(s: State): Row[] {
@@ -49,13 +48,8 @@ function rowsOf(s: State): Row[] {
   return out.sort((a, b) => b.at.localeCompare(a.at) || (a.kind === b.kind ? 0 : a.kind === "project" ? -1 : 1));
 }
 
-const clock = (at: string) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-
-/** One date style for every day: the full date, with "Today" or "Yesterday" in front when it applies. */
-function dayLabel(d: string) {
-  if (!d) return "Undated";
-  return Math.abs(daysBetween(today(), d)) <= 1 ? `${formatDate(d)} · ${formatLong(d)}` : formatLong(d);
-}
+const clock = clockOf;
+const dayLabel = dayHeading;
 
 /**
  * Done: everything archived off its list, newest first, grouped by the day it was done (or by project), as the Trash
@@ -78,7 +72,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
         key = p?.id ?? "none";
         label = p ? p.title || "Untitled project" : "No project";
       } else {
-        key = r.at.slice(0, 10);
+        key = localDay(r.at);
         label = dayLabel(key);
       }
       const g = map.get(key) ?? { label, rows: [] };
@@ -121,21 +115,40 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
     if (projs.length) projectEditors(ui).reopen(projs);
     if (acts.length) reopenActions(acts);
   };
-  const trash = (rows: Row[]) => {
+  const name = (rows: Row[]) => (rows.length === 1 ? `“${rows[0].title || "Untitled"}”` : plural(rows.length, "item"));
+  const trash = (rows: Row[], permanent = false) => {
     if (!rows.length) return;
-    const ops: Op[] = rows.map((r) => ({ type: "patch" as const, table: r.kind === "project" ? ("projects" as const) : ("actions" as const), id: r.id, data: { status: "trashed" } }));
-    mutate(`${rows.length === 1 ? `“${rows[0].title}”` : plural(rows.length, "item")} trashed`, ops);
+    const table = (r: Row) => (r.kind === "project" ? ("projects" as const) : ("actions" as const));
+    const ops: Op[] = rows.map((r): Op => (permanent ? { type: "delete", table: table(r), id: r.id } : { type: "patch", table: table(r), id: r.id, data: { status: "trashed" } }));
+    mutate(`${name(rows)} ${permanent ? "deleted permanently" : "trashed"}`, ops);
   };
+  /** F2, as on every list: a done item can still be reworded (in a picker, the list being read-only otherwise). */
+  const rename = (r: Row) =>
+    ui.openPicker({
+      type: "text",
+      title: "Rename",
+      current: r.title,
+      onPick: (v) => {
+        const title = (v ?? "").trim();
+        if (title && title !== r.title) mutate(`Renamed ${quote(title)}`, [{ type: "patch", table: r.kind === "project" ? "projects" : "actions", id: r.id, data: { title } }]);
+      },
+    });
 
   const openViewMenu = () =>
     ui.openPicker({
       type: "list",
       title: "View",
       items: [
-        { id: "day", label: "Group by day", hint: groupBy === "day" ? "Current" : "" },
-        { id: "project", label: "Group by project", hint: groupBy === "project" ? "Current" : "" },
+        { id: "day", label: "Group by day", hint: groupBy === "day" ? "Current" : "", section: "group" },
+        { id: "project", label: "Group by project", hint: groupBy === "project" ? "Current" : "", section: "group" },
+        { id: "s:", label: "Sort by when done", hint: !sort ? "Current" : "", section: "sort" },
+        { id: "s:subject", label: "Sort by subject", hint: sort?.key === "subject" ? "Current" : "", section: "sort" },
+        { id: "s:from", label: "Sort by where it was", hint: sort?.key === "from" ? "Current" : "", section: "sort" },
       ],
-      onPick: (id) => id && setGroupBy(id as "day" | "project"),
+      onPick: (id) => {
+        if (id === "day" || id === "project") setGroupBy(id);
+        if (id?.startsWith("s:")) setSort(id === "s:" ? null : { key: id.slice(2), dir: 1 });
+      },
     });
 
   const commands: Command[] = [
@@ -145,8 +158,10 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
     // P and J as on every list (for done actions; a done project has no project of its own).
     { id: "done.project", label: "Set project", group: "Fields", keys: ["p"], enabled: targets().some((r) => r.kind === "action"), run: () => setProject(ui, "actions", targets().filter((r) => r.kind === "action").map((r) => r.id)) },
     { id: "done.jump", label: "Jump to its project", group: "Done", keys: ["j"], enabled: focus?.kind === "action", run: () => focus?.kind === "action" && ui.jumpToProject(focus.id) },
+    { id: "done.rename", label: "Rename", group: "Done", keys: ["f2"], enabled: Boolean(focus), run: () => focus && rename(focus) },
     { id: "done.trash", label: "Trash", group: "Done", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => trash(targets()) },
-    { id: "done.view", label: "View: group by day or project", group: "View", keys: ["alt+v"], run: openViewMenu },
+    { id: "done.delete", label: "Delete permanently", group: "Done", keys: ["shift+backspace", "shift+delete"], enabled: Boolean(focus), run: () => trash(targets(), true) },
+    { id: "done.view", label: "View: group and sort", group: "View", keys: ["alt+v"], run: openViewMenu },
   ];
   useCommands("list:done", commands, { priority: 10, active: regionActive });
 
@@ -166,7 +181,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
       align: "end",
       drop: 1,
       // Grouped by day the heading has the date, so the row gives the time; by project, the date.
-      render: (r) => <span className="date">{groupBy === "day" ? clock(r.at) : formatDate(r.at.slice(0, 10))}</span>,
+      render: (r) => <span className="date">{groupBy === "day" ? clock(r.at) : formatDate(localDay(r.at))}</span>,
     },
   ];
 

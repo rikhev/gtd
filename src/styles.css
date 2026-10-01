@@ -85,6 +85,28 @@
   --font-ui: "Stiltje Keys", "Instrument Sans Variable", "Instrument Sans fallback", system-ui, sans-serif;
   --font-label: "Stiltje Keys", "Instrument Sans Variable", "Instrument Sans condensed fallback", "Arial Narrow", sans-serif;
   --row: 30px;
+  /* The spacing rhythm (DESIGN.md › Layout): every gap is one of these; the hairline is for an icon against its text. */
+  --sp-hair: 2px;
+  --sp-xs: 4px;
+  --sp-sm: 6px;
+  --sp-md: 8px;
+  --sp-lg: 10px;
+  --sp-xl: 14px;
+  --sp-gutter: 16px;
+  --sp-page: 20px;
+  /* The type scale, by role (DESIGN.md › Typography): every font size in the app is one of these. */
+  --fs-key: 11px; /* key caps, tiny tiles, calendar week numbers */
+  --fs-tag: 11.5px; /* label tape tags */
+  --fs-small: 12px; /* small print, label caps, group meta */
+  --fs-note: 12.5px; /* secondary lines: toasts, notes, pane sub-lines */
+  --fs-head: 13px; /* condensed section heads, quiet buttons */
+  --fs-body: 13.5px; /* body: rows, fields */
+  --fs-sheet: 14px; /* reading text on a sheet */
+  --fs-title: 15px; /* pane and dialog titles */
+  --fs-input: 16px; /* touch inputs (no zoom on a phone) */
+  --fs-proposal: 17px; /* Clarify's proposal title */
+  --fs-headline: 19px; /* view headings */
+  --fs-numeral: 30px; /* big numerals, the pond's name */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -183,7 +205,7 @@ body,
 body {
   background: var(--paper);
   color: var(--ink);
-  font: 13.5px/1.4 var(--font-ui); /* Instrument Sans runs small (x-height 0.51): half a pixel up keeps 13px density readable */
+  font: var(--fs-body)/1.4 var(--font-ui); /* Instrument Sans runs small (x-height 0.51): half a pixel up keeps 13px density readable */
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
   overflow: hidden;
@@ -232,7 +254,7 @@ a:hover {
   font-variant-numeric: tabular-nums;
 }
 .small {
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .muted-text {
   color: var(--ink-2);
@@ -283,7 +305,7 @@ a:hover {
 .topbar {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--sp-lg);
   padding: 7px 16px 7px 16px;
   height: 44px;
   border-bottom: 1px solid var(--rule);
@@ -294,12 +316,12 @@ a:hover {
 .viewhead {
   display: flex;
   align-items: baseline;
-  gap: 12px;
+  gap: var(--sp-lg);
   padding: 16px 20px 8px;
 }
 .viewtitle {
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fs-headline);
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -308,7 +330,7 @@ a:hover {
 }
 /* Inside a checklist the heading starts with the way back up: "Checklists ›" in ink-2, then the checklist's name. */
 .viewcrumb {
-  font-size: 19px;
+  font-size: var(--fs-headline);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--ink-2);
@@ -330,7 +352,7 @@ a:hover {
 .viewtools {
   margin-left: auto;
   display: flex;
-  gap: 16px;
+  gap: var(--sp-gutter);
 }
 .touch-only {
   display: none;
@@ -385,7 +407,7 @@ a:hover {
 .named {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--sp-sm);
   min-width: 0;
   max-width: 100%;
 }
@@ -408,7 +430,7 @@ a:hover {
   color: #fff;
   font-family: var(--font-ui);
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-key);
   line-height: 1;
   letter-spacing: 0;
 }
@@ -426,7 +448,7 @@ a:hover {
 .group-label.is-area {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
 }
 
 /* A tag names a disposition or a section: Label Caps on a quiet water-grey chip. Areas are not tags. */
@@ -447,12 +469,12 @@ a:hover {
   text-overflow: ellipsis;
 }
 .tag-sm {
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   padding: 3px 6px 3px;
 }
 /* A heading-sized tag stands alone as a state's title: plain caps, no chip. */
 .tag-md {
-  font-size: 14px;
+  font-size: var(--fs-sheet);
   padding: 0;
   background: none;
   color: var(--ink-2);
@@ -469,7 +491,7 @@ a:hover {
   border-right: 1px solid var(--rule-strong);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-lg);
   padding: 14px 10px;
   overflow: auto;
   color: var(--rail-ink);
@@ -501,7 +523,7 @@ a:hover {
   position: absolute;
   left: 20px;
   bottom: calc(100% - 43px);
-  font: 600 condensed 13px/1 var(--font-label);
+  font: 600 condensed var(--fs-head)/1 var(--font-label);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -573,7 +595,7 @@ a:hover {
   right: 0;
   bottom: 58%;
   text-align: center;
-  font-size: 30px;
+  font-size: var(--fs-numeral);
   letter-spacing: 0.34em;
   /* The tracking trails the last letter: shift back by half of it so the word sits on the centre line. */
   text-indent: 0.34em;
@@ -590,7 +612,7 @@ a:hover {
 @media (max-height: 680px) {
   /* Every stop in reach: the runs close up a little (rail critique). */
   .rail {
-    gap: 6px;
+    gap: var(--sp-sm);
   }
   .rail-list {
     gap: 1px;
@@ -619,7 +641,7 @@ a:hover {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-hair);
 }
 .rail-list + .rail-list {
   padding-top: 10px;
@@ -630,7 +652,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-md);
   height: 30px;
   padding: 0 10px;
   border-radius: 3px;
@@ -664,7 +686,7 @@ a:hover {
   translate: 0 -50%;
   min-width: 30px;
   padding: 0 4px;
-  font-size: 11px;
+  font-size: var(--fs-key);
   line-height: 15px;
   text-align: center;
   color: var(--ink-2);
@@ -684,10 +706,10 @@ body.keys-held .rail .rail-meta .num {
 .rail-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   flex: none;
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .rail-meta .is-due {
   color: var(--alert);
@@ -829,7 +851,7 @@ body.keys-held .rail .rail-meta .num {
 .capture-filed li {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   height: 22px;
   animation: drop 220ms var(--ease) both;
 }
@@ -837,7 +859,7 @@ body.keys-held .rail .rail-meta .num {
 .search {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   width: 220px;
   height: 30px;
   padding: 0 10px;
@@ -953,7 +975,7 @@ body.is-col-dragging * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -966,7 +988,7 @@ body.is-col-dragging * {
 .gh-sort {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-xs);
   max-width: 100%;
   padding: 0;
   border: 0;
@@ -979,7 +1001,7 @@ body.is-col-dragging * {
 }
 /* The project lamp column's heading: a small ring standing for status, with the sort chevron beside it. */
 .gh-sort.is-icon {
-  gap: 2px;
+  gap: var(--sp-hair);
 }
 .gh-lamp {
   display: inline-block;
@@ -1071,7 +1093,7 @@ body.is-col-resizing * {
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-lg);
   max-width: calc(100vw - 32px);
   padding: 6px 10px;
   background: var(--sheet);
@@ -1081,7 +1103,7 @@ body.is-col-resizing * {
   white-space: nowrap;
 }
 .crh-what {
-  font: 400 13px/1.4 var(--font-ui);
+  font: 400 var(--fs-head)/1.4 var(--font-ui);
   letter-spacing: normal;
   text-transform: none;
   color: var(--ink);
@@ -1123,7 +1145,7 @@ body.is-col-resizing * {
   text-overflow: ellipsis;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
 }
 .cell.c-mark {
   padding: 0 0 0 4px;
@@ -1154,7 +1176,7 @@ body.is-col-resizing * {
 .subject {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-md);
   min-width: 0;
   width: 100%;
 }
@@ -1178,8 +1200,8 @@ body.is-col-resizing * {
 .back-on {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  font-size: 12px;
+  gap: var(--sp-xs);
+  font-size: var(--fs-small);
 }
 /* A phone-width list keeps the text and drops what only says there is more inside (notes, files): the detail shows it. */
 .grid.is-compact .ind-notes,
@@ -1188,7 +1210,7 @@ body.is-col-resizing * {
 }
 .subject-icons {
   display: inline-flex;
-  gap: 4px;
+  gap: var(--sp-xs);
   color: var(--ink-3);
   flex: none;
   align-self: center;
@@ -1198,7 +1220,7 @@ body.is-col-resizing * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-2);
@@ -1211,7 +1233,7 @@ body.is-col-resizing * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--alert);
@@ -1236,7 +1258,7 @@ body.is-col-resizing * {
 .files-count {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--sp-xs);
   color: var(--ink-2);
 }
 
@@ -1257,7 +1279,7 @@ body.is-col-resizing * {
 .group-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-md);
   height: 32px;
   padding: 0 8px;
   margin-top: 10px;
@@ -1272,7 +1294,7 @@ body.is-col-resizing * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -1280,15 +1302,15 @@ body.is-col-resizing * {
 .group-label.is-ctx {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
 }
 .group-count {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .group-meta {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-3);
 }
 .group-count {
@@ -1360,7 +1382,7 @@ body.is-col-resizing * {
 .event-project {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
 }
 .event-project .lamp {
   margin-left: 0;
@@ -1439,7 +1461,7 @@ body.is-col-resizing * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -1457,7 +1479,7 @@ body.is-col-resizing * {
 .cl-section-count {
   margin-left: auto;
   padding-left: 12px;
-  font: 400 12px var(--font-ui);
+  font: 400 var(--fs-small) var(--font-ui);
   letter-spacing: 0;
   text-transform: none;
   color: var(--ink-3);
@@ -1470,7 +1492,7 @@ body.is-col-resizing * {
 .hstrip {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-hair);
   vertical-align: middle;
 }
 .hstrip i {
@@ -1591,7 +1613,7 @@ body.is-col-resizing * {
 
 .energy {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--sp-hair);
   align-items: flex-end;
   height: 12px;
 }
@@ -1623,7 +1645,7 @@ body.is-col-resizing * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 700;
-  font-size: 11px;
+  font-size: var(--fs-key);
   line-height: 1;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1678,7 +1700,7 @@ body.is-col-resizing * {
   max-width: 440px;
 }
 .empty-title {
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 650;
   margin: 0 0 4px;
 }
@@ -1696,14 +1718,14 @@ body.is-col-resizing * {
 /* An empty list's first step, for the mouse and touch (the keyboard has it in ⌘K). */
 .empty-action {
   margin-top: 12px;
-  font-size: 13px;
+  font-size: var(--fs-head);
 }
 /* Filing as a checklist in Clarify: the items it will get, in the list's own quiet type. */
 .cl-preview {
   margin: 2px 0 0;
   padding: 0;
   list-style: none;
-  font-size: 12.5px;
+  font-size: var(--fs-note);
   color: var(--ink-2);
 }
 .cl-preview li {
@@ -1724,7 +1746,7 @@ body.is-col-resizing * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1740,7 +1762,7 @@ body.is-col-resizing * {
   display: inline-block;
   min-width: 20px;
   padding: 1px 5px;
-  font: 600 11px/16px var(--font-ui);
+  font: 600 var(--fs-key)/var(--fs-input) var(--font-ui);
   text-align: center;
   color: var(--ink);
   background: var(--sheet);
@@ -1795,7 +1817,7 @@ body.is-col-resizing * {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -1808,24 +1830,24 @@ body.is-col-resizing * {
   padding: 14px 16px 40px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--sp-xl);
 }
 .detail-meta {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--fs-small);
   margin: 0;
 }
 .detail-h {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
   margin: 0 0 6px;
   display: flex;
-  gap: 6px;
+  gap: var(--sp-sm);
 }
 .detail-h .count,
 .group-toggle .count {
@@ -1835,7 +1857,7 @@ body.is-col-resizing * {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-xs);
   min-width: 0;
 }
 /* An action's importance or done mark leads its subject inside the field, as the marker column leads the list row:
@@ -1865,7 +1887,7 @@ input.field-text.has-lead {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -1934,19 +1956,19 @@ textarea.field-text {
   background: var(--sheet);
 }
 .field-title .field-text {
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 600;
 }
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px 12px;
+  gap: var(--sp-lg) var(--sp-lg);
 }
 .field-pick {
   height: 28px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   padding: 0 8px;
   border: 1px solid var(--rule);
   border-radius: 3px;
@@ -1988,14 +2010,14 @@ textarea.field-text {
 .detail-back {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-xs);
   min-width: 0;
   max-width: calc(100% - 72px);
   height: 28px;
   margin-left: -6px;
   padding: 0 8px 0 4px;
   border-radius: 3px;
-  font-size: 12.5px;
+  font-size: var(--fs-note);
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -2013,7 +2035,7 @@ textarea.field-text {
 }
 .detail-bar-tools {
   display: inline-flex;
-  gap: 2px;
+  gap: var(--sp-hair);
 }
 .pin-btn svg {
   transform: rotate(45deg);
@@ -2038,7 +2060,7 @@ textarea.field-text {
   display: grid;
   grid-template-columns: 16px 1fr auto 24px;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   padding: 3px 0;
   color: var(--ink-2);
 }
@@ -2048,7 +2070,7 @@ textarea.field-text {
   white-space: nowrap;
 }
 .file-size {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-3);
 }
 .file-thumb {
@@ -2066,7 +2088,7 @@ textarea.field-text {
   overflow: auto;
   margin: 4px 0 0;
   padding: 8px 10px;
-  font: 12px/1.5 var(--font-ui);
+  font: var(--fs-small)/1.5 var(--font-ui);
   white-space: pre-wrap;
   background: var(--paper);
   border: 1px solid var(--rule);
@@ -2079,7 +2101,7 @@ textarea.field-text {
   display: grid;
   grid-template-columns: 22px 1fr auto;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   height: 28px;
   border-bottom: 1px solid var(--rule);
   padding: 0 2px;
@@ -2098,7 +2120,7 @@ textarea.field-text {
 }
 .mini-meta {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .mini-row.is-done .mini-title {
   text-decoration: line-through;
@@ -2111,7 +2133,7 @@ textarea.field-text {
 .mini-date {
   min-width: 46px;
   text-align: right;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
@@ -2134,7 +2156,7 @@ textarea.field-text {
   text-transform: none;
   letter-spacing: 0;
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-3);
   margin-left: 4px;
 }
@@ -2144,12 +2166,12 @@ textarea.field-text {
 .group-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   margin-top: 12px;
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -2157,7 +2179,7 @@ textarea.field-text {
 .badge-line {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-md);
   color: var(--ink-2);
   margin: 0 0 6px;
 }
@@ -2187,7 +2209,7 @@ textarea.field-text {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -2216,7 +2238,7 @@ textarea.field-text {
 .palette-list li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-md);
   height: 28px;
   padding: 0 8px;
   border-radius: 2px;
@@ -2264,7 +2286,7 @@ textarea.field-text {
   white-space: nowrap;
 }
 .po-hint {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-3);
 }
 .is-hi .po-hint,
@@ -2306,7 +2328,7 @@ textarea.field-text {
 }
 .palette-input {
   height: 38px;
-  font-size: 15px;
+  font-size: var(--fs-title);
 }
 .palette-list {
   max-height: 55vh;
@@ -2316,7 +2338,7 @@ textarea.field-text {
 }
 .pal-group {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--fs-small);
   width: 90px;
   text-align: right;
 }
@@ -2363,7 +2385,7 @@ textarea.field-text {
 }
 .help-scope > h3 {
   margin: 0 0 12px;
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 600;
   color: var(--ink);
 }
@@ -2379,7 +2401,7 @@ textarea.field-text {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -2407,7 +2429,7 @@ textarea.field-text {
   margin: 0;
   display: grid;
   grid-template-columns: 84px 1fr;
-  gap: 5px 12px;
+  gap: var(--sp-sm) var(--sp-lg);
   align-items: start;
 }
 .help dl div {
@@ -2417,7 +2439,7 @@ textarea.field-text {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 3px;
+  gap: var(--sp-xs);
   margin: 0;
 }
 .help dd {
@@ -2447,14 +2469,14 @@ textarea.field-text {
   z-index: 70;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-lg);
   max-width: min(640px, calc(100vw - 32px));
   padding: 8px 14px;
   background: var(--toast);
   color: var(--toast-ink);
   border-radius: 5px;
   box-shadow: var(--shadow);
-  font-size: 12.5px;
+  font-size: var(--fs-note);
   opacity: 0;
   transform: translate(-50%, 8px);
   transition: opacity 180ms var(--ease), transform 180ms var(--ease);
@@ -2478,12 +2500,12 @@ textarea.field-text {
 .toast-undo {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-xs);
   flex: none;
   opacity: 0.8;
 }
 .toast-undo .kbd {
-  font-size: 11px;
+  font-size: var(--fs-key);
   line-height: 14px;
   padding: 0 4px;
   color: var(--ink);
@@ -2497,7 +2519,7 @@ textarea.field-text {
 .clarify {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-lg);
   width: 100%;
   max-width: 1040px;
 }
@@ -2513,7 +2535,7 @@ textarea.field-text {
 .clarify-next li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-lg);
   height: 28px;
   padding: 0 2px;
   border-top: 1px solid var(--rule);
@@ -2535,12 +2557,12 @@ textarea.field-text {
 .clarify-progress {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-lg);
   height: 22px;
 }
 .clarify-track {
   display: flex;
-  gap: 3px;
+  gap: var(--sp-xs);
   flex-wrap: wrap;
 }
 .clarify-track i {
@@ -2566,15 +2588,15 @@ textarea.field-text {
   text-decoration: underline;
   text-decoration-color: var(--rule-strong);
   text-underline-offset: 3px;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .attach-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   margin-top: 4px;
   text-decoration: none;
-  font-size: 13px;
+  font-size: var(--fs-head);
 }
 .attach-btn .muted-text {
   color: var(--ink-3);
@@ -2592,12 +2614,12 @@ textarea.field-text {
 .pane-h {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-md);
   margin: 0 0 10px;
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -2620,7 +2642,7 @@ textarea.field-text {
 .sheet-text {
   white-space: pre-wrap;
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-sheet);
   line-height: 1.55;
   max-width: 68ch;
 }
@@ -2638,7 +2660,7 @@ textarea.field-text {
 }
 .sheet-file pre {
   white-space: pre-wrap;
-  font: 12.5px/1.55 var(--font-ui);
+  font: var(--fs-note)/1.55 var(--font-ui);
   color: var(--ink-2);
   margin: 8px 0 0;
 }
@@ -2649,7 +2671,7 @@ textarea.field-text {
 .p-project {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 4px 10px;
+  gap: var(--sp-xs) var(--sp-lg);
   align-items: center;
   padding: 10px 12px 12px;
   margin-bottom: 12px;
@@ -2663,7 +2685,7 @@ textarea.field-text {
 }
 .p-project-title {
   font-weight: 650;
-  font-size: 14px;
+  font-size: var(--fs-sheet);
   background: var(--sheet);
 }
 .p-project .field-pick {
@@ -2675,7 +2697,7 @@ textarea.field-text {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-md);
 }
 .p-row {
   border: 1px solid var(--rule);
@@ -2708,7 +2730,7 @@ textarea.field-text {
 .p-row-top {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--sp-md);
 }
 .p-row-top .p-kind {
   padding-top: 5px;
@@ -2717,7 +2739,7 @@ textarea.field-text {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -2734,7 +2756,7 @@ textarea.field-text {
   border: 0;
   border-bottom: 1px solid transparent;
   background: none;
-  font-size: 17px;
+  font-size: var(--fs-proposal);
   font-weight: 600;
   letter-spacing: -0.005em;
   padding: 3px 0;
@@ -2750,24 +2772,24 @@ textarea.field-text {
 }
 .p-raw-note {
   margin: 6px 0 0 66px;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-2);
 }
 .p-fields {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 6px;
+  gap: var(--sp-xs) var(--sp-sm);
   margin: 6px 0 0 66px;
 }
 .p-field {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   height: 24px;
   padding: 0 7px;
   border: 1px solid var(--rule);
   border-radius: 3px;
-  font-size: 12.5px;
+  font-size: var(--fs-note);
   white-space: nowrap;
   max-width: 260px;
   overflow: hidden;
@@ -2784,7 +2806,7 @@ textarea.field-text {
 .p-done-note,
 .p-note {
   margin: 6px 0 0 66px;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-2);
 }
 .p-note {
@@ -2804,7 +2826,7 @@ textarea.field-text {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  gap: var(--sp-lg);
   padding: 40px 8px;
   max-width: 560px;
 }
@@ -2814,16 +2836,16 @@ textarea.field-text {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-hair);
 }
 .key-choices button {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-lg);
   height: 30px;
   padding: 0 8px 0 0;
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--fs-head);
 }
 .key-choices button:hover span {
   text-decoration: underline;
@@ -2836,20 +2858,20 @@ textarea.field-text {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 18px; /* spacing, not "·" separators, so a wrapped line never starts with a stray dot */
+  gap: var(--sp-sm) var(--sp-gutter); /* spacing, not "·" separators, so a wrapped line never starts with a stray dot */
   margin: 12px 0 0;
   padding-top: 10px;
   border-top: 1px solid var(--rule);
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
 }
 .key-hints .kbd {
-  font-size: 11px;
+  font-size: var(--fs-key);
   line-height: 14px;
   letter-spacing: 0;
   text-transform: none;
@@ -2857,7 +2879,7 @@ textarea.field-text {
   color: var(--ink-2);
 }
 .clarify-msg {
-  font-size: 15px;
+  font-size: var(--fs-title);
   margin: 0;
   line-height: 1.5;
 }
@@ -2869,13 +2891,13 @@ textarea.field-text {
 .review {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-md);
 }
 .review-steps {
   list-style: none;
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: var(--sp-hair);
   margin: 0;
   padding: 0 0 10px;
   border-bottom: 1px solid var(--rule);
@@ -2887,7 +2909,7 @@ textarea.field-text {
   align-items: center;
   height: 26px;
   padding: 0 4px 0 10px;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-3);
   white-space: nowrap;
 }
@@ -2898,14 +2920,15 @@ textarea.field-text {
 .review-steps button {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   height: 26px;
-  padding: 0 10px;
+  /* Tight enough that the eleven steps and three phase names fit one line beside the rail at 1440. */
+  padding: 0 var(--sp-md);
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.06em;
+  font-size: var(--fs-head);
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-3);
   border-radius: 2px;
@@ -2917,7 +2940,7 @@ textarea.field-text {
 }
 .step-count {
   font-family: var(--font-ui);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 650;
   letter-spacing: 0;
   color: var(--alert);
@@ -2933,7 +2956,7 @@ textarea.field-text {
 }
 .review-tally {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-head);
   color: var(--ink);
 }
 /* The step's title and what it asks for read as one line, like a view title and its count. */
@@ -2941,12 +2964,12 @@ textarea.field-text {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 12px;
+  gap: var(--sp-hair) var(--sp-lg);
   padding: 8px 0 6px;
 }
 .review-title {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--fs-title);
 }
 .review-head p {
   margin: 0;
@@ -2964,9 +2987,9 @@ textarea.field-text {
 .flag-note {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-xs);
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--fs-small);
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
@@ -2988,12 +3011,12 @@ textarea.field-text {
 .settings {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--sp-gutter);
 }
 .settings-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
+  gap: var(--sp-gutter);
   margin-top: var(--row);
   padding-bottom: 6px;
 }
@@ -3001,7 +3024,7 @@ textarea.field-text {
 .set-value {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   max-width: 100%;
   margin-left: -8px;
   padding: 3px 8px;
@@ -3056,7 +3079,7 @@ textarea.field-text {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: var(--sp-sm);
     color: var(--ink-2);
     font-weight: 500;
   }
@@ -3067,7 +3090,7 @@ textarea.field-text {
   }
   /* Like the rail: a plain count, only when something is waiting. */
   .tab-count {
-    font-size: 12px;
+    font-size: var(--fs-small);
     font-weight: 500;
     color: var(--ink-2);
     font-variant-numeric: tabular-nums;
@@ -3119,16 +3142,16 @@ textarea.field-text {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--sp-lg);
   }
   .more-check .is-due {
     color: var(--alert);
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--fs-small);
   }
   .more-meta {
     color: var(--ink-2);
-    font-size: 12px;
+    font-size: var(--fs-small);
   }
   .tab-dot {
     width: 6px;
@@ -3231,7 +3254,7 @@ textarea.field-text {
   /* The kind above, the title across the whole card, wrapping as long as it needs. */
   .p-row-top {
     flex-wrap: wrap;
-    gap: 2px 8px;
+    gap: var(--sp-hair) var(--sp-md);
   }
   .p-row-top .p-kind {
     width: auto;
@@ -3253,7 +3276,7 @@ textarea.field-text {
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
-    font-size: 12px;
+    font-size: var(--fs-small);
   }
   .settings .row .cell {
     height: auto;
@@ -3308,7 +3331,7 @@ textarea.field-text {
   width: min(360px, 100%);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--sp-xl);
   padding: 22px 22px 24px;
   background: var(--sheet);
   border: 1px solid var(--rule-strong);
@@ -3344,7 +3367,7 @@ textarea.field-text {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-sheet);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: center;
@@ -3408,7 +3431,7 @@ textarea.field-text {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -3435,7 +3458,7 @@ textarea.field-text {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: var(--sp-sm);
 }
 
 /* On a 1024-ish screen the detail pane gives up 40px, so the list beside it keeps its project column. */
@@ -3474,7 +3497,7 @@ textarea.field-text {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   padding: 24px;
   text-align: center;
   background: color-mix(in srgb, var(--paper) 86%, transparent);
@@ -3501,7 +3524,7 @@ textarea.field-text {
   position: relative;
   z-index: 1;
   margin: 0;
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 600;
   color: var(--ink-2);
 }
@@ -3513,7 +3536,7 @@ textarea.field-text {
   z-index: 1;
   margin: 0;
   max-width: 30ch;
-  font-size: 13px;
+  font-size: var(--fs-head);
   font-weight: 600;
   color: var(--ink);
   overflow: hidden;
@@ -3525,7 +3548,7 @@ textarea.field-text {
   position: relative;
   z-index: 1;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1.5;
   color: var(--ink-3);
 }
@@ -3672,7 +3695,7 @@ textarea.field-text {
   bottom: 6px;
   display: flex;
   justify-content: center;
-  gap: 3px;
+  gap: var(--sp-xs);
 }
 .cal-dots i {
   width: 5px;
@@ -3683,8 +3706,14 @@ textarea.field-text {
 .cal-dots i.is-project {
   background: var(--ink-2);
 }
+/* Colour is meaning here as on the lists: red only for what is overdue; a deadline is ink, a follow-up an ink ring
+   (amber belongs to the lamps), an appointment its calendar's colour. */
 .cal-dots i.is-follow {
-  background: var(--wait);
+  background: none;
+  box-shadow: inset 0 0 0 1.25px var(--ink-2);
+}
+.cal-dots i.is-deadline {
+  background: var(--ink);
 }
 .cal-dots i.is-due {
   background: var(--alert);
@@ -3698,21 +3727,21 @@ textarea.field-text {
 .cal-day-view {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--sp-gutter);
   max-width: 760px;
   padding: 4px 0 24px;
 }
 .cal-day-h {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-md);
   margin: 0 0 4px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--rule-strong);
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -3721,7 +3750,7 @@ textarea.field-text {
   font-family: var(--font-ui);
   font-stretch: 100%;
   font-weight: 400;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0;
   text-transform: none;
   color: var(--ink-3);
@@ -3739,9 +3768,9 @@ textarea.field-text {
 .cal-agenda-head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-md);
   margin: 0 0 4px;
-  font-size: 13px;
+  font-size: var(--fs-head);
   font-weight: 600;
 }
 .cal-agenda-day .cal-wd {
@@ -3772,7 +3801,7 @@ textarea.field-text {
 .cal-agenda-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-lg);
   width: 100%;
   min-height: 44px;
   padding: 0 4px;
@@ -3803,7 +3832,7 @@ textarea.field-text {
 }
 .cal-agenda-when {
   flex: none;
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--ink-2);
 }
 .cal-agenda-row.is-overdue .cal-agenda-when {
@@ -3814,7 +3843,7 @@ textarea.field-text {
   margin: 0;
   padding: 4px 4px 6px 44px;
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: var(--fs-head);
 }
 /* The month fits the window, and its weeks scroll inside it: the period title, navigation and weekday names stay put. */
 .calendar.is-month {
@@ -3829,20 +3858,20 @@ textarea.field-text {
 .cal-bar-top {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--sp-xl);
   padding: 2px 0 12px;
 }
 .cal-title-period {
   margin: 0;
   min-width: 0;
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .cal-nav {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--sp-hair);
 }
 .cal-nav .icon-btn {
   height: 26px;
@@ -3860,12 +3889,12 @@ textarea.field-text {
   border: 1px solid var(--rule-strong);
   border-radius: 3px;
   background: var(--sheet);
-  font-size: 12.5px;
+  font-size: var(--fs-note);
   color: var(--ink);
 }
 .cal-modes {
   display: flex;
-  gap: 2px;
+  gap: var(--sp-hair);
   margin-left: auto;
 }
 .cal-modes button {
@@ -3875,7 +3904,7 @@ textarea.field-text {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -3895,7 +3924,7 @@ textarea.field-text {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -3920,7 +3949,7 @@ textarea.field-text {
 }
 .cal-wk {
   padding: 6px 0 0;
-  font-size: 11px;
+  font-size: var(--fs-key);
   color: var(--ink-3);
   text-align: center;
 }
@@ -3958,7 +3987,7 @@ textarea.field-text {
   height: 22px;
   padding: 0 5px;
   border-radius: 50%;
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
@@ -3974,7 +4003,7 @@ textarea.field-text {
   bottom: 4px;
   padding: 0 4px;
   border-radius: 3px;
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   color: var(--ink-2);
 }
 .cal-more:hover {
@@ -3991,7 +4020,7 @@ textarea.field-text {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   grid-auto-rows: 22px;
-  row-gap: 2px;
+  row-gap: var(--sp-hair);
   pointer-events: none;
 }
 .cal-bar {
@@ -3999,14 +4028,14 @@ textarea.field-text {
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--sp-sm);
   min-width: 0;
   margin: 0 3px;
   padding: 0 7px;
   border: 1px solid var(--rule-strong);
   border-radius: 3px;
   background: var(--sheet);
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1;
   color: var(--ink);
   white-space: nowrap;
@@ -4128,7 +4157,7 @@ textarea.field-text {
   top: 4px;
   padding: 0 4px;
   border-radius: 3px;
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   font-weight: 600;
   color: var(--alert);
 }
@@ -4165,7 +4194,7 @@ textarea.field-text {
 .cal-line {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--sp-sm);
   min-width: 0;
 }
 .cal-title {
@@ -4248,7 +4277,7 @@ body.is-cal-dragging {
   left: 0;
   top: 58px;
   grid-auto-rows: 40px;
-  row-gap: 3px;
+  row-gap: var(--sp-xs);
 }
 .cal-row.is-week .cal-day:first-child {
   border-left: 0;
@@ -4258,12 +4287,12 @@ body.is-cal-dragging {
   flex-direction: column;
   align-items: stretch;
   justify-content: center;
-  gap: 3px;
+  gap: var(--sp-xs);
   padding: 0 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-note);
 }
 .cal-row.is-week .cal-sub {
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
 }
 .cal-row.is-week .cal-bar.has-due-end {
   padding-right: 22px;
@@ -4271,14 +4300,14 @@ body.is-cal-dragging {
 .cal-dayhead {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-md);
   padding: 4px 2px 0;
 }
 .cal-wd {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -4287,7 +4316,7 @@ body.is-cal-dragging {
   height: 28px;
   min-width: 28px;
   border-radius: 50%;
-  font-size: 15px;
+  font-size: var(--fs-title);
 }
 .cal-empty {
   position: absolute;
@@ -4296,7 +4325,7 @@ body.is-cal-dragging {
   right: 0;
   margin: 0;
   text-align: center;
-  font-size: 12.5px;
+  font-size: var(--fs-note);
   color: var(--ink-3);
   pointer-events: none;
 }
@@ -4315,7 +4344,7 @@ body.is-cal-dragging {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -4327,11 +4356,11 @@ body.is-cal-dragging {
 .cal-mini-grid {
   display: grid;
   grid-template-columns: 20px repeat(7, 1fr);
-  row-gap: 2px;
+  row-gap: var(--sp-hair);
 }
 .cal-mini-wd,
 .cal-mini-wk {
-  font-size: 11px;
+  font-size: var(--fs-key);
   line-height: 20px;
   text-align: center;
   color: var(--ink-3);
@@ -4352,7 +4381,7 @@ body.is-cal-dragging {
   height: 24px;
   margin: 0 1px;
   border-radius: 3px;
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   /* How full the day is, in the ink's own grey: a heat map without colour. */
@@ -4394,7 +4423,7 @@ body.is-cal-dragging {
 @media (max-width: 820px) {
   .cal-bar-top {
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--sp-md);
   }
   .cal-weekdays,
   .cal-row {
@@ -4408,7 +4437,7 @@ body.is-cal-dragging {
   }
   .cal-bar {
     padding: 0 4px;
-    font-size: 11px;
+    font-size: var(--fs-key);
   }
   .cal-grip {
     width: 10px;
@@ -4461,7 +4490,7 @@ body.is-cal-dragging {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 700;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -4519,7 +4548,7 @@ body.is-cal-dragging {
   .capture-input,
   .field-text,
   .field-pick {
-    font-size: 16px;
+    font-size: var(--fs-input);
   }
   .field-pick,
   input.field-text {
@@ -4552,7 +4581,7 @@ body.is-cal-dragging {
     display: none;
   }
   .key-hints {
-    gap: 8px;
+    gap: var(--sp-md);
   }
   .key-hints .kh {
     min-height: 44px;
@@ -4561,7 +4590,7 @@ body.is-cal-dragging {
     border-radius: 5px;
     background: var(--sheet);
     color: var(--ink);
-    font-size: 13px;
+    font-size: var(--fs-head);
   }
   .key-hints .kbd {
     display: none;
@@ -4571,12 +4600,12 @@ body.is-cal-dragging {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 8px;
+    gap: var(--sp-md);
   }
   .kh-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--sp-md);
   }
   .kh-row .kh {
     flex: 1 1 auto;
@@ -4630,7 +4659,7 @@ body.is-cal-dragging {
 .fit-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--sp-gutter);
   min-height: 34px;
   padding: 0 8px;
   margin-bottom: 6px;
@@ -4659,12 +4688,12 @@ body.is-cal-dragging {
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-md);
 }
 .sweep-help {
   margin: 0;
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .sweep-empty {
   align-self: flex-start;
@@ -4694,7 +4723,7 @@ body.is-cal-dragging {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--fs-head);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-2);
@@ -4717,12 +4746,12 @@ body.is-cal-dragging {
 }
 .sweep-ex {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 @media (max-width: 820px) {
   .sweep {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: var(--sp-page);
   }
   .sweep-capture {
     position: static;
@@ -4748,7 +4777,7 @@ body.is-cal-dragging {
     font-family: var(--font-label);
     font-stretch: 75%;
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--fs-small);
     letter-spacing: 0.07em;
     text-transform: uppercase;
     color: var(--ink-3);
@@ -4759,7 +4788,7 @@ body.is-cal-dragging {
   /* The heading keeps its title on one line; its tools wrap below, at the right, when there isn't room. */
   .viewhead {
     flex-wrap: wrap;
-    row-gap: 2px;
+    row-gap: var(--sp-hair);
   }
   .viewtitle {
     white-space: nowrap;
@@ -4778,12 +4807,12 @@ body.is-cal-dragging {
 .clarify-ask {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-sm);
   padding: 28px 4px;
 }
 .clarify-q {
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fs-headline);
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -4809,7 +4838,7 @@ body.is-cal-dragging {
   flex: none;
 }
 .cal-dots i.is-event {
-  background: var(--accent);
+  background: var(--ink-3);
 }
 
 /* A subscribed calendar's colour, before its name in Settings (as an area's tile carries its colour). */
@@ -4827,7 +4856,7 @@ body.is-cal-dragging {
    leave the view (for this browser). */
 .cal-legend {
   display: flex;
-  gap: 4px;
+  gap: var(--sp-xs);
   margin-left: auto;
   margin-right: 4px;
   flex-wrap: wrap;
@@ -4835,12 +4864,12 @@ body.is-cal-dragging {
 .cal-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-sm);
   height: 28px;
   padding: 0 8px;
   border-radius: 3px;
   color: var(--ink-2);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .cal-legend-item:hover {
   background: var(--rail-2);
@@ -4905,16 +4934,16 @@ body.is-cal-dragging {
 .cal-row.is-week.is-band .cal-bars {
   top: 38px;
   grid-auto-rows: 22px;
-  row-gap: 2px;
+  row-gap: var(--sp-hair);
 }
 .cal-row.is-week.is-band .cal-bar {
   flex-direction: row;
   align-items: center;
   /* The week's two-line bars centre their lines vertically; in a row that would centre the text across the bar. */
   justify-content: flex-start;
-  gap: 5px;
+  gap: var(--sp-sm);
   padding: 0 7px;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .cal-row.is-week.is-band .cal-bar.has-due-end {
   padding-right: 20px;
@@ -4936,7 +4965,7 @@ body.is-cal-dragging {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--fs-key);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
@@ -4961,7 +4990,7 @@ body.is-cal-dragging {
   position: absolute;
   right: 8px;
   translate: 0 -50%;
-  font-size: 11px;
+  font-size: var(--fs-key);
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
@@ -4988,7 +5017,7 @@ body.is-cal-dragging {
   border: 1px solid color-mix(in srgb, var(--feed, var(--accent)) 45%, var(--rule-strong));
   border-radius: 3px;
   background: color-mix(in srgb, var(--feed, var(--accent)) 14%, var(--sheet));
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1.25;
   cursor: default;
 }
@@ -4997,7 +5026,7 @@ body.is-cal-dragging {
 }
 .cal-block-time {
   flex: none;
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   font-weight: 600;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
@@ -5009,7 +5038,7 @@ body.is-cal-dragging {
 .cal-block.is-compact {
   flex-direction: row;
   align-items: baseline;
-  gap: 5px;
+  gap: var(--sp-sm);
   padding-top: 2px;
   padding-bottom: 0;
 }
@@ -5032,7 +5061,7 @@ body.is-cal-dragging {
 .cal-block-sub {
   min-height: 0;
   color: var(--ink-2);
-  font-size: 11.5px;
+  font-size: var(--fs-tag);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -5084,7 +5113,7 @@ body.is-cal-dragging {
 .event-head {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-xs);
 }
 /* Padded and bordered like a title field, so it can take the pane's cursor (see the One Blue Rule above). */
 .event-title {
@@ -5092,7 +5121,7 @@ body.is-cal-dragging {
   padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: 3px;
-  font-size: 15px;
+  font-size: var(--fs-title);
   font-weight: 600;
   line-height: 1.3;
 }
@@ -5100,12 +5129,12 @@ body.is-cal-dragging {
   display: inline-flex;
   align-items: center;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: var(--fs-note);
 }
 .event-facts {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-lg);
   margin: 0;
 }
 .event-facts dt {
@@ -5118,7 +5147,7 @@ body.is-cal-dragging {
 .event-join {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--sp-md);
   align-self: flex-start;
   height: 30px;
   padding: 0 12px;
@@ -5140,7 +5169,7 @@ body.is-cal-dragging {
 .event-people li {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-md);
   min-height: 26px;
 }
 .event-status {
@@ -5180,6 +5209,6 @@ body.is-cal-dragging {
 .event-counts {
   margin: 4px 0 0;
   color: var(--ink-2);
-  font-size: 12.5px;
+  font-size: var(--fs-note);
 }
 

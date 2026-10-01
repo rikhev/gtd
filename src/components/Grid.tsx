@@ -23,7 +23,7 @@ export interface Column<T> {
 /** On a phone the list keeps one column after the subject: the first of these it has. */
 const COMPACT_HIDE = ["done", "kind"];
 /** Names for the unlabelled lead columns, for screen readers. */
-const LEAD_NAME: Record<string, string> = { mark: "Importance or status", done: "Done", kind: "Kind" };
+const LEAD_NAME: Record<string, string> = { mark: "Status", done: "Done", kind: "Kind" };
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
 
 /** Whether a point is over a glyph of text (not merely inside an element that holds text): where a press selects text. */
@@ -1118,9 +1118,10 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   const total = groups.reduce((n, g) => n + g.rows.length, 0);
   const multi = showHeaders ?? groups.length > 1;
   // An empty list (Inbox zero, a search with no hits) is not a grid of nothing: it is a plain group that still takes
-  // focus, and its empty state is announced.
-  const isEmpty = total === 0 && !groups.some((g) => multi && g.label);
-  const showHead = head && (total > 0 || (multi && groups.some((g) => g.label)));
+  // focus, and its empty state is announced. A list with an empty state shows it even when its groups are fixed
+  // (Someday's Projects and Actions, Horizons' three): headings over nothing are scaffolding, not content.
+  const isEmpty = total === 0 && (Boolean(empty) || !groups.some((g) => multi && g.label));
+  const showHead = head && !isEmpty && (total > 0 || (multi && groups.some((g) => g.label)));
   return (
     <div
       ref={box}

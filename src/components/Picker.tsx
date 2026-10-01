@@ -101,7 +101,7 @@ export function Picker({ spec, close }: Props) {
       out.push(...scored.map(({ it }) => ({ id: it.id, label: it.label, hint: it.hint, color: it.color, section: it.section })));
       const exact = spec.items.some((it) => it.label.toLowerCase() === needle || it.label.toLowerCase() === `@${needle}`);
       if (spec.onCreate && needle && !exact) {
-        out.push({ id: "__create__", label: spec.createLabel ? spec.createLabel(q.trim()) : `Create “${q.trim()}”`, create: q.trim() });
+        out.push({ id: "__create__", label: spec.createLabel ? spec.createLabel(q.trim()) : `New “${q.trim()}”`, create: q.trim() });
       }
       return out;
     }

@@ -374,12 +374,29 @@ export function refUpdated(s: State, r: Ref): string {
   return at;
 }
 
+/** The lists by the names the rail gives them, for "Was in", "Where it lives" and search hits, the same everywhere. */
+export const LIST_NAMES: Record<string, string> = {
+  inbox: "Inbox",
+  next: "Next Actions",
+  waiting: "Waiting For",
+  someday: "Someday / Maybe",
+  later: "Later, in its project",
+  active: "Projects",
+  done: "Done",
+};
+
+/** A title as a toast names it: its first line in quotes, cut short past 42 characters ("“Call Anna about…”"). */
+export function quote(text: string, fallback = "Untitled"): string {
+  const raw = text.split("\n")[0].trim() || fallback;
+  return `“${raw.length > 42 ? `${raw.slice(0, 40).trimEnd()}…` : raw}”`;
+}
+
 export function named(table: "actions" | "projects" | "stuff" | "refs", ids: ID[], noun: string): string {
   if (ids.length !== 1) return plural(ids.length, noun);
   const row = (state[table] as unknown as { id: ID; title?: string; text?: string }[]).find((r) => r.id === ids[0]);
   const raw = (row?.title ?? row?.text ?? "").split("\n")[0].trim();
   if (!raw) return plural(1, noun);
-  return `“${raw.length > 42 ? `${raw.slice(0, 40).trimEnd()}…` : raw}”`;
+  return quote(raw);
 }
 
 export function completeActions(ids: ID[]) {
