@@ -287,26 +287,7 @@ export function editors(ui: UI) {
       });
     },
     project(ids: ID[]) {
-      if (!ids.length) return;
-      ui.openPicker({
-        type: "list",
-        title: "Project",
-        items: projectItems(),
-        current: one(ids)?.project_id ?? null,
-        noneLabel: "No project",
-        createLabel: (q) => `Create project “${q}”`,
-        onCreate: (q) => {
-          const p = newProject({ title: q });
-          mutate(`${n(ids)} → new project “${q}”`, [
-            { type: "create", table: "projects", row: { ...p } },
-            ...ids.map((a) => ({ type: "patch" as const, table: "actions" as const, id: a, data: { project_id: p.id } })),
-          ]);
-        },
-        onPick: (id) => {
-          const name = getState().projects.find((p) => p.id === id)?.title ?? "no project";
-          patchMany("actions", ids, { project_id: id }, `${n(ids)} → ${name}`);
-        },
-      });
+      setProject(ui, "actions", ids);
     },
     date(ids: ID[], field: "due" | "defer" | "followup" | "bring_back" | "waiting_since") {
       if (!ids.length) return;
@@ -686,5 +667,33 @@ export function chaseAction(ui: UI, w: Action) {
         }),
       );
     },
+  });
+}
+
+/**
+ * P everywhere (owner's request: link to a project from the list itself, the same way on every list): the project an
+ * action, a reference or a checklist belongs to or supports. One picker, one order, the current project marked, "No
+ * project" first, and a new project can be typed. One ⌘Z.
+ */
+export function setProject(ui: UI, table: "actions" | "refs" | "checklists", ids: ID[]) {
+  if (!ids.length) return;
+  const s = getState();
+  const rows = (s[table] as { id: ID; title: string; project_id?: ID | null }[]).filter((r) => ids.includes(r.id));
+  if (!rows.length) return;
+  const noun = { actions: "action", refs: "reference", checklists: "checklist" }[table];
+  const what = rows.length === 1 ? `“${rows[0].title || `Untitled ${noun}`}”` : `${rows.length} ${noun}s`;
+  const patch = (project_id: ID | null): Op[] => rows.map((r) => ({ type: "patch", table, id: r.id, data: { project_id } }));
+  ui.openPicker({
+    type: "list",
+    title: "Project",
+    items: projectItems(),
+    current: rows.length === 1 ? (rows[0].project_id ?? null) : null,
+    noneLabel: "No project",
+    createLabel: (q) => `Create project “${q}”`,
+    onCreate: (q) => {
+      const p = newProject({ title: q });
+      mutate(`${what} → new project “${q}”`, [{ type: "create", table: "projects", row: { ...p } }, ...patch(p.id)]);
+    },
+    onPick: (id) => mutate(`${what} → ${id ? (getState().projects.find((p) => p.id === id)?.title ?? "project") : "no project"}`, patch(id)),
   });
 }

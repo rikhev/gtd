@@ -1,30 +1,15 @@
 import { getState, mutate, notify } from "./store.ts";
 import type { UI } from "./ui.tsx";
-import { projectItems } from "./actionCommands.tsx";
-import { checklistNamed } from "./checklists.ts";
-import type { ID, Op } from "../shared/types.ts";
+import { setProject } from "./actionCommands.tsx";
+import type { ID } from "../shared/types.ts";
 
 /**
  * A project's support material (GTD's project support: the reference and the checklists a project draws on, kept
  * apart from its actions). References and checklists each name the project they support; its pane lists them.
  */
 
-/** P on a checklist: the project it supports, or none. */
-export function setChecklistProject(ui: UI, ids: ID[]) {
-  if (!ids.length) return;
-  const cur = ids.length === 1 ? (getState().checklists.find((c) => c.id === ids[0])?.project_id ?? null) : null;
-  ui.openPicker({
-    type: "list",
-    title: "Project it supports",
-    items: projectItems(),
-    current: cur,
-    noneLabel: "No project",
-    onPick: (project_id) => {
-      const name = project_id ? `“${getState().projects.find((p) => p.id === project_id)?.title || "Untitled project"}”` : "no project";
-      mutate(`${checklistNamed(ids)} → ${name}`, ids.map((id): Op => ({ type: "patch", table: "checklists", id, data: { project_id } })));
-    },
-  });
-}
+/** P on a checklist: the same project picker as every list (setProject). */
+export const setChecklistProject = (ui: UI, ids: ID[]) => setProject(ui, "checklists", ids);
 
 /**
  * From a project's pane: link a reference or a checklist that isn't its support material yet. One that supports

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight, Hourglass, RefreshCw } from "lucide-react";
-import { completeActions, isChase, isDeferred, isStalled, onHold, mutate, named, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
+import { completeActions, isDeferred, isStalled, onHold, mutate, named, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
 import { fitLabel, fits, useFit } from "../fit.ts";
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
 import { syncCalendars, toggleFeed, useEvents, useHiddenFeeds, useSyncing } from "../calendarFeed.ts";
 import { EventMark, Lamp, Marker } from "../components/bits.tsx";
-import { askContext, askWaitingOn, editors, linkAppointment } from "../actionCommands.tsx";
+import { askContext, askWaitingOn, editors, linkAppointment, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { addDays, addMonths, daysBetween, formatLong, fromIso, today } from "../../shared/dates.ts";
 import type { Appointment, ID, State } from "../../shared/types.ts";
@@ -20,7 +20,7 @@ import type { Appointment, ID, State } from "../../shared/types.ts";
 
 /** Day is the daily review (GTD: the calendar first, then the action lists); week, month and year the landscape. */
 type Mode = "day" | "week" | "month" | "year";
-type Role = "span" | "due" | "start" | "followup" | "tickler" | "event";
+type Role = "span" | "due" | "start" | "followup" | "tickler" | "event" | "next";
 interface Item {
   key: string;
   /** An appointment from the subscribed Outlook calendar: read-only, never dragged or opened. */
@@ -81,8 +81,8 @@ const max = (a: string, b: string) => (a > b ? a : b);
 /**
  * Every dated thing the landscape holds. Done and deleted work stays off it. GTD's calendar is the hard landscape
  * (owner's decision after the second GTD critique): by default it shows appointments, day-specific actions (start and
- * due the same day) and due dates, each on its day. `soft` adds the soft dates: start-to-due bars, starts on their own,
- * follow-ups and ticklers.
+ * due the same day), due dates and follow-ups, each on its day. `soft` adds the soft dates: start-to-due bars, starts
+ * on their own, and ticklers.
  */
 function itemsOf(s: State, t: string, soft: boolean): Item[] {
   const out: Item[] = [];
@@ -97,7 +97,8 @@ function itemsOf(s: State, t: string, soft: boolean): Item[] {
       // A day-specific action (start and due the same day) moves both ends together; a deadline alone moves its due.
       else if (a.due) out.push({ ...base, key: `a:${a.id}`, start: a.due, end: a.due, role: "due", startField: a.defer === a.due ? "defer" : null, endField: "due", overdue: a.due < t });
       else if (soft && a.defer) out.push({ ...base, key: `a:${a.id}`, start: a.defer, end: a.defer, role: "start", startField: "defer", endField: null });
-      if (soft && a.status === "waiting" && a.followup) out.push({ ...base, key: `f:${a.id}`, start: a.followup, end: a.followup, role: "followup", startField: "followup", endField: "followup", overdue: a.followup < t });
+      // A follow-up date is day-specific information (GTD), so it is on the hard landscape, not a soft date.
+      if (a.status === "waiting" && a.followup) out.push({ ...base, key: `f:${a.id}`, start: a.followup, end: a.followup, role: "followup", startField: "followup", endField: "followup", overdue: a.followup < t });
     }
     if (soft && (open || a.status === "someday") && a.bring_back)
       out.push({ key: `b:${a.id}`, kind: "action", id: a.id, title: a.title || "Untitled action", start: a.bring_back, end: a.bring_back, role: "tickler", startField: "bring_back", endField: "bring_back" });
@@ -198,7 +199,7 @@ function layoutDay(list: Item[], px: number, h0: number): Block[] {
 
 /** A phone-width screen, where bars across seven columns can't be read: the calendar becomes dots and an agenda. */
 function usePhone() {
-  const q = "(max-width: 640px)";
+  const q = "(max-width: 820px)";
   const [phone, setPhone] = useState(() => typeof window !== "undefined" && window.matchMedia(q).matches);
   useEffect(() => {
     const m = window.matchMedia(q);
@@ -252,10 +253,22 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const items = useMemo(() => (drag ? all.map((i) => (i.key === drag.key ? { ...i, start: drag.start, end: drag.end } : i)) : all), [all, drag]);
   const onDay = (d: string) => items.filter((i) => i.start <= d && i.end >= d);
   // The Day tab's day reads its overdue work too (on today only): what should already have happened.
-  const overdueBefore = (d: string) => (d === t ? items.filter((i) => i.kind !== "event" && i.overdue && i.end < d) : []);
-  const cursorItems = mode === "day" ? [...onDay(cursor), ...overdueBefore(cursor)] : onDay(cursor);
+  const overdueBefore = (d: string) => (d === t ? items.filter((i) => i.kind !== "event" && i.role !== "followup" && i.overdue && i.end < d) : []);
+  // Follow-ups already past their day (today's are in the day's landscape): chases to make, on today only.
+  const lateFollowups = (d: string) => (d === t ? items.filter((i) => i.role === "followup" && i.end < d) : []);
   const fitNow = useFit();
-  const focusItem = itemKey ? items.find((i) => i.key === itemKey) : undefined;
+  const overdueCount = items.filter((i) => i.kind !== "event" && i.overdue && i.end < t).length;
+  // The Day tab's next actions (what fits now, else anywhere) as items too, so the keyboard reaches every row.
+  const nextNow: Item[] = useMemo(() => {
+    if (mode !== "day" || cursor !== t) return [];
+    const ctx = new Map(s.contexts.map((c) => [c.id, c.name]));
+    return s.actions
+      .filter((a) => a.status === "next" && !onHold(a, s) && !isDeferred(a, t) && !(a.due && a.due <= t) && (!fitNow || fits(a, fitNow) === "fits"))
+      .sort((a, b) => a.sort - b.sort)
+      .map((a) => ({ key: `n:${a.id}`, kind: "action" as const, id: a.id, title: a.title || "Untitled action", start: t, end: t, role: "next" as const, startField: null, endField: null, sub: a.context_id ? (ctx.get(a.context_id) ?? "") : "" }));
+  }, [mode, cursor, t, s, fitNow]);
+  const cursorItems = mode === "day" ? [...onDay(cursor), ...overdueBefore(cursor), ...nextNow.slice(0, 12), ...lateFollowups(cursor)] : onDay(cursor);
+  const focusItem = itemKey ? (items.find((i) => i.key === itemKey) ?? nextNow.find((i) => i.key === itemKey)) : undefined;
 
   useEffect(() => {
     ui.followDetail(focusItem ? { kind: focusItem.kind, id: focusItem.id } : null);
@@ -484,7 +497,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     },
     { id: "cal.out", label: "Back to the day", group: "Calendar", keys: ["escape"], enabled: inItem, run: () => setItemKey(null) },
     { id: "cal.new", label: "New action for this day (day-specific)", group: "Calendar", keys: ["t", "n"], run: () => newOn(cursor) },
-    { id: "cal.soft", label: soft ? "Hide soft dates (starts, follow-ups, ticklers)" : "Show soft dates (starts, follow-ups, ticklers)", group: "View", run: () => setSoft(!soft) },
+    { id: "cal.soft", label: soft ? "Hide soft dates (starts and ticklers)" : "Show soft dates (starts and ticklers)", group: "View", run: () => setSoft(!soft) },
     { id: "cal.wait", label: "New waiting for, follow up on this day", group: "Calendar", keys: ["w"], run: () => waitOn(cursor) },
     { id: "cal.later", label: "Move a day later", group: "Calendar", keys: ["alt+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "move") },
     { id: "cal.earlier", label: "Move a day earlier", group: "Calendar", keys: ["alt+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "move") },
@@ -528,21 +541,30 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       label: "Jump to its project",
       group: "Calendar",
       keys: ["j"],
-      enabled: focusItem?.kind === "event",
-      run: () => focusItem?.kind === "event" && ui.jumpFromAppointment(focusItem.id),
+      enabled: focusItem?.kind === "event" || focusItem?.kind === "action",
+      run: () => focusItem && (focusItem.kind === "event" ? ui.jumpFromAppointment(focusItem.id) : focusItem.kind === "action" && ui.jumpToProject(focusItem.id)),
     },
     {
       id: "cal.project",
-      label: "Link the appointment to a project",
+      label: focusItem?.kind === "event" ? "Link the appointment to a project" : "Set project",
       group: "Calendar",
       keys: ["p"],
-      enabled: focusItem?.kind === "event",
+      // P as on every list: an appointment is linked to a project, an action set in one (a project has none).
+      enabled: focusItem?.kind === "event" || focusItem?.kind === "action",
       run: () =>
-        focusItem?.kind === "event" &&
-        linkAppointment(ui, { key: focusItem.id, title: focusItem.title, date: focusItem.start, time: focusItem.time ?? null, endTime: focusItem.endTime ?? null, feed: focusItem.feed ?? "" }),
+        focusItem?.kind === "event"
+          ? linkAppointment(ui, { key: focusItem.id, title: focusItem.title, date: focusItem.start, time: focusItem.time ?? null, endTime: focusItem.endTime ?? null, feed: focusItem.feed ?? "" })
+          : focusItem?.kind === "action" && setProject(ui, "actions", [focusItem.id]),
     },
   ];
   useCommands("list:calendar", commands, { priority: 10, active: regionActive });
+  // While the calendar is the active region it holds focus (as a list's grid does), so a screen reader is inside the
+  // calendar widget and hears the live line; a picker, a field or the pane keep focus when they have it.
+  useEffect(() => {
+    if (!regionActive) return;
+    const el = document.activeElement;
+    if (!el || el === document.body) root.current?.focus({ preventScroll: true });
+  });
 
   // J from a project lands here on its appointment: that day, the appointment picked (its key ends in its day).
   useEffect(() => {
@@ -602,8 +624,10 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       i.waiting ? "is-waiting" : "",
       p.contL ? "cont-l" : "",
       p.contR ? "cont-r" : "",
-      // The due end carries the milestone diamond wherever it falls on screen: deadlines stand out in every view.
-      (i.role === "due" || i.role === "span") && !p.contR ? "has-due-end" : "",
+      // The due end carries the milestone diamond wherever it falls on screen: deadlines stand out in every view. A
+      // day-specific action (start and due the same day) is a plan for the day, not a deadline: outlined, no diamond.
+      i.role === "due" && i.startField === "defer" ? "is-dayspecific" : "",
+      (i.role === "due" || i.role === "span") && !p.contR && !(i.role === "due" && i.startField === "defer") ? "has-due-end" : "",
       itemKey === i.key ? "is-focus" : "",
       drag?.key === i.key ? "is-dragging" : "",
     ].join(" ");
@@ -705,6 +729,22 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         <span className="cal-num">{Number(d.slice(8)) === 1 && !phone ? `${Number(d.slice(8))} ${MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}` : Number(d.slice(8))}</span>
       )}
       {phone && !opts.head && dots(d)}
+      {/* What should already have happened, on today's cell, so Week and Month don't hide it in the past. */}
+      {d === t && overdueCount > 0 && (
+        <button
+          type="button"
+          className="cal-overdue"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={() => {
+            setItemKey(null);
+            setCursor(t);
+            setMode("day");
+          }}
+          title="Open the Day tab: today, with what is overdue"
+        >
+          {overdueCount} overdue
+        </button>
+      )}
       {!phone && Boolean(opts.hidden) && (
         <button
           type="button"
@@ -782,35 +822,18 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       </>
     );
   } else if (mode === "day") {
-    // The daily review (GTD): the hard landscape first (appointments, day-specific actions, deadlines), what is
-    // overdue, then the next actions that fit now and the follow-ups due, so the day starts from one page.
+    // The daily review (GTD): the hard landscape first (appointments, day-specific actions, deadlines, follow-ups),
+    // what is overdue, then the next actions that fit now and the chases still to make. Every row is the same agenda
+    // row: ↑↓ walk them all, Enter opens the details beside the calendar, J goes to its project.
     const d = cursor;
     const here = onDay(d);
     const late = overdueBefore(d);
-    const ctxName = new Map(s.contexts.map((c) => [c.id, c.name]));
-    const nextNow =
-      d === t
-        ? s.actions
-            .filter((a) => a.status === "next" && !onHold(a, s) && !isDeferred(a, t) && !(a.due && a.due <= t) && (!fitNow || fits(a, fitNow) === "fits"))
-            .sort((a, b) => a.sort - b.sort)
-        : [];
-    const chases = d === t ? s.actions.filter((a) => isChase(a, t)) : [];
-    const plain = (key: string, title: string, meta: string, onOpen: () => void, mark: React.ReactNode) => (
-      <li key={key}>
-        <button type="button" className="cal-agenda-row" onClick={onOpen}>
-          <span className="cal-agenda-mark" aria-hidden="true">
-            {mark}
-          </span>
-          <span className="cal-agenda-title">{title}</span>
-          <span className="cal-agenda-when">{meta}</span>
-        </button>
-      </li>
-    );
+    const chases = lateFollowups(d);
     body = (
       <div className="cal-day-view">
-        <section aria-label={d === t ? "Today" : formatLong(d)}>
-          <h3 className="cal-day-h">{d === t ? "Today" : "On the day"}</h3>
-          {here.length ? <ul className="cal-agenda">{here.map((i) => agendaRow(i, d))}</ul> : <p className="cal-agenda-none">Nothing on the calendar.</p>}
+        <section aria-label="On the calendar">
+          <h3 className="cal-day-h">On the calendar</h3>
+          {here.length ? <ul className="cal-agenda">{here.map((i) => agendaRow(i, d))}</ul> : <p className="cal-agenda-none">Nothing scheduled.</p>}
         </section>
         {late.length > 0 && (
           <section aria-label="Overdue">
@@ -821,12 +844,10 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         {d === t && (
           <section aria-label="Next actions">
             <h3 className="cal-day-h">
-              Next actions {fitNow ? <span className="cal-day-note">that fit {fitLabel(fitNow)}</span> : <span className="cal-day-note">anywhere</span>}
+              Next actions <span className="cal-day-note">{fitNow ? `that fit ${fitLabel(fitNow)}` : "anywhere"}</span>
             </h3>
             {nextNow.length ? (
-              <ul className="cal-agenda">
-                {nextNow.slice(0, 12).map((a) => plain(a.id, a.title || "Untitled action", a.context_id ? (ctxName.get(a.context_id) ?? "") : "", () => ui.reveal({ kind: "action", id: a.id }), <Marker />))}
-              </ul>
+              <ul className="cal-agenda">{nextNow.slice(0, 12).map((i) => agendaRow(i, d, i.sub ?? ""))}</ul>
             ) : (
               <p className="cal-agenda-none">{fitNow ? "Nothing fits right now." : "No next actions."}</p>
             )}
@@ -838,9 +859,9 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           </section>
         )}
         {chases.length > 0 && (
-          <section aria-label="Follow-ups due">
-            <h3 className="cal-day-h">Follow-ups due</h3>
-            <ul className="cal-agenda">{chases.map((a) => plain(`c:${a.id}`, a.title || "Untitled", `${a.waiting_who ?? ""} · since ${a.waiting_since ? formatShort(a.waiting_since) : "?"}`, () => ui.reveal({ kind: "action", id: a.id }), <Hourglass size={13} strokeWidth={2} />))}</ul>
+          <section aria-label="Follow-ups to chase">
+            <h3 className="cal-day-h">Follow-ups to chase</h3>
+            <ul className="cal-agenda">{chases.map((i) => agendaRow(i, d, `${i.waiting ?? ""} · was ${formatShort(i.end)}`))}</ul>
           </section>
         )}
       </div>
@@ -938,7 +959,17 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   }
 
   return (
-    <div className={`calendar is-${mode} ${phone ? "is-phone" : ""}`} ref={root} aria-label={`Calendar, ${title}`}>
+    // One keyboard widget for a screen reader (Calendar critique): the calendar holds focus and its keys, and the live
+    // line below says where the cursor is and what it is on (kind, when, overdue, which calendar).
+    <div
+      className={`calendar is-${mode} ${phone ? "is-phone" : ""}`}
+      ref={root}
+      role="application"
+      aria-roledescription="calendar"
+      aria-label={`Calendar, ${title}`}
+      aria-describedby="cal-live"
+      tabIndex={-1}
+    >
       <div className="cal-bar-top">
         <h2 className="cal-title-period">{title}</h2>
         <div className="cal-nav">
@@ -951,6 +982,34 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           <button type="button" className="icon-btn" onClick={() => step(1)} aria-label={`Next ${mode}`} title={`Next ${mode} (${keyLabel("pagedown")})`}>
             <ChevronRight size={16} strokeWidth={2} />
           </button>
+        </div>
+        {/* The right-hand group, pushed right once: what's shown (the soft-dates layer and each calendar), then sync. */}
+        <div className="cal-legend" aria-label="What's shown">
+          {/* Soft dates (starts, start bars, ticklers) as a layer you switch on; the hard landscape always shows. */}
+          <button
+            type="button"
+            className={`cal-legend-item cal-soft ${soft ? "is-on" : ""}`}
+            aria-pressed={soft}
+            title={soft ? "Hide soft dates: starts and ticklers" : "Show soft dates: starts and ticklers"}
+            onClick={() => setSoft(!soft)}
+          >
+            <span className="cal-soft-box" aria-hidden="true" />
+            Soft dates
+          </button>
+          {/* The subscribed calendars, each in its colour: pressing one hides it here for a while (kept in this browser). */}
+          {feeds.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              className={`cal-legend-item ${hiddenFeeds.has(f.id) ? "is-off" : ""}`}
+              aria-pressed={!hiddenFeeds.has(f.id)}
+              title={hiddenFeeds.has(f.id) ? `Show ${f.name}` : `Hide ${f.name}`}
+              onClick={() => toggleFeed(f.id)}
+            >
+              <span className="cal-legend-dot" style={{ background: hiddenFeeds.has(f.id) ? "transparent" : f.color }} aria-hidden="true" />
+              {f.name}
+            </button>
+          ))}
         </div>
         {/* Sync now: every subscribed calendar read again at once; the icon turns while it runs. */}
         {feeds.length > 0 && (
@@ -965,53 +1024,48 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
             <RefreshCw size={14} strokeWidth={2} aria-hidden />
           </button>
         )}
-        {/* The soft dates as a layer you switch on; the hard landscape (appointments, day-specific actions, deadlines) always shows. */}
-        <div className="cal-legend" aria-label="Layers">
-          <button
-            type="button"
-            className={`cal-legend-item ${soft ? "" : "is-off"}`}
-            aria-pressed={soft}
-            title={soft ? "Hide soft dates: starts, follow-ups, ticklers" : "Show soft dates: starts, follow-ups, ticklers"}
-            onClick={() => setSoft(!soft)}
-          >
-            <span className="cal-legend-dot cal-soft-dot" aria-hidden="true" />
-            Soft dates
-          </button>
-        </div>
-        {/* The subscribed calendars, each in its colour: pressing one hides it here for a while (kept in this browser). */}
-        {feeds.length > 0 && (
-          <div className="cal-legend" aria-label="Calendars">
-            {feeds.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                className={`cal-legend-item ${hiddenFeeds.has(f.id) ? "is-off" : ""}`}
-                aria-pressed={!hiddenFeeds.has(f.id)}
-                title={hiddenFeeds.has(f.id) ? `Show ${f.name}` : `Hide ${f.name}`}
-                onClick={() => toggleFeed(f.id)}
-              >
-                <span className="cal-legend-dot" style={{ background: hiddenFeeds.has(f.id) ? "transparent" : f.color }} aria-hidden="true" />
-                {f.name}
-              </button>
-            ))}
-          </div>
-        )}
         <div className="cal-modes" role="tablist" aria-label="Calendar view">
           {(["day", "week", "month", "year"] as Mode[]).map((m, i) => (
-            <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? "is-current" : ""} onClick={() => setMode(m)} title={`${m[0].toUpperCase()}${m.slice(1)} (${i + 1})`} aria-keyshortcuts={String(i + 1)}>
+            <button key={m} id={`cal-tab-${m}`} type="button" role="tab" aria-selected={mode === m} aria-controls="cal-panel" tabIndex={mode === m ? 0 : -1} className={mode === m ? "is-current" : ""} onClick={() => setMode(m)} title={`${m[0].toUpperCase()}${m.slice(1)} (${i + 1})`} aria-keyshortcuts={String(i + 1)}>
               {m}
             </button>
           ))}
         </div>
       </div>
-      {body}
-      <p className="visually-hidden" aria-live="polite">
-        {focusItem
-          ? `${focusItem.title}, ${focusItem.start === focusItem.end ? formatLong(focusItem.start) : `${formatLong(focusItem.start)} to ${formatLong(focusItem.end)}`}`
-          : `${formatLong(cursor)}, ${cursorItems.length ? plural(cursorItems.length, "item") : "nothing scheduled"}`}
+      <div id="cal-panel" className="cal-panel" role="tabpanel" aria-labelledby={`cal-tab-${mode}`}>
+        {body}
+      </div>
+      <p id="cal-live" className="visually-hidden" aria-live="polite">
+        {focusItem ? describe(focusItem) : `${formatLong(cursor)}, ${cursorItems.length ? plural(cursorItems.length, "item") : "nothing scheduled"}`}
       </p>
     </div>
   );
+}
+
+/**
+ * What an item is, said whole for a screen reader (Calendar critique: the live line gave only the title and date):
+ * its kind, its title, when, and anything that asks for attention.
+ */
+function describe(i: Item): string {
+  const when = i.start === i.end ? formatLong(i.start) : `${formatLong(i.start)} to ${formatLong(i.end)}`;
+  const late = i.overdue ? ", overdue" : "";
+  const what = i.kind === "project" ? "Project" : "Action";
+  switch (i.role) {
+    case "event":
+      return `Appointment${i.feedName ? `, ${i.feedName}` : ""}: ${i.title}, ${when}${i.time ? `, ${i.time}${i.endTime ? ` to ${i.endTime}` : ""}` : ", all day"}${i.location ? `, ${i.location}` : ""}`;
+    case "due":
+      return `${what}: ${i.title}, ${i.startField === "defer" ? "on the day" : "due"} ${when}${late}`;
+    case "span":
+      return `${what}: ${i.title}, from ${when}${late}`;
+    case "start":
+      return `${what}: ${i.title}, starts ${when}`;
+    case "followup":
+      return `Follow up${i.waiting ? ` with ${i.waiting}` : ""}: ${i.title}, ${when}${late}`;
+    case "tickler":
+      return `Comes back: ${i.title}, ${when}`;
+    case "next":
+      return `Next action: ${i.title}${i.sub ? `, ${i.sub}` : ""}`;
+  }
 }
 
 function formatShort(d: string) {
@@ -1069,6 +1123,8 @@ function YearGrid({ year, ws, items, cursor, t, onPick, onCursor }: { year: numb
                       className={["cal-mini-day", d === t ? "is-today" : "", d === cursor ? "is-cursor" : "", due.get(d) ? `has-${due.get(d)}` : ""].join(" ")}
                       style={{ ["--load" as string]: n / peak }}
                       aria-label={`${formatLong(d)}${n ? `, ${plural(n, "item")}` : ""}${due.get(d) === "overdue" ? ", overdue" : ""}`}
+                      // The calendar's keys move through the days; 365 tab stops would bury everything after them.
+                      tabIndex={-1}
                       onClick={() => onCursor(d)}
                       onDoubleClick={() => onPick(d)}
                     >

@@ -6,7 +6,7 @@ import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { ContextCode, DateCell, Marker } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
-import { askContext } from "../actionCommands.tsx";
+import { askContext, setProject } from "../actionCommands.tsx";
 import { formatDate, today } from "../../shared/dates.ts";
 import type { Action, ID, State } from "../../shared/types.ts";
 
@@ -137,6 +137,9 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
   const commands: Command[] = [
     ...nav.commands,
     { id: "ag.open", label: "Open details", group: "Agendas", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: "action", id: focus.a.id }, true) },
+    // P and J as on every list: link to a project from here, and jump to it.
+    { id: "ag.project", label: "Set project", group: "Fields", keys: ["p"], enabled: targets().length > 0, run: () => setProject(ui, "actions", targets()) },
+    { id: "ag.jump", label: "Jump to its project", group: "Agendas", keys: ["j"], enabled: Boolean(focus), run: () => focus && ui.jumpToProject(focus.a.id) },
     { id: "ag.done", label: "Mark done (taken up, or received)", group: "Agendas", keys: ["e"], enabled: targets().length > 0, run: () => completeActions(targets()) },
     { id: "ag.yours", label: person ? `Take something up with ${person}` : "Take something up with this person", group: "Agendas", keys: ["t"], enabled: Boolean(person), run: () => person && addYours(person) },
     { id: "ag.theirs", label: person ? `Waiting on ${person} for something` : "Waiting on this person for something", group: "Agendas", keys: ["w"], enabled: Boolean(person), run: () => person && addTheirs(person) },

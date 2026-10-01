@@ -75,10 +75,10 @@ export function Rail({ active }: { active: boolean }) {
     // The oldest thing in the whole system: a review is only "due" once there is a week's worth to review.
     const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
     const systemAge = firstDay ? daysBetween(firstDay.slice(0, 10), t) : 0;
-    // The hard landscape only, as the Calendar shows it by default: what is due today (day-specific actions included);
-    // starts are soft dates (GTD audit).
+    // The hard landscape only, as the Calendar shows it by default: what is due today (day-specific actions included)
+    // and follow-ups due today; starts are soft dates (GTD audit).
     const scheduled =
-      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && !onHold(a, s) && a.due === t).length +
+      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && !onHold(a, s) && (a.due === t || (a.status === "waiting" && a.followup === t))).length +
       s.projects.filter((p) => p.status === "active" && p.due === t).length;
     return { inbox: inboxItems.length, overdue, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps

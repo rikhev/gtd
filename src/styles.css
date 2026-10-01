@@ -3591,6 +3591,17 @@ textarea.field-text {
   min-height: 100%;
   padding-bottom: 16px;
 }
+/* The calendar holds focus as one widget; its cursor (the day's fill, the item's ring) is the visible focus. */
+.calendar:focus {
+  outline: none;
+}
+/* The tab panel passes the column through, so each view lays out as before. */
+.cal-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
 /* Phones: seven columns are too narrow for titles, so the month is a grid of day numbers with a dot per item (red
    when something is due that day) and the chosen day listed in full below; the week is an agenda, a day at a time. */
 .calendar.is-phone .cal-weekdays {
@@ -4056,6 +4067,40 @@ textarea.field-text {
 }
 .cal-bar.role-due.is-focus.is-overdue::after {
   background: var(--alert);
+}
+
+/* A day-specific action (start and due the same day) is the day's plan, not a deadline: outlined in ink on the sheet,
+   no diamond, so a day with three planned calls doesn't read as three deadlines. */
+.cal-bar.role-due.is-dayspecific {
+  background: var(--sheet);
+  border-color: var(--ink-2);
+  color: var(--ink);
+}
+.cal-bar.role-due.is-dayspecific .cal-sub {
+  color: var(--ink-2);
+}
+.cal-bar.role-due.is-dayspecific::after {
+  display: none;
+}
+.cal-bar.role-due.is-dayspecific.is-overdue {
+  background: var(--sheet);
+  border-color: var(--alert);
+  color: var(--alert);
+}
+/* Today's cell says what is overdue, in Week and Month: a small alert count that opens the Day tab. */
+.cal-overdue {
+  position: absolute;
+  right: 6px;
+  top: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--alert);
+}
+.cal-overdue:hover {
+  background: var(--rail);
+  color: var(--alert-on-rail);
 }
 
 /* Continuing from last week or into the next: that side runs to the edge, squared. */
@@ -4750,7 +4795,7 @@ body.is-cal-dragging {
   display: flex;
   gap: 4px;
   margin-left: auto;
-  margin-right: 12px;
+  margin-right: 4px;
   flex-wrap: wrap;
 }
 .cal-legend-item {
@@ -4773,13 +4818,23 @@ body.is-cal-dragging {
   border-radius: 50%;
   flex: none;
 }
-/* Soft dates have no calendar colour: a dashed ring in ink, solid when the layer is on. */
-.cal-soft-dot {
-  box-shadow: inset 0 0 0 1.5px var(--ink-2);
+/* Soft dates is a layer, not a calendar: a small checkbox (an empty hairline square, filled in ink when on), never
+   crossed out, with a hairline after it to set it apart from the calendars beside it. */
+.cal-legend-item.cal-soft {
+  margin-right: 4px;
+  border-right: 1px solid var(--rule-strong);
+  border-radius: 3px 0 0 3px;
 }
-.cal-legend-item.is-off .cal-soft-dot {
+.cal-soft-box {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+  flex: none;
+}
+.cal-legend-item.cal-soft.is-on .cal-soft-box {
+  background: var(--mark);
   box-shadow: none;
-  border: 1px dashed var(--ink-3);
 }
 .cal-legend-item.is-off {
   color: var(--ink-3);
@@ -4969,12 +5024,10 @@ body.is-cal-dragging {
 }
 
 /* Sync now, before the Calendar's legend: the arrows turn while every calendar is read again. */
+/* Sync sits right after what's shown, before the tabs; the legend group alone pushes the right-hand side over. */
 .cal-sync {
-  margin-left: auto;
+  margin-right: 12px;
   color: var(--ink-2);
-}
-.cal-sync + .cal-legend {
-  margin-left: 4px;
 }
 .cal-sync.is-syncing svg {
   animation: cal-spin 900ms linear infinite;

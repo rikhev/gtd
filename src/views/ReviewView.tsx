@@ -7,7 +7,7 @@ import { useEvents } from "../calendarFeed.ts";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
 import { DateCell, EventMark, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
-import { editors, linkAppointment, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
+import { editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
@@ -550,15 +550,26 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : step.id === "papers" ? "All collected: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
     {
+      // P as on every list: an appointment is linked to a project, an action set in one.
       id: "rv.project",
-      label: "Link the appointment to a project",
+      label: focusRow?.kind === "event" ? "Link the appointment to a project" : "Set project",
       group: "Review",
       keys: ["p"],
-      enabled: focusRow?.kind === "event",
+      enabled: focusRow?.kind === "event" || targetsOf("action").length > 0,
       run: () => {
-        const e = events.find((x) => x.key === focusRow?.id);
-        if (e) linkAppointment(ui, e);
+        if (focusRow?.kind === "event") {
+          const e = events.find((x) => x.key === focusRow?.id);
+          if (e) linkAppointment(ui, e);
+        } else setProject(ui, "actions", targetsOf("action"));
       },
+    },
+    {
+      id: "rv.jump",
+      label: "Jump to its project",
+      group: "Review",
+      keys: ["j"],
+      enabled: focusRow?.kind === "action" || focusRow?.kind === "event",
+      run: () => focusRow && (focusRow.kind === "event" ? ui.jumpFromAppointment(focusRow.id) : ui.jumpToProject(focusRow.id)),
     },
     {
       id: "rv.open",

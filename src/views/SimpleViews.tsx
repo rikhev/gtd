@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
-import { getState, mutate, newAction, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
+import { mutate, newAction, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { DateCell, Lamp, Marker } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { editors, projectItems } from "../actionCommands.tsx";
+import { editors, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { formatDate } from "../../shared/dates.ts";
 import type { ID, Op, Ref } from "../../shared/types.ts";
@@ -236,16 +236,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
       group: "Fields",
       keys: ["p"],
       enabled: Boolean(focusId),
-      run: () => {
-        const ids = nav.targets();
-        ui.openPicker({
-          type: "list",
-          title: "Project",
-          items: projectItems(),
-          noneLabel: "No project",
-          onPick: (id) => patchMany("refs", ids, { project_id: id }, `${plural(ids.length, "reference")} → ${getState().projects.find((p) => p.id === id)?.title ?? "no project"}`),
-        });
-      },
+      run: () => setProject(ui, "refs", nav.targets()),
     },
     { id: "ref.attach", label: "Attach file", group: "Reference", keys: ["mod+o"], enabled: Boolean(focusId), run: () => fileInput.current?.click() },
     {

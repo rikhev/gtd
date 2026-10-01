@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { Circle, Layers } from "lucide-react";
 import { mutate, plural, reopenActions, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
+import { setProject } from "../actionCommands.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
@@ -141,6 +142,9 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "done.reopen", label: "Not done (put back)", group: "Done", keys: ["e"], enabled: Boolean(focus), run: () => reopen(targets()) },
     { id: "done.open", label: "Open details", group: "Done", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
+    // P and J as on every list (for done actions; a done project has no project of its own).
+    { id: "done.project", label: "Set project", group: "Fields", keys: ["p"], enabled: targets().some((r) => r.kind === "action"), run: () => setProject(ui, "actions", targets().filter((r) => r.kind === "action").map((r) => r.id)) },
+    { id: "done.jump", label: "Jump to its project", group: "Done", keys: ["j"], enabled: focus?.kind === "action", run: () => focus?.kind === "action" && ui.jumpToProject(focus.id) },
     { id: "done.trash", label: "Trash", group: "Done", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => trash(targets()) },
     { id: "done.view", label: "View: group by day or project", group: "View", keys: ["alt+v"], run: openViewMenu },
   ];
