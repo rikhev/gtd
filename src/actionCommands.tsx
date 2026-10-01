@@ -530,16 +530,16 @@ export function actionRowCommands(
     { id: "row.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(ids()) },
     { id: "row.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(ids()) },
     waiting
-      ? { id: "row.date", label: "Follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "followup") }
-      : { id: "row.date", label: "Due date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "due") },
-    ...(waiting ? [{ id: "row.since", label: "Waiting since", group: "Fields", keys: ["i"], run: () => ed.date(ids(), "waiting_since") }] : []),
-    { id: "row.defer", label: "Start date", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "defer") },
+      ? { id: "row.date", label: "Set follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "followup") }
+      : { id: "row.date", label: "Set due date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "due") },
+    ...(waiting ? [{ id: "row.since", label: "Set waiting since", group: "Fields", keys: ["i"], run: () => ed.date(ids(), "waiting_since") }] : []),
+    { id: "row.defer", label: "Set start date", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "defer") },
     // M for minutes: T and W add, everywhere (owner's decision after the critique found T editing here and adding elsewhere).
-    { id: "row.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["m"], run: () => ed.time(ids()) },
-    { id: "row.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(ids()) },
-    { id: "row.repeat", label: "Repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(ids()) },
+    { id: "row.time", label: "Set time estimate (then 1–6)", group: "Fields", keys: ["m"], run: () => ed.time(ids()) },
+    { id: "row.energy", label: "Set energy (then 1–3)", group: "Fields", keys: ["g"], run: () => ed.energy(ids()) },
+    { id: "row.repeat", label: "Set repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(ids()) },
     { id: "row.bringback", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], run: () => ed.date(ids(), "bring_back") },
-    { id: "row.person", label: "Who it's with (their agenda)", group: "Fields", keys: ["h"], run: () => ed.person(ids()) },
+    { id: "row.person", label: "Set who it's with (their agenda)", group: "Fields", keys: ["h"], run: () => ed.person(ids()) },
     { id: "row.delegate", label: "Delegate → Waiting For", group: o.group, keys: ["shift+f"], run: () => ed.delegate(ids()) },
     { id: "row.trash", label: "Trash", group: o.group, keys: ["backspace", "delete"], run: () => trash(false) },
     { id: "row.delete", label: "Delete permanently", group: o.group, keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },
@@ -642,7 +642,7 @@ export function useActionCommands(opts: {
     },
     { id: "act.addwait", row: true, label: "Add a waiting for (to this row's project)", group: "Actions", keys: ["w"], run: () => addBeside("waiting") },
     opts.doneView
-      ? { id: "act.reopen", row: true, label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
+      ? { id: "act.reopen", row: true, label: "Mark not done (put back)", group: "Actions", keys: ["e"], run: reopen }
       : { id: "act.done", row: true, label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
     ...actionRowCommands(ui, { targets: pick, focusId: opts.focusId, group: "Actions", rename: setEditing, waiting: opts.waitingView }),
     { id: "act.up", row: true, label: "Move row up", group: "Actions", keys: ["alt+arrowup"], run: () => reorder(-1) },

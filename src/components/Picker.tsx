@@ -63,12 +63,12 @@ export function Picker({ spec, close }: Props) {
     [
       { id: "picker.close", label: "Cancel", group: "Picker", keys: ["escape"], inInput: true, run: close },
       { id: "picker.move", label: "Move up or down the choices", group: "Picker", displayKeys: ["arrowup", "arrowdown"], run: noop },
-      { id: "picker.pick", label: spec.type === "text" ? "Done" : "Pick", group: "Picker", displayKeys: ["enter"], run: noop },
+      { id: "picker.pick", label: spec.type === "text" ? "Save" : "Pick", group: "Picker", displayKeys: ["enter"], run: noop },
       ...(spec.type === "list" && spec.onPickMore ? [{ id: "picker.more", label: "Pick this and keep choosing", group: "Picker", displayKeys: ["shift+enter"], run: noop }] : []),
-      ...(spec.type === "time" ? [{ id: "picker.digits", label: "A length by its number (0 clears)", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),
-      ...(spec.type === "energy" ? [{ id: "picker.digits", label: "A level by its number (0 clears)", group: "Picker", displayKeys: ["1–3"], run: noop }] : []),
+      ...(spec.type === "time" ? [{ id: "picker.digits", label: "Pick a length by its number (0 clears)", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),
+      ...(spec.type === "energy" ? [{ id: "picker.digits", label: "Pick a level by its number (0 clears)", group: "Picker", displayKeys: ["1–3"], run: noop }] : []),
       // ⌘K works in a picker too, listing its keys (it holds every other key while it is open).
-      { id: "picker.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
+      { id: "picker.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     ],
     { priority: 200, exclusive: true, title: spec.type === "time" ? "Time estimate" : spec.type === "energy" ? "Energy" : spec.title },
   );

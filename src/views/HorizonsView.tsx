@@ -68,9 +68,9 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "hz.new", label: "New (in this group)", group: "Horizons", keys: ["n"], run: create },
     { id: "hz.rename", row: true, label: "Rename", group: "Horizons", keys: ["f2", "enter"], enabled: Boolean(focus), run: () => focus && setEditing(focus.id) },
-    { id: "hz.done", row: true, label: "Achieved, or current again", group: "Horizons", keys: ["e"], enabled: Boolean(focus), run: () => toggleDone(targets()) },
+    { id: "hz.done", row: true, label: "Mark achieved, or current again", group: "Horizons", keys: ["e"], enabled: Boolean(focus), run: () => toggleDone(targets()) },
     { id: "hz.area", row: true, label: "Set the goal's area", group: "Fields", keys: ["a"], enabled: goals().length > 0, run: () => setArea(ui, goals()) },
-    { id: "hz.target", row: true, label: "Target date", group: "Fields", keys: ["d"], enabled: goals().length > 0, run: () => setTarget(ui, goals()) },
+    { id: "hz.target", row: true, label: "Set target date", group: "Fields", keys: ["d"], enabled: goals().length > 0, run: () => setTarget(ui, goals()) },
     { id: "hz.up", row: true, label: "Move row up", group: "Horizons", keys: ["alt+arrowup"], enabled: Boolean(focus), run: () => reorder(-1) },
     { id: "hz.down", row: true, label: "Move row down", group: "Horizons", keys: ["alt+arrowdown"], enabled: Boolean(focus), run: () => reorder(1) },
     {

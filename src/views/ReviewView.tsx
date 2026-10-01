@@ -507,8 +507,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
 
   const commands: Command[] = [
     ...nav.commands,
-    { id: "rv.next", label: "Next step", group: "Step", keys: ["mod+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
-    { id: "rv.prev", label: "Previous step", group: "Step", keys: ["mod+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
+    { id: "rv.next", label: "Go to the next step", group: "Step", keys: ["mod+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
+    { id: "rv.prev", label: "Go to the previous step", group: "Step", keys: ["mod+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
     { id: "rv.clarify", label: "Clarify", group: "Row", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: clarify },
     {
       id: "rv.addnext",
@@ -570,7 +570,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.file", row: true, label: "File", group: "Row", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Step", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Step", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
-    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Reviewed: next step", group: "Step", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
+    { id: "rv.here", label: step.id === "sweep" ? "Mark my head empty and go to the next step" : "Mark reviewed and go to the next step", group: "Step", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
     {
       // P as on every list: an appointment is linked to a project, an action set in one.
       id: "rv.project",
@@ -636,7 +636,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     {
       id: "rv.current",
       row: true,
-      label: "Reviewed: still current",
+      label: "Mark reviewed: still current",
       group: "Row",
       keys: ["r"],
       enabled: ["next", "waiting", "projects"].includes(step.id) && Boolean(focusRow),

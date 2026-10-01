@@ -141,7 +141,7 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
     { id: "ag.done", row: true, label: "Mark done (taken up, or received)", group: "Agendas", keys: ["e"], enabled: targets().length > 0, run: () => completeActions(targets()) },
     { id: "ag.yours", row: true, label: person ? `Take something up with ${person}` : "Take something up with this person", group: "Agendas", keys: ["t"], enabled: Boolean(person), run: () => person && addYours(person) },
     { id: "ag.theirs", row: true, label: person ? `Waiting on ${person} for something` : "Waiting on this person for something", group: "Agendas", keys: ["w"], enabled: Boolean(person), run: () => person && addTheirs(person) },
-    { id: "ag.view", label: "View: one person's agenda, or everyone's", group: "View", keys: ["alt+v"], run: openViewMenu },
+    { id: "ag.view", label: "Open the View menu: one person's agenda, or everyone's", group: "View", keys: ["alt+v"], run: openViewMenu },
     ...(only ? [{ id: "ag.all", label: "Show everyone's agenda", group: "View", run: () => setOnly(null) }] : []),
   ];
   useCommands("list:agendas", commands, { priority: 10, active: regionActive });

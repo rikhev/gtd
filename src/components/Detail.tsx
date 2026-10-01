@@ -50,7 +50,7 @@ function TextField({
   const k = autoFocus ? "F2" : multiline ? "N" : undefined;
   useCommands(
     `detail-notes:${label}`,
-    multiline ? [{ id: `detail.notes.${label}`, label: `${label}…`, group: "Details", keys: ["n"], run: () => area.current?.focus() }] : [],
+    multiline ? [{ id: `detail.notes.${label}`, label: `Edit ${label.toLowerCase()}`, group: "Details", keys: ["n"], run: () => area.current?.focus() }] : [],
     { priority: 21, active: active && Boolean(multiline) },
   );
   const commit = () => {
@@ -117,25 +117,25 @@ const PANE_STOPS = ".detail-body .field .field-text, .detail-body .event-title, 
 /** Whether the detail pane is the active region: its fields' letter keys only work then. */
 const DetailActive = createContext(false);
 
-/** A pane field's key reads as the same command does on the lists ("Set context", "Due date"), in ⌘K and the keys view. */
+/** A pane field's key reads as the same command does on the lists ("Set context", "Set due date"), in ⌘K: a command says what it does. */
 const FIELD_COMMAND: Record<string, string> = {
   Context: "Set context",
   Project: "Set project",
-  Due: "Due date",
-  Start: "Start date",
-  Time: "Time estimate (then 1–6)",
-  Energy: "Energy (then 1–3)",
-  Repeat: "Repeat",
+  Due: "Set due date",
+  Start: "Set start date",
+  Time: "Set time estimate (then 1–6)",
+  Energy: "Set energy (then 1–3)",
+  Repeat: "Set repeat",
   "Bring back": "Bring back on (tickler)",
-  With: "Who it's with (their agenda)",
-  "Follow up": "Follow-up date",
-  Since: "Waiting since",
+  With: "Set who it's with (their agenda)",
+  "Follow up": "Set follow-up date",
+  Since: "Set waiting since",
 };
 
 function PickField({ label, children, onOpen, k }: { label: string; children: ReactNode; onOpen: () => void; k?: string }) {
   // The key shown beside a field (D for Due, P for Project…) opens its picker while the pane has focus.
   const active = useContext(DetailActive);
-  useCommands(`detail-field:${label}`, k ? [{ id: `detail.field.${label}`, label: FIELD_COMMAND[label] ?? `${label}…`, group: "Fields", keys: [k.toLowerCase()], run: () => open() }] : [], { priority: 21, active: active && Boolean(k) });
+  useCommands(`detail-field:${label}`, k ? [{ id: `detail.field.${label}`, label: FIELD_COMMAND[label] ?? `Set ${label.toLowerCase()}`, group: "Fields", keys: [k.toLowerCase()], run: () => open() }] : [], { priority: 21, active: active && Boolean(k) });
   // Screen readers hear the field, its value and its key: "Due, Fri 25 Sep 2026, D".
   const id = useId();
   // Opening from the key or a click first puts focus on this field, so the picker anchors under it.
@@ -944,8 +944,8 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   useCommands(
     "detail",
     [
-      { id: "detail.down", label: "Next field", group: "Details", keys: ["arrowdown"], run: () => moveCursor(1) },
-      { id: "detail.up", label: "Previous field", group: "Details", keys: ["arrowup"], run: () => moveCursor(-1) },
+      { id: "detail.down", label: "Go to the next field", group: "Details", keys: ["arrowdown"], run: () => moveCursor(1) },
+      { id: "detail.up", label: "Go to the previous field", group: "Details", keys: ["arrowup"], run: () => moveCursor(-1) },
       {
         id: "detail.open",
         label: "Open or edit the field under the cursor",

@@ -365,12 +365,12 @@ export function useListNav(
   const commands: Command[] = [
     ...quiet(
       [
-        { id: "nav.down", label: "Next row", group: "Move", keys: ["arrowdown"], run: () => move(1) },
-        { id: "nav.up", label: "Previous row", group: "Move", keys: ["arrowup"], run: () => move(-1) },
-        { id: "nav.first", label: "First row", group: "Move", keys: ["mod+arrowup", "home"], run: () => move(-1e6) },
-        { id: "nav.last", label: "Last row", group: "Move", keys: ["mod+arrowdown", "end"], run: () => move(1e6) },
-        { id: "nav.pagedown", label: "Page down", group: "Move", keys: ["pagedown"], run: () => move(page()) },
-        { id: "nav.pageup", label: "Page up", group: "Move", keys: ["pageup"], run: () => move(-page()) },
+        { id: "nav.down", label: "Go to the next row", group: "Move", keys: ["arrowdown"], run: () => move(1) },
+        { id: "nav.up", label: "Go to the previous row", group: "Move", keys: ["arrowup"], run: () => move(-1) },
+        { id: "nav.first", label: "Go to the first row", group: "Move", keys: ["mod+arrowup", "home"], run: () => move(-1e6) },
+        { id: "nav.last", label: "Go to the last row", group: "Move", keys: ["mod+arrowdown", "end"], run: () => move(1e6) },
+        { id: "nav.pagedown", label: "Go down a page", group: "Move", keys: ["pagedown"], run: () => move(page()) },
+        { id: "nav.pageup", label: "Go up a page", group: "Move", keys: ["pageup"], run: () => move(-page()) },
       ],
       rowCount > 1,
     ),
@@ -384,7 +384,7 @@ export function useListNav(
         { id: "nav.extpageup", label: "Extend selection a page up", group: "Select", keys: ["shift+pageup"], run: () => move(-page(), true) },
         {
           id: "nav.tick",
-          label: "Tick / untick row",
+          label: "Tick or untick the row",
           group: "Select",
           keys: ["space"],
           run: () => {
@@ -650,15 +650,15 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   useCommands(
     `grid-resize:${listId}`,
     [
-      { id: "grid.resize.wider", label: "Wider", group: "Column width", keys: ["arrowright"], run: () => resizeBy(8) },
-      { id: "grid.resize.narrower", label: "Narrower", group: "Column width", keys: ["arrowleft"], run: () => resizeBy(-8) },
-      { id: "grid.resize.wider1", label: "Wider by a pixel", group: "Column width", keys: ["shift+arrowright"], run: () => resizeBy(1) },
-      { id: "grid.resize.narrower1", label: "Narrower by a pixel", group: "Column width", keys: ["shift+arrowleft"], run: () => resizeBy(-1) },
-      { id: "grid.resize.next", label: "Next column", group: "Column width", keys: ["tab"], run: () => resizeStep(1) },
-      { id: "grid.resize.prev", label: "Previous column", group: "Column width", keys: ["shift+tab"], run: () => resizeStep(-1) },
+      { id: "grid.resize.wider", label: "Make it wider", group: "Column width", keys: ["arrowright"], run: () => resizeBy(8) },
+      { id: "grid.resize.narrower", label: "Make it narrower", group: "Column width", keys: ["arrowleft"], run: () => resizeBy(-8) },
+      { id: "grid.resize.wider1", label: "Make it a pixel wider", group: "Column width", keys: ["shift+arrowright"], run: () => resizeBy(1) },
+      { id: "grid.resize.narrower1", label: "Make it a pixel narrower", group: "Column width", keys: ["shift+arrowleft"], run: () => resizeBy(-1) },
+      { id: "grid.resize.next", label: "Go to the next column", group: "Column width", keys: ["tab"], run: () => resizeStep(1) },
+      { id: "grid.resize.prev", label: "Go to the previous column", group: "Column width", keys: ["shift+tab"], run: () => resizeStep(-1) },
       {
         id: "grid.resize.fit",
-        label: "Fit to contents",
+        label: "Fit it to its contents",
         group: "Column width",
         keys: ["f"],
         run: () => {
@@ -666,8 +666,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
           if (resizing && w) setColumnWidth(resizing.key, w);
         },
       },
-      { id: "grid.resize.default", label: "Default width", group: "Column width", keys: ["0"], run: () => resizing && setColumnWidth(resizing.key, null) },
-      { id: "grid.resize.done", label: "Keep", group: "Column width", keys: ["enter"], run: () => setResizing(null) },
+      { id: "grid.resize.default", label: "Restore its default width", group: "Column width", keys: ["0"], run: () => resizing && setColumnWidth(resizing.key, null) },
+      { id: "grid.resize.done", label: "Keep these widths", group: "Column width", keys: ["enter"], run: () => setResizing(null) },
       {
         id: "grid.resize.cancel",
         label: "Cancel",

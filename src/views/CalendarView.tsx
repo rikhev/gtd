@@ -474,19 +474,19 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   };
   const commands: Command[] = [
     { id: "cal.sync", label: "Sync calendars (all of them, now)", group: "Calendar", keys: ["alt+s"], enabled: feeds.length > 0, run: () => void syncCalendars() },
-    { id: "cal.day", label: "Day (the daily review)", group: "Calendar", keys: ["1"], run: () => setMode("day") },
-    { id: "cal.week", label: "Week", group: "Calendar", keys: ["2"], run: () => setMode("week") },
-    { id: "cal.month", label: "Month", group: "Calendar", keys: ["3"], run: () => setMode("month") },
-    { id: "cal.year", label: "Year", group: "Calendar", keys: ["4"], run: () => setMode("year") },
+    { id: "cal.day", label: "Show the day (the daily review)", group: "Calendar", keys: ["1"], run: () => setMode("day") },
+    { id: "cal.week", label: "Show the week", group: "Calendar", keys: ["2"], run: () => setMode("week") },
+    { id: "cal.month", label: "Show the month", group: "Calendar", keys: ["3"], run: () => setMode("month") },
+    { id: "cal.year", label: "Show the year", group: "Calendar", keys: ["4"], run: () => setMode("year") },
     // T and W add, as they do everywhere (DESIGN.md: letters mean one thing); today is Home, or Outlook's ⌥⇧Y.
     { id: "cal.today", label: "Go to today", group: "Calendar", keys: ["home", "alt+shift+y"], run: () => (setItemKey(null), setCursor(t)) },
     { id: "cal.prev", label: `Previous ${mode}`, group: "Calendar", keys: ["pageup", "shift+arrowleft"], run: () => step(-1) },
     { id: "cal.next", label: `Next ${mode}`, group: "Calendar", keys: ["pagedown", "shift+arrowright"], run: () => step(1) },
-    { id: "cal.left", label: "Previous day", group: "Move", keys: ["arrowleft"], run: () => moveCursor(-1) },
-    { id: "cal.right", label: "Next day", group: "Move", keys: ["arrowright"], run: () => moveCursor(1) },
+    { id: "cal.left", label: "Go to the previous day", group: "Move", keys: ["arrowleft"], run: () => moveCursor(-1) },
+    { id: "cal.right", label: "Go to the next day", group: "Move", keys: ["arrowright"], run: () => moveCursor(1) },
     // On the Day tab ↑↓ walk the day's items (there is no week to move through); elsewhere they move a week.
-    { id: "cal.up", label: inItem ? "Previous item on this day" : mode === "day" ? "Last item of the day" : "Same day last week", group: "Move", keys: ["arrowup"], run: () => (inItem ? cycle(-1) : mode === "day" ? cursorItems.length && setItemKey(cursorItems[cursorItems.length - 1].key) : moveCursor(-7)) },
-    { id: "cal.down", label: inItem ? "Next item on this day" : mode === "day" ? "First item of the day" : "Same day next week", group: "Move", keys: ["arrowdown"], run: () => (inItem ? cycle(1) : mode === "day" ? cursorItems.length && setItemKey(cursorItems[0].key) : moveCursor(7)) },
+    { id: "cal.up", label: inItem ? "Go to the previous item on this day" : mode === "day" ? "Go to the last item of the day" : "Go to the same day last week", group: "Move", keys: ["arrowup"], run: () => (inItem ? cycle(-1) : mode === "day" ? cursorItems.length && setItemKey(cursorItems[cursorItems.length - 1].key) : moveCursor(-7)) },
+    { id: "cal.down", label: inItem ? "Go to the next item on this day" : mode === "day" ? "Go to the first item of the day" : "Go to the same day next week", group: "Move", keys: ["arrowdown"], run: () => (inItem ? cycle(1) : mode === "day" ? cursorItems.length && setItemKey(cursorItems[0].key) : moveCursor(7)) },
     {
       id: "cal.enter",
       label: inItem ? "Open details" : mode === "year" ? "Open this month" : "Step into the day's items",
@@ -498,7 +498,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         else if (cursorItems.length) setItemKey(cursorItems[0].key);
       },
     },
-    { id: "cal.out", row: true, label: "Back to the day", group: "Calendar", keys: ["escape"], enabled: inItem, run: () => setItemKey(null) },
+    { id: "cal.out", label: "Back to the day", group: "Calendar", keys: ["escape"], enabled: inItem, run: () => setItemKey(null) },
     { id: "cal.new", label: "New action for this day (day-specific)", group: "Calendar", keys: ["t", "n"], run: () => newOn(cursor) },
     { id: "cal.soft", label: soft ? "Hide soft dates (starts and ticklers)" : "Show soft dates (starts and ticklers)", group: "View", run: () => setSoft(!soft) },
     { id: "cal.wait", label: "New waiting for, follow up on this day", group: "Calendar", keys: ["w"], run: () => waitOn(cursor) },
@@ -529,7 +529,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       // D is the follow-up on a waiting item, the due date on anything else, as on the lists.
       id: "cal.due",
       row: true,
-      label: focusWaiting ? "Follow-up date" : "Due date",
+      label: focusWaiting ? "Set follow-up date" : "Set due date",
       group: "Fields",
       keys: ["d"],
       enabled: editable,
@@ -538,7 +538,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     {
       id: "cal.start",
       row: true,
-      label: "Start date",
+      label: "Set start date",
       group: "Fields",
       keys: ["s"],
       enabled: editable,

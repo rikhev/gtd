@@ -458,7 +458,7 @@ export default function App() {
     { id: "go.horizons", label: "Go to Horizons (purpose, vision, goals)", group: "Go to", run: () => go("horizons") },
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
-    { id: "g.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
+    { id: "g.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
     // K clarifies: you decide, one item at a time.
     { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
@@ -468,7 +468,7 @@ export default function App() {
     // A mind sweep on its own: the Weekly Review opened at its first step.
     {
       id: "g.sweep",
-      label: "Mind sweep: empty your head into the Inbox",
+      label: "Start a mind sweep: empty your head into the Inbox",
       group: "Review",
       enabled: view !== "review",
       run: () => {
@@ -485,8 +485,8 @@ export default function App() {
     { id: "g.newaction", label: "New next action", group: "Actions", keys: ["alt+t"], run: () => quickAddNextAction(ui) },
     // Something you're waiting for, from anywhere: what, who or what you wait on, and its project if any.
     { id: "g.newwaiting", label: "New waiting for", group: "Actions", keys: ["alt+w"], run: () => quickAddWaiting(ui) },
-    { id: "g.region", label: "Next region (lists → items → details)", group: "Move", keys: ["alt+tab", "mod+f6"], inInput: true, run: () => cycleRegion(1) },
-    { id: "g.regionback", label: "Previous region", group: "Move", keys: ["alt+shift+tab", "mod+shift+f6"], inInput: true, run: () => cycleRegion(-1) },
+    { id: "g.region", label: "Go to the next region (lists → items → details)", group: "Move", keys: ["alt+tab", "mod+f6"], inInput: true, run: () => cycleRegion(1) },
+    { id: "g.regionback", label: "Go to the previous region", group: "Move", keys: ["alt+shift+tab", "mod+shift+f6"], inInput: true, run: () => cycleRegion(-1) },
     // Light, dark, or follow the system: the switch goes to the other theme from whatever is showing now.
     { id: "g.theme", label: theme.dark ? "Switch to the light theme" : "Switch to the dark theme", group: "View", run: () => themeTo(theme.dark ? "light" : "dark") },
     { id: "g.themesystem", label: "Follow the system theme", group: "View", enabled: theme.pref !== "system", run: () => themeTo("system") },

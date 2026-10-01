@@ -251,9 +251,9 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
 
   const commands: Command[] = [
     ...nav.commands,
-    { id: "set.nexttab", label: "Next settings tab", group: "Settings", keys: ["mod+."], inInput: true, run: () => setTab(TABS[(tabIdx + 1) % TABS.length].id) },
-    { id: "set.prevtab", label: "Previous settings tab", group: "Settings", keys: ["mod+,"], inInput: true, run: () => setTab(TABS[(tabIdx - 1 + TABS.length) % TABS.length].id) },
-    ...TABS.map((t, i) => ({ id: `set.tab.${t.id}`, label: `Settings: ${t.title}`, group: "Settings", keys: [String(i + 1)], run: () => setTab(t.id) })),
+    { id: "set.nexttab", label: "Go to the next settings tab", group: "Settings", keys: ["mod+."], inInput: true, run: () => setTab(TABS[(tabIdx + 1) % TABS.length].id) },
+    { id: "set.prevtab", label: "Go to the previous settings tab", group: "Settings", keys: ["mod+,"], inInput: true, run: () => setTab(TABS[(tabIdx - 1 + TABS.length) % TABS.length].id) },
+    ...TABS.map((t, i) => ({ id: `set.tab.${t.id}`, label: `Go to Settings › ${t.title}`, group: "Settings", keys: [String(i + 1)], run: () => setTab(t.id) })),
     {
       id: "set.export",
       row: true,

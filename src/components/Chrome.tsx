@@ -158,10 +158,10 @@ export function Rail({ active }: { active: boolean }) {
   useCommands(
     "rail",
     [
-      { id: "rail.down", label: "Next in the rail", group: "Move", keys: ["arrowdown"], run: () => setCursor((c) => Math.min(entries.length - 1, c + 1)) },
-      { id: "rail.up", label: "Previous in the rail", group: "Move", keys: ["arrowup"], run: () => setCursor((c) => Math.max(0, c - 1)) },
-      { id: "rail.first", label: "First in the rail", group: "Move", keys: ["home", "mod+arrowup"], run: () => setCursor(0) },
-      { id: "rail.last", label: "Last in the rail", group: "Move", keys: ["end", "mod+arrowdown"], run: () => setCursor(entries.length - 1) },
+      { id: "rail.down", label: "Go down the rail", group: "Move", keys: ["arrowdown"], run: () => setCursor((c) => Math.min(entries.length - 1, c + 1)) },
+      { id: "rail.up", label: "Go up the rail", group: "Move", keys: ["arrowup"], run: () => setCursor((c) => Math.max(0, c - 1)) },
+      { id: "rail.first", label: "Go to the top of the rail", group: "Move", keys: ["home", "mod+arrowup"], run: () => setCursor(0) },
+      { id: "rail.last", label: "Go to the foot of the rail", group: "Move", keys: ["end", "mod+arrowdown"], run: () => setCursor(entries.length - 1) },
       { id: "rail.open", label: "Open", group: "Move", keys: ["enter", "arrowright", "space"], run: () => entries[cursor] && open(entries[cursor]) },
       { id: "rail.leave", label: "Back to the list", group: "Move", keys: ["escape"], run: () => ui.setRegion("list") },
       ...letters.map((ch) => ({ id: `rail.jump.${ch}`, label: `Jump to “${ch.toUpperCase()}…”`, group: "Move", keys: [ch], hidden: true, run: () => jump(ch) })),
@@ -687,11 +687,10 @@ export function Palette({ entries, where, rowName, close }: { entries: LayeredCo
       false,
       "recent:",
     );
-    // The row under the cursor (or the item in the details pane), by name; its fields after.
+    // The row under the cursor (or the item in the details pane), under its name: one group, what you do to it
+    // first, its fields after (a second heading split a three-command appointment in two).
     const row = live.filter(onRow);
-    const name = rowName || "The row under the cursor";
-    add(row.filter((e) => e.command.group !== "Fields"), name, false, "", true);
-    add(row.filter((e) => e.command.group === "Fields"), `${name} · Fields`, false, "", true);
+    add([...row.filter((e) => e.command.group !== "Fields"), ...row.filter((e) => e.command.group === "Fields")], rowName || "The row under the cursor", false, "", true);
     // The rest of this place, by group, moving around last.
     const page = new Map<string, LayeredCommand[]>();
     for (const e of live) if (e.layer !== "global" && !onRow(e)) page.set(e.command.group, [...(page.get(e.command.group) ?? []), e]);

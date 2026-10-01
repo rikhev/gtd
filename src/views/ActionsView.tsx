@@ -431,13 +431,13 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         };
   const archiveHere = () => archiveDone(s.actions.filter((a) => doneHere(a, mode)).map((a) => a.id), VIEW_TITLES[mode]);
   const viewCommands: Command[] = [
-    { id: "view.menu", label: "View: group and sort", group: "View", keys: ["alt+v"], run: openViewMenu },
+    { id: "view.menu", label: "Open the View menu: group and sort", group: "View", keys: ["alt+v"], run: openViewMenu },
     ...(mode === "next"
       ? [
-          { id: "view.fit", label: fit ? "What fits now (change or clear)" : "What fits now: the contexts where you are", group: "View", keys: ["f"], run: () => openFit(ui) },
+          { id: "view.fit", label: fit ? "Show what fits now (change or clear)" : "Show what fits now: the contexts where you are", group: "View", keys: ["f"], run: () => openFit(ui) },
           // Allen's next two questions, there when wanted (no key: F asks only where you are).
-          { id: "view.fittime", label: "What fits now: the time you have", group: "View", run: () => askTime(ui) },
-          { id: "view.fitenergy", label: "What fits now: your energy", group: "View", run: () => askEnergy(ui) },
+          { id: "view.fittime", label: "Show what fits now: the time you have", group: "View", run: () => askTime(ui) },
+          { id: "view.fitenergy", label: "Show what fits now: your energy", group: "View", run: () => askEnergy(ui) },
           ...(fit ? [{ id: "view.fitoff", label: "Show every next action", group: "View", run: () => setFit(null) }] : []),
         ]
       : []),

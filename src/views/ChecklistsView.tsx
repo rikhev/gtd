@@ -146,7 +146,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     { id: "cl.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: Boolean(focusId), run: () => setArea(ui, targets()) },
     { id: "cl.jump", row: true, label: "Jump to its project", group: "Checklists", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
     { id: "cl.project", row: true, label: "Set project (support material for it)", group: "Fields", keys: ["p"], enabled: Boolean(focusId), run: () => setChecklistProject(ui, targets()) },
-    { id: "cl.repeat", row: true, label: "Repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], enabled: Boolean(focusId), run: () => pickRepeats(ui, targets()) },
+    { id: "cl.repeat", row: true, label: "Set repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], enabled: Boolean(focusId), run: () => pickRepeats(ui, targets()) },
     { id: "cl.over", row: true, label: "Start over (clear the ticks)", group: "Checklists", enabled: anyTicked(targets()), run: () => startOver(targets()) },
     { id: "cl.trash", row: true, label: "Trash checklist", group: "Checklists", keys: ["backspace", "delete"], enabled: Boolean(focusId), run: () => trash(targets()) },
     { id: "cl.delete", row: true, label: "Delete permanently", group: "Checklists", keys: ["shift+backspace", "shift+delete"], enabled: Boolean(focusId), run: () => purge(targets()) },
@@ -154,7 +154,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     { id: "cl.down", row: true, label: "Move row down", group: "Checklists", keys: ["alt+arrowdown"], enabled: Boolean(focusId), run: () => reorder(1) },
     {
       id: "cl.view",
-      label: "View: group and sort",
+      label: "Open the View menu: group and sort",
       group: "View",
       keys: ["alt+v"],
       run: () =>
@@ -507,7 +507,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.up", row: true, label: focus?.section ? "Move the section up" : "Move row up", group: "Checklist", keys: ["alt+arrowup"], enabled: Boolean(focus), run: () => reorder(-1) },
     { id: "ci.down", row: true, label: focus?.section ? "Move the section down" : "Move row down", group: "Checklist", keys: ["alt+arrowdown"], enabled: Boolean(focus), run: () => reorder(1) },
     { id: "ci.over", label: "Start over (clear the ticks)", group: "Checklist", enabled: ticked > 0 && !repeats, run: () => startOver([list.id]) },
-    { id: "ci.repeat", label: repeats ? `Repeats ${repeatsLabel(repeats).toLowerCase()}: change` : "Repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], run: () => pickRepeats(ui, [list.id]) },
+    { id: "ci.repeat", label: repeats ? `Change repeat (now ${repeatsLabel(repeats).toLowerCase()})` : "Set repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], run: () => pickRepeats(ui, [list.id]) },
     { id: "ci.renamelist", label: "Rename checklist", group: "Checklist", run: rename },
     { id: "ci.area", label: "Set the checklist's area", group: "Fields", keys: ["a"], run: () => setArea(ui, [list.id]) },
     { id: "ci.jump", label: "Jump to the project it supports", group: "Checklist", keys: ["j"], run: () => ui.jumpFromSupport("checklist", list.id) },
@@ -523,7 +523,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     },
     {
       id: "ci.view",
-      label: "View: repeat, start over, rename",
+      label: "Open the View menu: repeat, start over, rename",
       group: "View",
       keys: ["alt+v"],
       run: () =>
