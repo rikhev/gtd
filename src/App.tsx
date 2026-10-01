@@ -433,6 +433,8 @@ export default function App() {
       hidden: r.id === "review",
     })),
     { id: "go.settings", label: "Go to Settings (rules, contexts, export)", group: "Go to", keys: ["mod+shift+,"], inInput: true, run: () => go("settings") },
+    // Horizons has no rail stop or key (owner's decision): looked at quarterly, from ⌘K and the review's Get creative.
+    { id: "go.horizons", label: "Go to Horizons (purpose, vision, goals)", group: "Go to", run: () => go("horizons") },
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
     { id: "g.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },

@@ -10,8 +10,8 @@ import { daysBetween, today } from "../../shared/dates.ts";
 /**
  * The go-to keys follow the rail from the top, counted per group so every key sits under one hand (owner's request:
  * ⌃7–9 needed a second hand). The first group is Control+1–6 (Inbox, Calendar, Next Actions, Waiting For, Agendas,
- * Projects); the second group and the Trash below it are Control+Shift+1–6 (Someday, Reference, Checklists, Horizons,
- * Done, Trash): Shift
+ * Projects); the second group and the foot below it are Control+Shift+1–5 (Someday, Reference, Checklists, then Done
+ * and Trash): Shift
  * means "the second group", counted from 1 again. Digits are read by their key, so it works on every layout. On the
  * Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs. Elsewhere the page takes
  * Ctrl+1–6 over the browser's tab switching (Chrome and Firefox allow it); Ctrl+Shift+digits are free. Control with a
@@ -35,10 +35,10 @@ export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "reference", key: go2(2) },
   // Checklists follow Reference: both non-actionable, but GTD keeps checklists as their own category (reviewed, not filed).
   { id: "checklists", key: go2(3) },
-  // GTD's higher horizons (purpose, vision, goals): above the lists, looked at in the review and when weighing priority.
-  { id: "horizons", key: go2(4) },
-  { id: "done", key: go2(5) },
-  { id: "trash", key: go2(6) },
+  // Horizons has no rail stop or key (owner's decision after the rail critique: looked at quarterly, from the review's
+  // Get creative and ⌘K). Done and Trash sit together at the foot, looking back, keys in the order they appear.
+  { id: "done", key: go2(4) },
+  { id: "trash", key: go2(5) },
   { id: "review" },
 ];
 
@@ -49,7 +49,7 @@ export const RAIL: { id: ViewId; key?: string }[] = [
 // The calendar follows the Inbox: in GTD it is the hard landscape, checked before the lists are worked.
 const LISTS: ViewId[][] = [
   ["inbox", "calendar", "next", "waiting", "agendas", "projects"],
-  ["someday", "reference", "checklists", "horizons", "done"],
+  ["someday", "reference", "checklists"],
 ];
 
 type Entry = { key: string; view: ViewId; label: string; name: string; start?: boolean };
@@ -84,6 +84,13 @@ export function Rail({ active }: { active: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);
   const reviewAge = daysSinceReview(s);
+  // The Inbox count is spoken only when it grows (something new landed), never as it is worked down.
+  const lastInbox = useRef(sig.inbox);
+  const [inboxNews, setInboxNews] = useState("");
+  useEffect(() => {
+    if (sig.inbox > lastInbox.current) setInboxNews(sig.inbox === 1 ? "1 item in the Inbox" : `${sig.inbox} items in the Inbox`);
+    lastInbox.current = sig.inbox;
+  }, [sig.inbox]);
   const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
 
   const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
@@ -93,7 +100,8 @@ export function Rail({ active }: { active: boolean }) {
     if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
     // What today's landscape holds: things due or starting today.
-    if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} today`, tone: "quiet" } : null;
+    // What the hard landscape asks of today; "today" stays Done's word for what was finished (rail critique).
+    if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} due`, tone: "quiet" } : null;
     return null;
   };
 
@@ -114,6 +122,8 @@ export function Rail({ active }: { active: boolean }) {
       return { key: id, view: id, name: VIEW_TITLES[id], label: `${VIEW_TITLES[id]}${m ? `, ${id === "inbox" ? `${m.text} ${m.text === "1" ? "item" : "items"}` : m.text}` : ""}` };
     }),
     ...health,
+    // The foot: what is finished and what was deleted, both to look back at, then Settings.
+    { key: "done", view: "done", name: VIEW_TITLES.done, label: `${VIEW_TITLES.done}${listMeta("done") ? `, ${listMeta("done")!.text}` : ""}` },
     { key: "trash", view: "trash", name: "Trash", label: "Trash" },
     { key: "settings", view: "settings", name: "Settings", label: "Settings" },
   ];
@@ -162,7 +172,11 @@ export function Rail({ active }: { active: boolean }) {
   // While the rail is the active region its cursor is real keyboard focus, so screen readers follow it.
   const navRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (active) navRef.current?.querySelector<HTMLElement>(`[data-rail="${cursor}"]`)?.focus({ preventScroll: true });
+    if (!active) return;
+    const el = navRef.current?.querySelector<HTMLElement>(`[data-rail="${cursor}"]`);
+    el?.focus({ preventScroll: true });
+    // In a short window the rail scrolls: the cursor never rests on a row out of sight (rail critique).
+    el?.scrollIntoView({ block: "nearest" });
   }, [active, cursor]);
   // Focus arriving by Tab (or a click) makes the rail the active region, so the keys act on what looks focused.
   const onFocusStop = (i: number) => () => {
@@ -186,11 +200,12 @@ export function Rail({ active }: { active: boolean }) {
   };
 
   return (
-    <nav ref={navRef} className={`rail ${active ? "is-active" : ""}`} aria-label="Lists">
+    <nav ref={navRef} className={`rail ${active ? "is-active" : ""}`} aria-label="Lists and status">
       <Pond />
-      {/* A polite live region, so a new capture's count is announced. */}
+      {/* A polite live region, so a new capture is announced; clarifying it away is not (rail critique: every
+          decrement was spoken while clarifying). */}
       <span className="visually-hidden" aria-live="polite">
-        {sig.inbox === 1 ? "1 item in the Inbox" : `${sig.inbox} items in the Inbox`}
+        {inboxNews}
       </span>
 
       {LISTS.map((group, gi) => (
@@ -251,7 +266,16 @@ export function Rail({ active }: { active: boolean }) {
       </section>
 
       <ul className="rail-list rail-settings">
-        {/* Out of the way at the foot, beside Settings: a place to look back, not a list to work. */}
+        {/* Out of the way at the foot, beside Settings: places to look back at, not lists to work. */}
+        <li>
+          <button type="button" {...stop(entries[idx("done")], "rail-item")}>
+            <span className="rail-name">{VIEW_TITLES.done}</span>
+            <span className="rail-meta">
+              {listMeta("done") && <span className="num is-quiet">{listMeta("done")!.text}</span>}
+              <RailKey k={keyOf("done")} />
+            </span>
+          </button>
+        </li>
         <li>
           <button type="button" {...stop(entries[entries.length - 2], "rail-item")}>
             <span className="rail-name">Trash</span>
@@ -352,7 +376,7 @@ export function TabBar() {
   const [more, setMore] = useState(false);
   const inboxItems = s.stuff.filter((x) => x.status === "inbox");
   const inbox = inboxItems.length;
-  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "checklists", "horizons", "done", "trash", "settings"];
+  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "checklists", "done", "trash", "settings"];
   // The phone's system check, as in the rail: is the review due, and how old is the oldest thing in the Inbox?
   const t = today();
   const reviewAge = daysSinceReview(s);

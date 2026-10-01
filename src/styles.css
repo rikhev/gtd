@@ -588,6 +588,18 @@ a:hover {
    Trash and Settings, scrolled out of reach). The horizon stays on the top bar's rule; the reflection and the
    ripples leave with the water, giving the lists 40px back. */
 @media (max-height: 680px) {
+  /* Every stop in reach: the runs close up a little (rail critique). */
+  .rail {
+    gap: 6px;
+  }
+  .rail-list {
+    gap: 1px;
+  }
+  .rail-list + .rail-list,
+  .rail-health,
+  .rail-settings {
+    padding-top: 6px;
+  }
   .pond {
     height: 44px;
     background: none;
