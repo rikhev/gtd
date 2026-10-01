@@ -19,13 +19,16 @@ import type { Action, ID, Stuff } from "../../shared/types.ts";
 
 /**
  * The Weekly Review in David Allen's order (2015), in his three phases (owner's decision after the GTD critique):
- * Get Clear (collect loose papers, the Inbox to zero, empty your head), Get Current (action lists, the previous
+ * Get Clear (empty your head, then the Inbox to zero: collect first, process once; no loose-papers step, owner's
+ * decision), Get Current (action lists, the previous
  * calendar, the upcoming calendar, Waiting For, projects, checklists), Get Creative (Someday/Maybe, then be creative).
  */
 const STEPS = [
-  { id: "papers", phase: "Get clear", title: "Loose papers", note: "Gather the scraps: notes, receipts, business cards, papers on the desk and in the bag, wallet and pockets. Type in anything that needs a decision; it goes to the Inbox." },
-  { id: "clear", phase: "Get clear", title: "Inbox to zero", note: "Clarify everything in the Inbox, so nothing is left undecided." },
-  { id: "sweep", phase: "Get clear", title: "Mind sweep", note: "Empty your head: read down the list and capture whatever it brings to mind. It lands in the Inbox; clarify it before you finish." },
+  // Collect, then process once (owner's decision): the sweep captures into the Inbox here, so it comes before Inbox to
+  // zero rather than refilling it afterwards (Allen's "empty your head" writes straight to lists). No Loose papers step
+  // (owner's decision): paper is captured as it comes, like everything else.
+  { id: "sweep", phase: "Get clear", title: "Mind sweep", note: "Empty your head: read down the list and capture whatever it brings to mind. It all lands in the Inbox, clarified next." },
+  { id: "clear", phase: "Get clear", title: "Inbox to zero", note: "Clarify everything in the Inbox, what you just collected included, so nothing is left undecided." },
   { id: "next", phase: "Get current", title: "Next actions", note: "Mark what's done. Rewrite anything vague." },
   { id: "lookback", phase: "Get current", title: "Look back", note: "What the last two weeks finished. Anything it left behind? Add the follow-up now." },
   { id: "upcoming", phase: "Get current", title: "Upcoming", note: "Due, starting, follow-ups and tickler dates in the next two weeks." },
@@ -548,7 +551,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.file", label: "File", group: "Review", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
-    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : step.id === "papers" ? "All collected: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
+    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
     {
       // P as on every list: an appointment is linked to a project, an action set in one.
       id: "rv.project",
@@ -751,15 +754,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       </div>
       {step.id === "clear" && clarifying ? (
         <ClarifyView key={clarifying.run} regionActive={regionActive} host={clarifyHost} />
-      ) : step.id === "papers" ? (
-        <div className="review-panel">
-          <IdeaCapture
-            onCapture={captureHere}
-            captured={capturedHere.filter((x) => x.status === "inbox").length}
-            label="A paper or note that needs a decision"
-            placeholder="Enter puts it in the Inbox; the paper itself can go once it's typed"
-          />
-        </div>
       ) : step.id === "sweep" ? (
         <MindSweep onDone={doneHere} captured={[...capturedHere].sort((a, b) => b.created_at.localeCompare(a.created_at))} onCapture={captureHere} active={regionActive} />
       ) : step.id === "finish" ? (
@@ -813,8 +807,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
             ...(step.id === "checklists" ? [...(rows.length > 0 ? [{ k: "enter", label: "Open" }] : []), { k: "t", label: "New next action" }] : []),
-            ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : step.id === "papers" ? "All collected" : "Reviewed", primary: true }] : []),
-            ...(!["finish", "lookback", "sweep", "papers", "creative", "checklists"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
+            ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Reviewed", primary: true }] : []),
+            ...(!["finish", "lookback", "sweep", "creative", "checklists"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
           ]}
         />
       )}
@@ -860,25 +854,15 @@ const TRIGGERS: { title: string; items: [string, string][] }[] = [
 ];
 
 /** Get creative's capture line: anything new goes to the Inbox, to be clarified like everything else. */
-function IdeaCapture({
-  captured,
-  onCapture,
-  label = "Anything new? A project, an idea, a someday wish",
-  placeholder = "Enter puts it in the Inbox",
-}: {
-  captured: number;
-  onCapture: (text: string) => void;
-  label?: string;
-  placeholder?: string;
-}) {
+function IdeaCapture({ captured, onCapture }: { captured: number; onCapture: (text: string) => void }) {
   const [text, setText] = useState("");
   return (
     <label className="field idea-capture">
-      <span className="field-label">{label}</span>
+      <span className="field-label">Anything new? A project, an idea, a someday wish</span>
       <input
         className="field-text"
         value={text}
-        placeholder={placeholder}
+        placeholder="Enter puts it in the Inbox"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.metaKey || e.ctrlKey || e.defaultPrevented) return;
