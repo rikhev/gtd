@@ -64,26 +64,29 @@ export const fitLabel = (f: Fit) =>
 
 /** F: where you are, and only that. On again, it also offers to show everything. */
 export function openFit(ui: UI, chosen: string[] = read()?.where ?? [], at: string | null = null) {
-  // Tick one or more contexts. Each tick applies at once (owner's bug report: ticks waited for "Show", so leaving with
-  // Esc or a click away kept nothing); the picker comes back on the place just ticked. Done closes, Anywhere clears.
+  // Pick where you are and the list narrows to it, the picker gone (owner's request). ⇧↵ (or a ⇧- or ⌘-click) adds a
+  // place to the ones shown instead, or takes it off, and keeps the picker; Anywhere shows every next action.
   const ctxs = getState().contexts;
   const open = (id: string) => getState().actions.filter((a) => a.status === "next" && a.context_id === id).length;
+  const toggle = (cid: string) => (chosen.includes(cid) ? chosen.filter((x) => x !== cid) : [...chosen, cid]);
   ui.openPicker({
     type: "list",
     title: "Where are you?",
+    placeholder: "Pick a place · ⇧↵ adds another",
     items: [
-      chosen.length ? { id: "go", label: "Done", hint: `${chosen.length === 1 ? "1 place" : `${chosen.length} places`} shown` } : { id: "off", label: "Anywhere", hint: "Every context" },
-      ...(chosen.length ? [{ id: "off", label: "Show every next action", hint: "Clear" }] : []),
+      { id: "off", label: "Anywhere", hint: chosen.length ? "Clear" : "Every context" },
       ...ctxs
         .filter((c) => open(c.id) > 0 || chosen.includes(c.id))
         .map((c) => ({ id: `c:${c.id}`, label: c.name.startsWith("@") ? c.name : `@${c.name}`, hint: chosen.includes(c.id) ? "Here" : String(open(c.id)) })),
     ],
     highlight: at,
     onPick: (id) => {
-      if (!id || id === "go") return;
+      if (!id || id === "off") return setFit(null);
+      setFit({ where: [id.slice(2)], day: today() });
+    },
+    onPickMore: (id) => {
       if (id === "off") return setFit(null);
-      const cid = id.slice(2);
-      const next = chosen.includes(cid) ? chosen.filter((x) => x !== cid) : [...chosen, cid];
+      const next = toggle(id.slice(2));
       setFit(next.length ? { where: next, day: today() } : null);
       window.setTimeout(() => openFit(ui, next, id));
     },

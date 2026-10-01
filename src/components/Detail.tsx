@@ -1,11 +1,13 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video } from "lucide-react";
+import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Plus } from "lucide-react";
 import { mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
-import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
+import { askContext, editors, linkAppointment, projectItems, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
+import { openChecklist, progress, progressLabel, repeatsLabel } from "../checklists.ts";
+import { linkSupport } from "../support.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
 import { AreaName, ContextCode, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
@@ -573,6 +575,7 @@ function ProjectDetail({ p }: { p: Project }) {
     [
       { id: "detail.addnext", label: "Add a next action to this project", group: "Details", keys: ["t"], run: () => addInput.current?.focus() },
       { id: "detail.addwaiting", label: "Add a waiting for to this project", group: "Details", keys: ["w"], run: () => ed.addWaiting(p.id) },
+      { id: "detail.support", label: "Link a reference or checklist to this project", group: "Details", run: () => linkSupport(ui, p.id) },
     ],
     { priority: 21, active },
   );
@@ -718,9 +721,75 @@ function ProjectDetail({ p }: { p: Project }) {
           }}
         />
       </section>
+      <SupportMaterial projectId={p.id} />
       <TextField label="Support notes" value={p.notes} multiline rows={4} onCommit={(v) => patch("projects", p.id, { notes: v })} placeholder="Plans, meeting notes, phone numbers, links…" />
       <Files owner={{ kind: "project", id: p.id }} />
     </>
+  );
+}
+
+/**
+ * The project's support material (GTD keeps it with the project, apart from its actions): the references and
+ * checklists linked to it, A–Z, references first. A reference opens here in the pane (Esc comes back); a checklist
+ * opens in Checklists. The last row links another.
+ */
+function SupportMaterial({ projectId }: { projectId: string }) {
+  const ui = useUI();
+  const s = useStore((x) => x);
+  const refs = s.refs.filter((r) => r.status === "active" && r.project_id === projectId).sort((a, b) => a.title.localeCompare(b.title));
+  const lists = s.checklists.filter((c) => c.status === "active" && c.project_id === projectId).sort((a, b) => a.title.localeCompare(b.title));
+  const files = (id: string) => s.files.filter((f) => f.owner_kind === "ref" && f.owner_id === id).length;
+  return (
+    <section className="detail-actions" aria-label="Support material">
+      <h3 className="detail-h">
+        Support material {refs.length + lists.length > 0 && <span className="count">{refs.length + lists.length}</span>}
+      </h3>
+      <ul className="timeline">
+        {refs.map((r) => (
+          <li key={r.id}>
+            <button type="button" className="mini-row" title={`Reference: ${r.title || "Untitled"}`} onClick={() => ui.drillDetail({ kind: "ref", id: r.id })}>
+              <span className="kind-icon">
+                <BookOpen size={14} strokeWidth={1.75} aria-label="Reference" />
+              </span>
+              <span className="mini-title">{r.title || "Untitled reference"}</span>
+              <span className="mini-meta">{files(r.id) ? `${files(r.id)} ${files(r.id) === 1 ? "file" : "files"}` : r.notes.trim() ? "Note" : ""}</span>
+              <span className="mini-date">{formatDate(refUpdated(s, r).slice(0, 10))}</span>
+            </button>
+          </li>
+        ))}
+        {lists.map((c) => {
+          const pr = progress(s, c.id);
+          return (
+            <li key={c.id}>
+              <button
+                type="button"
+                className="mini-row"
+                title={`Checklist: ${c.title || "Untitled"}. Opens in Checklists`}
+                onClick={() => {
+                  ui.go("checklists");
+                  openChecklist(c.id);
+                }}
+              >
+                <span className="kind-icon">
+                  <ListChecks size={14} strokeWidth={1.75} aria-label="Checklist" />
+                </span>
+                <span className="mini-title">{c.title || "Untitled checklist"}</span>
+                <span className="mini-meta">{[repeatsLabel(c.repeats), progressLabel(pr) || `${pr.total} ${pr.total === 1 ? "item" : "items"}`].filter(Boolean).join(" · ")}</span>
+                <span className="mini-date" />
+              </button>
+            </li>
+          );
+        })}
+        <li>
+          <button type="button" className="mini-row mini-link" onClick={() => linkSupport(ui, projectId)}>
+            <span className="kind-icon">
+              <Plus size={14} strokeWidth={1.75} aria-hidden />
+            </span>
+            <span className="mini-title">Link a reference or checklist</span>
+          </button>
+        </li>
+      </ul>
+    </section>
   );
 }
 
@@ -749,6 +818,9 @@ function StuffDetail({ st }: { st: Stuff }) {
 function RefDetail({ r }: { r: Ref }) {
   const ui = useUI();
   const s = useStore((x) => x);
+  // J, as on the Reference list: to the project it supports, and J there comes back.
+  const active = useContext(DetailActive);
+  useCommands("detail-ref", [{ id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["j"], run: () => ui.jumpFromSupport("ref", r.id) }], { priority: 21, active });
   const proj = s.projects.find((p) => p.id === r.project_id);
   return (
     <>
@@ -759,8 +831,10 @@ function RefDetail({ r }: { r: Ref }) {
         onOpen={() =>
           ui.openPicker({
             type: "list",
-            title: "Project",
-            items: s.projects.filter((p) => p.status === "active").map((p) => ({ id: p.id, label: p.title })),
+            // The same projects, in the same order, as everywhere a project is picked; the one it supports is marked.
+            title: "Project it supports",
+            items: projectItems(),
+            current: r.project_id,
             noneLabel: "No project",
             onPick: (id) => patch("refs", r.id, { project_id: id }),
           })

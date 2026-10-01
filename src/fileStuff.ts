@@ -51,7 +51,7 @@ export function fileStuff(ui: UI, ids: ID[]) {
       ...destinationItems().flatMap((it) =>
         it.section !== "lists"
           ? []
-          : // Checklists sit with Reference (GTD's support material): an item's lines become the items to tick.
+          : // A checklist follows Reference (both non-actionable; GTD keeps checklists as their own category): an item's lines become the items to tick.
             it.id === "reference"
             ? [it, { id: "checklist", label: "Checklist", hint: "Its lines become items", section: "lists" }]
             : [it],

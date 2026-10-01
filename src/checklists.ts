@@ -4,8 +4,9 @@ import { addDays, formatLong, fromIso, today } from "../shared/dates.ts";
 import type { Checklist, ChecklistItem, ChecklistTick, ID, Op, State } from "../shared/types.ts";
 
 /**
- * Checklists, as GTD keeps them: reusable lists beside Reference (packing for a trip, closing the month, a new
- * starter's first week), looked at when they are relevant and reviewed in the Weekly Review. Ticking only ticks: the
+ * Checklists, as GTD keeps them: a category of their own, apart from Reference (reminders reviewed again and again,
+ * not information filed to look up): reusable lists such as packing for a trip, closing the month, a new
+ * starter's first week, looked at when they are relevant and reviewed in the Weekly Review. Ticking only ticks: the
  * ticks are the current run's progress, kept until the run starts over, and they never reach the other lists.
  */
 
@@ -183,6 +184,7 @@ export function newChecklist(data: Partial<Checklist> = {}): Checklist {
     created_at: stamp(),
     updated_at: stamp(),
     finished_at: null,
+    project_id: null,
     ...data,
   };
 }

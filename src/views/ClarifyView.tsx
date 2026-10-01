@@ -178,7 +178,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       ops.push({ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } });
       label = "Trashed";
     } else if (d.disposition === "reference" && d.reference?.checklist) {
-      // A checklist (GTD keeps them with reference): the item's lines under its first become the items to tick.
+      // A checklist (non-actionable, but its own category in GTD, not reference): the item's lines under its first become the items to tick.
       if (filesHere.length) {
         notify("This item has files attached, and a checklist can't keep files. File it as Reference to keep them.", { tone: "error" });
         return;

@@ -189,6 +189,13 @@ export function Picker({ spec, close }: Props) {
     }
   };
 
+  /** Add an option to a filter of several: the caller reopens the picker with it ticked. */
+  const more = (o: Option) => {
+    if (spec.type !== "list" || !o.id) return;
+    close();
+    spec.onPickMore?.(o.id);
+  };
+
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -201,7 +208,8 @@ export function Picker({ spec, close }: Props) {
       if (spec.type === "text") {
         const pv = spec.preview?.(q);
         if (!pv || pv.ok) choose({ id: "__ok__", label: q });
-      } else choose(options[hi]);
+      } else if (e.shiftKey && spec.type === "list" && spec.onPickMore && options[hi]?.id && !options[hi].create) more(options[hi]);
+      else choose(options[hi]);
     } else if ((spec.type === "time" || spec.type === "energy") && q === "" && /^[0-9]$/.test(e.key)) {
       e.preventDefault();
       const n = Number(e.key);
@@ -259,6 +267,7 @@ export function Picker({ spec, close }: Props) {
             onMouseDown={(e) => {
               e.preventDefault();
               if (spec.type === "text") choose({ id: "__ok__", label: q });
+              else if ((e.shiftKey || e.metaKey || e.ctrlKey) && spec.type === "list" && spec.onPickMore && o.id && !o.create) more(o);
               else choose(o);
             }}
           >

@@ -146,7 +146,7 @@ export default function App() {
   const clarifyReturn = useRef<ViewId>("inbox");
   const prevView = useRef<ViewId>("next");
   // Where J came from (an action, or an appointment in the Calendar), so J on the project goes back there.
-  const jumpOrigin = useRef<{ actionId?: string; eventKey?: string; projectId: string } | null>(null);
+  const jumpOrigin = useRef<{ actionId?: string; eventKey?: string; refId?: string; checklistId?: string; projectId: string } | null>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -340,10 +340,34 @@ export default function App() {
         setRevealTarget({ kind: "project", id: p.id });
         notify(`Project: ${p.title}`);
       },
+      jumpFromSupport: (kind, id) => {
+        const s = getState();
+        const row = kind === "ref" ? s.refs.find((x) => x.id === id) : s.checklists.find((x) => x.id === id);
+        const p = row?.project_id ? s.projects.find((x) => x.id === row.project_id && x.status !== "trashed") : undefined;
+        if (!row || !p) {
+          notify(`This ${kind === "ref" ? "reference" : "checklist"} doesn't support a project. P links one.`);
+          return;
+        }
+        jumpOrigin.current = kind === "ref" ? { refId: id, projectId: p.id } : { checklistId: id, projectId: p.id };
+        go(p.status === "someday" ? "someday" : "projects");
+        setRevealTarget({ kind: "project", id: p.id });
+        notify(`Project: ${p.title}`);
+      },
       jumpToAction: (projectId) => {
         const s = getState();
         const open = (id: string) => s.actions.some((x) => x.id === id && ["next", "waiting", "someday"].includes(x.status));
         const origin = jumpOrigin.current;
+        // Jumped here from its support material, still linked: back to that reference or checklist.
+        if (origin?.projectId === projectId && origin.refId && s.refs.some((x) => x.id === origin.refId && x.status === "active" && x.project_id === projectId)) {
+          go("reference");
+          setRevealTarget({ kind: "ref", id: origin.refId });
+          return;
+        }
+        if (origin?.projectId === projectId && origin.checklistId && s.checklists.some((x) => x.id === origin.checklistId && x.status === "active" && x.project_id === projectId)) {
+          go("checklists");
+          openChecklist(origin.checklistId);
+          return;
+        }
         const toCalendar = (key: string) => {
           go("calendar");
           setRevealTarget({ kind: "event", id: key });

@@ -29,10 +29,11 @@ import {
   type Repeats,
 } from "../checklists.ts";
 import { formatDate } from "../../shared/dates.ts";
+import { setChecklistProject } from "../support.ts";
 import type { Checklist, ChecklistItem, ID, Op } from "../../shared/types.ts";
 
 /**
- * Checklists (GTD's checklists, kept beside Reference): every checklist, or one checklist's items. Enter opens a
+ * Checklists (GTD's checklists, their own category apart from Reference): every checklist, or one checklist's items. Enter opens a
  * checklist, Esc comes back up; each level has its own address.
  */
 export function ChecklistsView({ regionActive }: { regionActive: boolean }) {
@@ -61,7 +62,7 @@ export function ChecklistsView({ regionActive }: { regionActive: boolean }) {
 
 function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
-  const s = useTables("checklists", "checklist_items", "checklist_ticks", "areas");
+  const s = useTables("checklists", "checklist_items", "checklist_ticks", "areas", "projects");
   const [editing, setEditing] = useState<{ id: ID; fresh: boolean } | null>(null);
   const [byArea, setByArea] = usePersisted<boolean>("checklists:byArea", true);
   const [sort, setSort] = useSort("checklists");
@@ -75,6 +76,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
       subject: (c) => c.title,
       area: (c) => areaById.get(c.area_id ?? "")?.name,
       repeats: (c) => (c.repeats === "day" ? 1 : c.repeats === "week" ? 2 : null),
+      proj: (c) => s.projects.find((p) => p.id === c.project_id)?.title,
       items: (c) => progress(s, c.id).total,
       run: (c) => {
         const p = progress(s, c.id);
@@ -129,6 +131,8 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     { id: "cl.open", label: "Open checklist", group: "Checklists", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && openChecklist(focusId) },
     { id: "cl.rename", label: "Rename", group: "Checklists", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing({ id: focusId, fresh: false }) },
     { id: "cl.area", label: "Set area", group: "Fields", keys: ["a"], enabled: Boolean(focusId), run: () => setArea(ui, targets()) },
+    { id: "cl.jump", label: "Jump to its project", group: "Checklists", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
+    { id: "cl.project", label: "Set project (support material for it)", group: "Fields", keys: ["p"], enabled: Boolean(focusId), run: () => setChecklistProject(ui, targets()) },
     { id: "cl.repeat", label: "Repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], enabled: Boolean(focusId), run: () => pickRepeats(ui, targets()) },
     { id: "cl.over", label: "Start over (clear the ticks)", group: "Checklists", enabled: anyTicked(targets()), run: () => startOver(targets()) },
     { id: "cl.trash", label: "Trash checklist", group: "Checklists", keys: ["backspace", "delete"], enabled: Boolean(focusId), run: () => trash(targets()) },
@@ -197,6 +201,18 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
       render: (c) => {
         const a = areaById.get(c.area_id ?? "");
         return a && !grouped ? <AreaName name={a.name} color={a.color} /> : <span className="dash" aria-hidden="true">–</span>;
+      },
+    },
+    {
+      key: "proj",
+      label: "Project",
+      width: "minmax(110px, 1fr)",
+      drop: 3,
+      // Only checklists that support a project name one; the column steps aside until one does.
+      blank: (c) => !s.projects.some((p) => p.id === c.project_id),
+      render: (c) => {
+        const p = s.projects.find((x) => x.id === c.project_id);
+        return p ? <span className="proj-cell">{p.title || "Untitled project"}</span> : <span className="dash" aria-hidden="true">–</span>;
       },
     },
     { key: "items", label: "Items", width: "64px", align: "end", render: (c) => <span className="num muted-text">{progress(s, c.id).total}</span> },
@@ -412,6 +428,8 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.repeat", label: repeats ? `Repeats ${repeatsLabel(repeats).toLowerCase()}: change` : "Repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], run: () => pickRepeats(ui, [list.id]) },
     { id: "ci.renamelist", label: "Rename checklist", group: "Checklist", run: rename },
     { id: "ci.area", label: "Set the checklist's area", group: "Fields", keys: ["a"], run: () => setArea(ui, [list.id]) },
+    { id: "ci.jump", label: "Jump to the project it supports", group: "Checklist", keys: ["j"], run: () => ui.jumpFromSupport("checklist", list.id) },
+    { id: "ci.project", label: "Set the project it supports", group: "Fields", keys: ["p"], run: () => setChecklistProject(ui, [list.id]) },
     {
       id: "ci.trashlist",
       label: "Trash this checklist",
@@ -435,6 +453,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
             { id: "repeat", label: repeats ? `Repeats ${repeatsLabel(repeats).toLowerCase()}…` : "Repeat every day or week…", section: "run" },
             { id: "rename", label: "Rename checklist", section: "list" },
             { id: "area", label: "Set area", section: "list" },
+            { id: "project", label: "Set project", section: "list" },
             { id: "back", label: "Every checklist", section: "go" },
           ],
           onPick: (id) => {
@@ -442,6 +461,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
             if (id === "repeat") window.setTimeout(() => pickRepeats(ui, [list.id]), 0);
             if (id === "rename") window.setTimeout(rename, 0);
             if (id === "area") window.setTimeout(() => setArea(ui, [list.id]), 0);
+            if (id === "project") window.setTimeout(() => setChecklistProject(ui, [list.id]), 0);
             if (id === "back") back();
           },
         }),

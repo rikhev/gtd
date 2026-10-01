@@ -128,8 +128,8 @@ export interface Appointment {
 }
 
 /**
- * A checklist (GTD's checklists: reusable lists kept beside Reference, run when they are relevant, such as packing for
- * a trip or closing the month). Its items can be ticked off as a run goes; starting over clears the ticks.
+ * A checklist (GTD's checklists: their own category apart from Reference, reusable lists run when relevant, such as
+ * packing for a trip or closing the month). Its items can be ticked off as a run goes; starting over clears the ticks.
  */
 export interface Checklist {
   id: ID;
@@ -148,6 +148,8 @@ export interface Checklist {
    * it was done (ChecklistTick). Null for an ordinary checklist, whose ticks wait for Start over.
    */
   repeats?: "day" | "week" | null;
+  /** The project it supports, if any: it shows among the project's support material. */
+  project_id?: ID | null;
   /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
   trashed_at?: string | null;
   trashed_from?: string | null;

@@ -25,7 +25,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at"],
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
-  checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats"],
+  checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id"],
   checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at"],
   checklist_ticks: ["id", "item_id", "checklist_id", "day", "created_at"],
 };
@@ -137,6 +137,10 @@ for (const [was, now] of [["#0f8a8a", "#0e8181"], ["#b7791f", "#9f691b"]]) {
 // Checklists can repeat (habits): every day or every week.
 if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).some((c) => c.name === "repeats")) {
   db.exec("ALTER TABLE checklists ADD COLUMN repeats TEXT");
+}
+// A checklist can support a project, as a reference can.
+if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).some((c) => c.name === "project_id")) {
+  db.exec("ALTER TABLE checklists ADD COLUMN project_id TEXT");
 }
 
 /** Owner preferences kept on the server (so every browser agrees). */

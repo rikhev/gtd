@@ -174,6 +174,7 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       const s = getState();
       const ops: Op[] = [];
       const at = stamp();
+      let closed = 0;
       for (const id of ids) {
         if (s.projects.find((p) => p.id === id)?.status === "done") continue;
         // The project stays on Projects, struck through, until archived (⇧E), like a done action on its list.
@@ -182,9 +183,11 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         // They share the project's completion stamp, so unticking the project brings them back with it.
         for (const a of s.actions.filter((a) => a.project_id === id && ["next", "waiting"].includes(a.status))) {
           ops.push({ type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, done_from: a.status, archived_at: at } });
+          closed++;
         }
       }
-      if (ops.length) mutate(`${n(ids)} complete`, ops);
+      // Say what went with it (owner's request): its next actions and waiting fors are done too, and now in Done.
+      if (ops.length) mutate(`${n(ids)} complete${closed ? ` · ${plural(closed, "open action")} done with it` : ""}`, ops);
     },
     /** Not done after all: active again, with the actions that were closed along with it. */
     reopen(ids: ID[]) {
@@ -372,7 +375,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.addwaiting", label: "Add a waiting for to the project", group: "Projects", keys: ["w"], enabled: Boolean(focusId), run: () => focusId && ed.addWaiting(focusId) },
     { id: "proj.new", label: "New project", group: "Projects", keys: ["n"], run: create },
     { id: "proj.open", label: "Open project", group: "Projects", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "project", id: focusId }, true) },
-    { id: "proj.jump", label: "Jump to its next action (or back to the appointment you came from)", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
+    { id: "proj.jump", label: "Jump to its next action (or back to the appointment, reference or checklist you came from)", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
     { id: "proj.rename", label: "Rename", group: "Projects", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "proj.done", label: "Complete project, or not done", group: "Projects", keys: ["e"], enabled: has, run: () => toggleDone(nav.targets()) },
     { id: "proj.archive", label: `Archive completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", enabled: doneHere.length > 0, run: () => ed.archive(doneHere) },

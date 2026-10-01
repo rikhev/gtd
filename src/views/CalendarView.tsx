@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight, Hourglass, RefreshCw } from "lucide-react";
-import { completeActions, isStalled, mutate, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
+import { completeActions, isStalled, mutate, named, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
@@ -406,6 +406,18 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const inItem = Boolean(focusItem);
   // Appointments belong to their calendar: moved, completed or re-dated only there.
   const editable = inItem && focusItem?.kind !== "event";
+  /**
+   * Trash what is under the cursor (to the Trash, ⌘Z brings it back); the cursor moves on to the day's next item, or
+   * back to the day when it was the last. A project goes with its open actions, as it does on Projects.
+   */
+  const trashItem = (it: typeof focusItem) => {
+    if (!it || it.kind === "event") return;
+    const others = cursorItems.filter((x) => !(x.kind === it.kind && x.id === it.id));
+    const at = cursorItems.findIndex((x) => x.key === it.key);
+    setItemKey(others.length ? others[Math.min(Math.max(0, at), others.length - 1)].key : null);
+    if (it.kind === "project") ped.trash([it.id], false);
+    else mutate(`${named("actions", [it.id], "action")} trashed`, [{ type: "patch", table: "actions", id: it.id, data: { status: "trashed" } }]);
+  };
   const cycle = (dir: 1 | -1) => {
     if (!cursorItems.length) return;
     const i = cursorItems.findIndex((x) => x.key === itemKey);
@@ -447,6 +459,15 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       keys: ["e"],
       enabled: editable,
       run: () => focusItem && (focusItem.kind === "action" ? completeActions([focusItem.id]) : ped.complete([focusItem.id])),
+    },
+    {
+      // Your own things only (owner's request): an appointment belongs to its calendar and is deleted there.
+      id: "cal.trash",
+      label: focusItem?.kind === "project" ? "Trash the project (and its open actions)" : "Trash",
+      group: "Calendar",
+      keys: ["backspace", "delete"],
+      enabled: editable,
+      run: () => trashItem(focusItem),
     },
     {
       id: "cal.due",

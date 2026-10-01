@@ -33,7 +33,7 @@ export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "projects", key: go(6) },
   { id: "someday", key: go2(1) },
   { id: "reference", key: go2(2) },
-  // GTD keeps checklists with the other support material, beside Reference.
+  // Checklists follow Reference: both non-actionable, but GTD keeps checklists as their own category (reviewed, not filed).
   { id: "checklists", key: go2(3) },
   { id: "done", key: go2(4) },
   { id: "trash", key: go2(5) },

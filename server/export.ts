@@ -77,7 +77,9 @@ export function exportZip(): Uint8Array {
             i.section ? `\n### ${i.title}\n` : c.repeats ? `- ${i.title}  _(done on ${daysDone(i.id)} of the last 28 days)_` : `- [${i.checked_at ? "x" : " "}] ${i.title}`,
           );
         const repeats = c.repeats === "day" ? "Repeats every day\n" : c.repeats === "week" ? "Repeats every week\n" : "";
-        return `## ${c.title}\n\n${area ? `Area: ${area}\n` : ""}${repeats}${c.notes ? `\n${c.notes}\n` : ""}\n${items.join("\n")}`;
+        const project = s.projects.find((p) => p.id === c.project_id)?.title;
+        const forProject = project ? `Project: ${project}\n` : "";
+        return `## ${c.title}\n\n${area ? `Area: ${area}\n` : ""}${forProject}${repeats}${c.notes ? `\n${c.notes}\n` : ""}\n${items.join("\n")}`;
       })
       .join("\n\n"),
   );

@@ -229,6 +229,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
     },
     { id: "ref.open", label: "Open details", group: "Reference", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
+    { id: "ref.jump", label: "Jump to its project", group: "Reference", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {
       id: "ref.project",
       label: "Set project",

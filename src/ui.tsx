@@ -43,6 +43,11 @@ export type PickerSpec =
       current?: string | null;
       /** Where the highlight starts, without marking it as the current value (a filter coming back on the row just ticked). */
       highlight?: string | null;
+      /**
+       * ⇧↵ (or a ⇧- or ⌘-click) on an option: add it without closing, for a filter that can hold several. The picker
+       * closes and the caller reopens it with the new state; a plain pick still chooses and closes.
+       */
+      onPickMore?: (id: string) => void;
       noneLabel?: string;
       createLabel?: (q: string) => string;
       onCreate?: (q: string) => void;
@@ -104,7 +109,9 @@ export interface UI {
   reveal: (t: Target) => void;
   /** J on an action: go to its project, remembering where you came from. */
   jumpToProject: (actionId: ID) => void;
-  /** J on a project: back to the action or appointment you jumped from, else its first next action. */
+  /** J on a reference or a checklist: go to the project it supports, remembering it, so J on the project comes back. */
+  jumpFromSupport: (kind: "ref" | "checklist", id: ID) => void;
+  /** J on a project: back to the action, appointment, reference or checklist you jumped from, else its first next action. */
   jumpToAction: (projectId: ID) => void;
   /** J on an appointment linked to a project: go to the project, remembering the appointment, so J comes back. */
   jumpFromAppointment: (key: string) => void;

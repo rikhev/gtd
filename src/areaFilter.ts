@@ -56,19 +56,19 @@ export const areaFilterLabel = (ids: string[]) =>
   ids.map((id) => (id === "none" ? "No area" : areaLabel(getState().areas.find((a) => a.id === id)?.name ?? ""))).join(", ");
 
 /**
- * F on Projects: tick one or more areas. Each tick applies at once (owner's bug report: ticks waited for "Show", so
- * leaving with Esc or a click away kept nothing), and the picker comes back on the area just ticked, so several can be
- * ticked in a row; Done closes it, Every area clears the filter.
+ * F on Projects: pick an area and the list narrows to it, the picker gone (owner's request). ⇧↵ (or a ⇧- or ⌘-click)
+ * adds an area to the ones shown instead, or takes it off, and keeps the picker for the next; Every area clears it.
  */
 export function openAreaFilter(ui: UI, chosen: string[] = read() ?? [], at: string | null = null) {
   const { areas, projects } = getState();
   const count = (id: string) => projects.filter((p) => ["active", "someday"].includes(p.status) && (p.area_id ?? "none") === id).length;
+  const toggle = (aid: string) => (chosen.includes(aid) ? chosen.filter((x) => x !== aid) : [...chosen, aid]);
   ui.openPicker({
     type: "list",
     title: "Which areas?",
+    placeholder: "Pick an area · ⇧↵ adds another",
     items: [
-      chosen.length ? { id: "go", label: "Done", hint: `${chosen.length === 1 ? "1 area" : `${chosen.length} areas`} shown` } : { id: "off", label: "Every area", hint: "No filter" },
-      ...(chosen.length ? [{ id: "off", label: "Show every area", hint: "Clear" }] : []),
+      { id: "off", label: "Every area", hint: chosen.length ? "Clear" : "No filter" },
       ...areas
         .slice()
         .sort((a, b) => a.sort - b.sort)
@@ -77,10 +77,12 @@ export function openAreaFilter(ui: UI, chosen: string[] = read() ?? [], at: stri
     ],
     highlight: at,
     onPick: (id) => {
-      if (!id || id === "go") return;
+      if (!id || id === "off") return setAreaFilter([]);
+      setAreaFilter([id.slice(2)]);
+    },
+    onPickMore: (id) => {
       if (id === "off") return setAreaFilter([]);
-      const aid = id.slice(2);
-      const next = chosen.includes(aid) ? chosen.filter((x) => x !== aid) : [...chosen, aid];
+      const next = toggle(id.slice(2));
       setAreaFilter(next);
       window.setTimeout(() => openAreaFilter(ui, next, id));
     },
