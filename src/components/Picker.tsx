@@ -65,8 +65,8 @@ export function Picker({ spec, close }: Props) {
       { id: "picker.move", label: "Move up or down the choices", group: "Picker", displayKeys: ["arrowup", "arrowdown"], run: noop },
       { id: "picker.pick", label: spec.type === "text" ? "Save" : "Pick", group: "Picker", displayKeys: ["enter"], run: noop },
       ...(spec.type === "list" && spec.onPickMore ? [{ id: "picker.more", label: "Pick this and keep choosing", group: "Picker", displayKeys: ["shift+enter"], run: noop }] : []),
-      ...(spec.type === "time" ? [{ id: "picker.digits", label: "Pick a length by its number (0 clears)", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),
-      ...(spec.type === "energy" ? [{ id: "picker.digits", label: "Pick a level by its number (0 clears)", group: "Picker", displayKeys: ["1–3"], run: noop }] : []),
+      ...(spec.type === "time" ? [{ id: "picker.digits", label: "Pick a length by number", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),
+      ...(spec.type === "energy" ? [{ id: "picker.digits", label: "Pick a level by number", group: "Picker", displayKeys: ["1–3"], run: noop }] : []),
       // ⌘K works in a picker too, listing its keys (it holds every other key while it is open).
       { id: "picker.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     ],

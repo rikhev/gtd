@@ -333,7 +333,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           },
         }),
     },
-    { id: "set.addfeed", label: "Add a calendar (Outlook, iCloud…)", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
+    { id: "set.addfeed", label: "Add a calendar", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
     {
       id: "set.feedlink",
       row: true,
@@ -420,7 +420,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     {
       id: "set.theme",
       row: true,
-      label: "Choose the theme: light, dark or the system's",
+      label: "Choose the theme",
       group: "Settings",
       keys: ["enter", "f2"],
       enabled: cur?.kind === "theme",

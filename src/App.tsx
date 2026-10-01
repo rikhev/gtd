@@ -383,6 +383,16 @@ export default function App() {
         setRevealTarget({ kind: "project", id: p.id });
         notify(`Project: ${p.title}`);
       },
+      // Where J on a project goes back to, if it came from somewhere still linked (else it goes to its next action).
+      jumpBackTo: (projectId) => {
+        const s = getState();
+        const o = jumpOrigin.current;
+        if (o?.projectId !== projectId) return null;
+        if (o.refId && s.refs.some((x) => x.id === o.refId && x.status === "active" && x.project_id === projectId)) return "reference";
+        if (o.checklistId && s.checklists.some((x) => x.id === o.checklistId && x.status === "active" && x.project_id === projectId)) return "checklist";
+        if (o.eventKey && s.appointments.some((x) => x.id === o.eventKey && x.project_id === projectId)) return "appointment";
+        return null;
+      },
       jumpToAction: (projectId) => {
         const s = getState();
         const open = (id: string) => s.actions.some((x) => x.id === id && ["next", "waiting", "someday"].includes(x.status));
@@ -453,9 +463,9 @@ export default function App() {
       // The review has its own entry (Start the Weekly Review); every list is offered.
       hidden: r.id === "review",
     })),
-    { id: "go.settings", label: "Go to Settings (rules, contexts, export)", group: "Go to", keys: ["mod+shift+,"], inInput: true, run: () => go("settings") },
+    { id: "go.settings", label: "Go to Settings", group: "Go to", keys: ["mod+shift+,"], inInput: true, run: () => go("settings") },
     // Horizons has no rail stop or key (owner's decision): looked at quarterly, from ⌘K and the review's Get creative.
-    { id: "go.horizons", label: "Go to Horizons (purpose, vision, goals)", group: "Go to", run: () => go("horizons") },
+    { id: "go.horizons", label: "Go to Horizons", group: "Go to", run: () => go("horizons") },
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
     { id: "g.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
@@ -468,7 +478,7 @@ export default function App() {
     // A mind sweep on its own: the Weekly Review opened at its first step.
     {
       id: "g.sweep",
-      label: "Start a mind sweep: empty your head into the Inbox",
+      label: "Start a mind sweep",
       group: "Review",
       enabled: view !== "review",
       run: () => {
@@ -485,7 +495,7 @@ export default function App() {
     { id: "g.newaction", label: "New next action", group: "Actions", keys: ["alt+t"], run: () => quickAddNextAction(ui) },
     // Something you're waiting for, from anywhere: what, who or what you wait on, and its project if any.
     { id: "g.newwaiting", label: "New waiting for", group: "Actions", keys: ["alt+w"], run: () => quickAddWaiting(ui) },
-    { id: "g.region", label: "Go to the next region (lists → items → details)", group: "Move", keys: ["alt+tab", "mod+f6"], inInput: true, run: () => cycleRegion(1) },
+    { id: "g.region", label: "Go to the next region", group: "Move", keys: ["alt+tab", "mod+f6"], inInput: true, run: () => cycleRegion(1) },
     { id: "g.regionback", label: "Go to the previous region", group: "Move", keys: ["alt+shift+tab", "mod+shift+f6"], inInput: true, run: () => cycleRegion(-1) },
     // Light, dark, or follow the system: the switch goes to the other theme from whatever is showing now.
     { id: "g.theme", label: theme.dark ? "Switch to the light theme" : "Switch to the dark theme", group: "View", run: () => themeTo(theme.dark ? "light" : "dark") },
@@ -493,7 +503,7 @@ export default function App() {
     { id: "g.detailtoggle", label: detail ? "Close details" : "Open details", group: "Move", run: () => (detail ? ui.openDetail(null) : undefined) },
     {
       id: "g.detailpin",
-      label: detailPinned ? "Unpin details" : "Pin details (keep the pane open beside every list)",
+      label: detailPinned ? "Unpin details" : "Pin details",
       group: "Move",
       keys: ["alt+p"],
       run: () => ui.setDetailPinned(!detailPinned),

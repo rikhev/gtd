@@ -305,7 +305,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       });
     if (field === "due" || field === "defer")
       ui.openPicker({ type: "date", title: field === "due" ? "Due date" : "Start date", current: a[field], onPick: (d) => updateRow(i, { [field]: d }) });
-    if (field === "back") ui.openPicker({ type: "date", title: "Bring back on (the tickler)", current: a.bring_back ?? null, onPick: (d) => updateRow(i, { bring_back: d }) });
+    if (field === "back") ui.openPicker({ type: "date", title: "Bring back on a day", current: a.bring_back ?? null, onPick: (d) => updateRow(i, { bring_back: d }) });
     if (field === "time") ui.openPicker({ type: "time", current: a.time_min, onPick: (m) => updateRow(i, { time_min: m }) });
     if (field === "energy") ui.openPicker({ type: "energy", current: a.energy, onPick: (e) => updateRow(i, { energy: e }) });
     if (field === "who") askWaitingOn(ui, a.waiting_who, (who) => updateRow(i, { kind: "waiting", waiting_who: who }));
@@ -425,7 +425,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     // GTD's incubate has two homes: Someday/Maybe, and the tickler. B is the tickler: on Someday until the day it comes back.
     {
       id: "cl.tickler",
-      label: "Not now: bring it back on a day (the tickler)",
+      label: "Bring it back on a day",
       group: "Clarify",
       keys: ["b"],
       enabled: gating,
@@ -464,18 +464,18 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     } },
     { id: "cl.context", label: "Set context", group: "Fields", keys: ["c"], enabled: ready, run: () => pickFor(rowOfFocus(), "context") },
     { id: "cl.project", label: "Set project", group: "Fields", keys: ["p"], enabled: ready, run: () => pickFor(rowOfFocus(), "project") },
-    { id: "cl.makeproject", label: "Make this a project (more than one step)", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
+    { id: "cl.makeproject", label: "Make it a project", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
     { id: "cl.due", label: "Set due date", group: "Fields", keys: ["d"], enabled: ready, run: () => pickFor(rowOfFocus(), "due") },
     { id: "cl.defer", label: "Set start date", group: "Fields", keys: ["s"], enabled: ready, run: () => pickFor(rowOfFocus(), "defer") },
-    { id: "cl.back", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], enabled: ready, run: () => pickFor(rowOfFocus(), "back") },
-    { id: "cl.time", label: "Set time estimate (then 1–6)", group: "Fields", keys: ["m"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
-    { id: "cl.energy", label: "Set energy (then 1–3)", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
-    { id: "cl.kind", label: "File as (list or whole item)", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
+    { id: "cl.back", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: ready, run: () => pickFor(rowOfFocus(), "back") },
+    { id: "cl.time", label: "Set time estimate", group: "Fields", keys: ["m"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
+    { id: "cl.energy", label: "Set energy", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
+    { id: "cl.kind", label: "File as", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
     { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready, run: () => pickFor(rowOfFocus(), "who") },
     {
       id: "cl.leave",
       // One level at a time: out of a field first, then out of Clarify.
-      label: "Back (out of the field, then out of Clarify)",
+      label: "Go back",
       group: "Clarify",
       keys: ["escape"],
       inInput: true,

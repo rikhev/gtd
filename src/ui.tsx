@@ -113,6 +113,8 @@ export interface UI {
   jumpFromSupport: (kind: "ref" | "checklist", id: ID) => void;
   /** J on a project: back to the action, appointment, reference or checklist you jumped from, else its first next action. */
   jumpToAction: (projectId: ID) => void;
+  /** What J on this project would go back to ("reference", "checklist", "appointment"), or null: its next action. */
+  jumpBackTo: (projectId: ID) => "reference" | "checklist" | "appointment" | null;
   /** J on an appointment linked to a project: go to the project, remembering the appointment, so J comes back. */
   jumpFromAppointment: (key: string) => void;
   revealTarget: Target | null;

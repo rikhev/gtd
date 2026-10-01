@@ -123,11 +123,11 @@ const FIELD_COMMAND: Record<string, string> = {
   Project: "Set project",
   Due: "Set due date",
   Start: "Set start date",
-  Time: "Set time estimate (then 1–6)",
-  Energy: "Set energy (then 1–3)",
+  Time: "Set time estimate",
+  Energy: "Set energy",
   Repeat: "Set repeat",
-  "Bring back": "Bring back on (tickler)",
-  With: "Set who it's with (their agenda)",
+  "Bring back": "Bring back on a day",
+  With: "Set who it's with",
   "Follow up": "Set follow-up date",
   Since: "Set waiting since",
 };
@@ -311,8 +311,8 @@ function ActionDetail({ a }: { a: Action }) {
   useCommands(
     "detail-action-add",
     [
-      { id: "detail.a.addnext", label: "Add a next action (to this project)", group: "Details", keys: ["t"], run: () => (a.project_id ? projectEditors(ui).addNextAction(a.project_id) : quickAddNextAction(ui)) },
-      { id: "detail.a.addwait", label: "Add a waiting for (to this project)", group: "Details", keys: ["w"], run: () => (a.project_id ? projectEditors(ui).addWaiting(a.project_id) : quickAddWaiting(ui)) },
+      { id: "detail.a.addnext", label: "Add a next action", group: "Details", keys: ["t"], run: () => (a.project_id ? projectEditors(ui).addNextAction(a.project_id) : quickAddNextAction(ui)) },
+      { id: "detail.a.addwait", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => (a.project_id ? projectEditors(ui).addWaiting(a.project_id) : quickAddWaiting(ui)) },
     ],
     { priority: 21, active: paneActive },
   );
@@ -500,8 +500,8 @@ function EventDetail({ e }: { e: CalEvent }) {
   useCommands(
     "detail-event",
     [
-      { id: "detail.e.addnext", label: "Add a next action (from this appointment)", group: "Details", keys: ["t"], run: () => quickAddNextAction(ui) },
-      { id: "detail.e.addwait", label: "Add a waiting for (from this appointment)", group: "Details", keys: ["w"], run: () => quickAddWaiting(ui) },
+      { id: "detail.e.addnext", label: "Add a next action", group: "Details", keys: ["t"], run: () => quickAddNextAction(ui) },
+      { id: "detail.e.addwait", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => quickAddWaiting(ui) },
       { id: "detail.e.jump", label: "Jump to its project", group: "Details", keys: ["j"], run: () => ui.jumpFromAppointment(e.key) },
     ],
     { priority: 21, active },
@@ -614,10 +614,10 @@ function ProjectDetail({ p }: { p: Project }) {
   useCommands(
     "detail-addnext",
     [
-      { id: "detail.addnext", label: "Add a next action to this project", group: "Details", keys: ["t"], run: () => addInput.current?.focus() },
-      { id: "detail.addwaiting", label: "Add a waiting for to this project", group: "Details", keys: ["w"], run: () => ed.addWaiting(p.id) },
-      { id: "detail.support", label: "Link a reference or checklist to this project", group: "Details", run: () => linkSupport(ui, p.id) },
-      { id: "detail.plan", label: "Plan a later step for this project", group: "Details", run: () => planLater() },
+      { id: "detail.addnext", label: "Add a next action", group: "Details", keys: ["t"], run: () => addInput.current?.focus() },
+      { id: "detail.addwaiting", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => ed.addWaiting(p.id) },
+      { id: "detail.support", label: "Link support material", group: "Details", run: () => linkSupport(ui, p.id) },
+      { id: "detail.plan", label: "Plan a later step", group: "Details", run: () => planLater() },
     ],
     { priority: 21, active },
   );
@@ -948,7 +948,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
       { id: "detail.up", label: "Go to the previous field", group: "Details", keys: ["arrowup"], run: () => moveCursor(-1) },
       {
         id: "detail.open",
-        label: "Open or edit the field under the cursor",
+        label: "Edit this field",
         group: "Details",
         keys: ["enter"],
         run: () => {
@@ -962,7 +962,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
         // Escape steps out one level. In a text field it only leaves the field (the edit is saved on blur) and the pane keeps
         // focus, so its field keys work again; from the pane it closes it (unless pinned) and you're back on the row.
         id: "detail.back",
-        label: ui.detailTrail.length ? `Back to “${titleOf(ui.detailTrail[ui.detailTrail.length - 1]) || "the previous item"}”` : ui.detailPinned ? "Back to the list" : "Close details and go back to the list",
+        label: ui.detailTrail.length ? `Back to “${titleOf(ui.detailTrail[ui.detailTrail.length - 1]) || "the previous item"}”` : ui.detailPinned ? "Back to the list" : "Close details",
         group: "Details",
         keys: ["escape"],
         inInput: true,
@@ -1002,7 +1002,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           ui.setRegion("list");
         },
       },
-      { id: "detail.close", label: "Close details at once (pinned too)", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
+      { id: "detail.close", label: "Close details, pinned or not", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
       // An Inbox item's pane offers the Inbox's own two verbs.
       {
         id: "detail.file",

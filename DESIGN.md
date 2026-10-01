@@ -469,7 +469,7 @@ Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and e
 - **Don't** let a neutral drift into a colour: if a grey reads as blue, pull it back.
 - **Don't** use alert red decoratively.
 - **Don't** fill rows, cells or chips with context colours.
-- **Do** name every command by what it does, verb first: "Set due date", not "Due date" (a field's bare name is a label, not a command); "Go to the next row", "Show the week", "Open the View menu: …".
+- **Do** name every command by what it does, verb first: "Set due date", not "Due date" (a field's bare name is a label, not a command); "Go to the next row", "Show the week", "Open the View menu". Keep it short: the action alone, no bracketed explanation, nothing the place already says.
 - **Don't** print key hints on controls, lists or empty states. Keys are discovered through ⌘K. The pinned exceptions are the rail key legends, "⌘Z undo" on toast notes, the single Key Hints line at the foot of Clarify, the Weekly Review and Settings (Label Caps 12px `ink-3`, small key caps, 18px gaps between entries rather than dots, a `rule` hairline above), and the Key Choices list on a stopped Clarify (a key cap, then the action in 13px `ink`). Detail panes print no keys at all (owner's request): no key caps beside field labels or section heads and no hint line; each field still announces its key (`aria-keyshortcuts`) and the keys work while the pane has focus. On a touch screen an Inbox item's pane keeps File as and Clarify as buttons to tap.
 - **Don't** add paper texture, airy card layouts or large radii. Density beats decoration.
 

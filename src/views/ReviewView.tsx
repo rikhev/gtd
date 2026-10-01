@@ -513,7 +513,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     {
       id: "rv.addnext",
       row: true,
-      label: "Add a next action to this project",
+      label: "Add a next action",
       group: "Add",
       keys: ["t", "n"],
       enabled: step.id === "projects" && focusRow?.kind === "project",
@@ -522,7 +522,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     {
       id: "rv.addwaiting",
       row: true,
-      label: "Add a waiting for to this project",
+      label: "Add a waiting for",
       group: "Add",
       keys: ["w"],
       enabled: step.id === "projects" && focusRow?.kind === "project",
@@ -533,7 +533,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     {
       id: "rv.followup",
       row: true,
-      label: step.id === "lookback" ? "Add a follow-up next action" : "Add a next action (to this row's project)",
+      label: step.id === "lookback" ? "Add a follow-up next action" : "Add a next action",
       group: "Add",
       keys: ["t"],
       enabled: ["lookback", "next", "waiting"].includes(step.id),
@@ -546,7 +546,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     {
       id: "rv.followwait",
       row: true,
-      label: step.id === "lookback" ? "Add a follow-up waiting for" : "Add a waiting for (to this row's project)",
+      label: step.id === "lookback" ? "Add a follow-up waiting for" : "Add a waiting for",
       group: "Add",
       keys: ["w"],
       enabled: ["lookback", "next", "waiting"].includes(step.id),
@@ -568,7 +568,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       run: () => setStepIdx(x.i),
     })),
     { id: "rv.file", row: true, label: "File", group: "Row", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
-    { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Step", keys: [], run: startOver },
+    { id: "rv.new", label: "Start a new review", group: "Step", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Step", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.here", label: step.id === "sweep" ? "Mark my head empty and go to the next step" : "Mark reviewed and go to the next step", group: "Step", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
     {

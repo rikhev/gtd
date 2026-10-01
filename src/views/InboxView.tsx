@@ -114,7 +114,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     {
       id: "inbox.done",
       row: true,
-      label: "Done already (two-minute rule), or not done",
+      label: "Mark done (two-minute rule)",
       group: "Inbox",
       keys: ["e"],
       enabled: Boolean(focusId),
