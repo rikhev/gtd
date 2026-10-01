@@ -500,7 +500,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.new", label: "New item below", group: "Checklist", keys: ["n"], run: () => add(0) },
     { id: "ci.section", label: "New section heading below", group: "Checklist", run: () => add(1) },
     { id: "ci.makesection", label: focus?.section ? "Make it an item" : "Make it a section heading", group: "Checklist", keys: ["l"], enabled: Boolean(focus), run: () => toggleSection(targets()) },
-    { id: "ci.rename", label: "Rewrite", group: "Checklist", keys: ["f2", "enter"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
+    { id: "ci.rename", label: "Rename", group: "Checklist", keys: ["f2", "enter"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
     // GTD: a checklist is a trigger for new actions. The item stays as it is; ticking still only ticks.
     { id: "ci.action", label: "New next action from this item", group: "Checklist", keys: ["t"], enabled: Boolean(focus && !focus.section), run: () => focus && quickAddNextAction(ui, focus.title, list.project_id ?? null) },
     { id: "ci.remove", label: "Remove", group: "Checklist", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => remove(targets()) },

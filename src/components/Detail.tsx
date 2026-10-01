@@ -117,10 +117,25 @@ const PANE_STOPS = ".detail-body .field .field-text, .detail-body .event-title, 
 /** Whether the detail pane is the active region: its fields' letter keys only work then. */
 const DetailActive = createContext(false);
 
+/** A pane field's key reads as the same command does on the lists ("Set context", "Due date"), in ⌘K and the keys view. */
+const FIELD_COMMAND: Record<string, string> = {
+  Context: "Set context",
+  Project: "Set project",
+  Due: "Due date",
+  Start: "Start date",
+  Time: "Time estimate (then 1–6)",
+  Energy: "Energy (then 1–3)",
+  Repeat: "Repeat",
+  "Bring back": "Bring back on (tickler)",
+  With: "Who it's with (their agenda)",
+  "Follow up": "Follow-up date",
+  Since: "Waiting since",
+};
+
 function PickField({ label, children, onOpen, k }: { label: string; children: ReactNode; onOpen: () => void; k?: string }) {
   // The key shown beside a field (D for Due, P for Project…) opens its picker while the pane has focus.
   const active = useContext(DetailActive);
-  useCommands(`detail-field:${label}`, k ? [{ id: `detail.field.${label}`, label: `${label}…`, group: "Details", keys: [k.toLowerCase()], run: () => open() }] : [], { priority: 21, active: active && Boolean(k) });
+  useCommands(`detail-field:${label}`, k ? [{ id: `detail.field.${label}`, label: FIELD_COMMAND[label] ?? `${label}…`, group: "Fields", keys: [k.toLowerCase()], run: () => open() }] : [], { priority: 21, active: active && Boolean(k) });
   // Screen readers hear the field, its value and its key: "Due, Fri 25 Sep 2026, D".
   const id = useId();
   // Opening from the key or a click first puts focus on this field, so the picker anchors under it.
@@ -971,7 +986,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
       },
       {
         id: "detail.edit",
-        label: "Edit the subject",
+        label: "Rename",
         group: "Details",
         keys: ["f2"],
         run: () => root.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus(),
@@ -987,7 +1002,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           ui.setRegion("list");
         },
       },
-      { id: "detail.close", label: "Close details", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
+      { id: "detail.close", label: "Close details at once (pinned too)", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
       // An Inbox item's pane offers the Inbox's own two verbs.
       {
         id: "detail.file",

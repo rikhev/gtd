@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { formatDate, formatLong, formatTime, daysBetween, today } from "../../shared/dates.ts";
 import type { Action, Appointment, Context } from "../../shared/types.ts";
-import { keyLabel, runKey } from "../keys.ts";
+import { keyLabel, keySpoken, runKey } from "../keys.ts";
 
 /** A disposition or section name as a quiet chip; md is a state's title in plain caps. */
 export function Tag({ children, size = "sm" }: { children: ReactNode; size?: "sm" | "md" }) {
@@ -194,8 +194,14 @@ export function Energy({ level }: { level: number | null }) {
   );
 }
 
+/** A key cap. Its glyphs are for the eye; a screen reader hears the key's name ("Command Shift K", not "place of interest sign"). */
 export function Kbd({ k }: { k: string }) {
-  return <kbd className="kbd">{keyLabel(k)}</kbd>;
+  return (
+    <kbd className="kbd">
+      <span aria-hidden="true">{keyLabel(k)}</span>
+      <span className="visually-hidden">{keySpoken(k)}</span>
+    </kbd>
+  );
 }
 
 /** The ways forward from a stopped or finished state, each with its key. The keys themselves are bound by the view. */

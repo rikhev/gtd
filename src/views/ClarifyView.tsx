@@ -462,19 +462,20 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       const i = rowOfFocus();
       update((d) => d.actions.splice(i, 1));
     } },
-    { id: "cl.context", label: "Context", group: "Fields", keys: ["c"], enabled: ready, run: () => pickFor(rowOfFocus(), "context") },
-    { id: "cl.project", label: "Project", group: "Fields", keys: ["p"], enabled: ready, run: () => pickFor(rowOfFocus(), "project") },
+    { id: "cl.context", label: "Set context", group: "Fields", keys: ["c"], enabled: ready, run: () => pickFor(rowOfFocus(), "context") },
+    { id: "cl.project", label: "Set project", group: "Fields", keys: ["p"], enabled: ready, run: () => pickFor(rowOfFocus(), "project") },
     { id: "cl.makeproject", label: "Make this a project (more than one step)", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
     { id: "cl.due", label: "Due date", group: "Fields", keys: ["d"], enabled: ready, run: () => pickFor(rowOfFocus(), "due") },
     { id: "cl.defer", label: "Start date", group: "Fields", keys: ["s"], enabled: ready, run: () => pickFor(rowOfFocus(), "defer") },
-    { id: "cl.back", label: "Bring back on (the tickler)", group: "Fields", keys: ["b"], enabled: ready, run: () => pickFor(rowOfFocus(), "back") },
+    { id: "cl.back", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], enabled: ready, run: () => pickFor(rowOfFocus(), "back") },
     { id: "cl.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["m"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
     { id: "cl.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
     { id: "cl.kind", label: "File as (list or whole item)", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
     { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready, run: () => pickFor(rowOfFocus(), "who") },
     {
       id: "cl.leave",
-      label: "Leave the field, then Clarify",
+      // One level at a time: out of a field first, then out of Clarify.
+      label: "Back (out of the field, then out of Clarify)",
       group: "Clarify",
       keys: ["escape"],
       inInput: true,
@@ -486,7 +487,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         else host.leave();
       },
     },
-    { id: "cl.edit", label: "Edit the action text", group: "Clarify", keys: ["f2"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus()}'] .p-title`)?.focus() },
+    { id: "cl.edit", label: "Rename", group: "Clarify", keys: ["f2"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus()}'] .p-title`)?.focus() },
     {
       id: "cl.enter",
       label: "Edit the focused row or field",

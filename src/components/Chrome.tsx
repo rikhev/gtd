@@ -2,8 +2,8 @@ import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from
 import { Search, Check, LogOut } from "lucide-react";
 import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { allCommandsForPalette, activeCommandsByLayer, layerOf, useCommands, keyLabel, keyAria, IS_MAC, type Command } from "../keys.ts";
-import { Kbd, Tag } from "./bits.tsx";
+import { useCommands, keyLabel, keyAria, IS_MAC, type Command, type LayeredCommand } from "../keys.ts";
+import { Kbd } from "./bits.tsx";
 import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
 
@@ -618,107 +618,6 @@ function rememberCommand(id: string) {
 }
 
 const PALETTE_SECTIONS = ["Recent", "This screen", "Go to and more", "Moving around"] as const;
-/**
- * Which heading a command falls under while browsing the palette. "This screen" means registered by
- * the screen or pane you're on; everything app-wide goes under "Go to and more"; cursor moves go last.
- */
-function paletteSection(c: Command): 0 | 1 | 2 | 3 {
-  if (recentIds().includes(c.id)) return 0;
-  if (GENERIC_GROUPS[c.group] === 3) return 3;
-  return layerOf(c) === "global" ? 2 : 1;
-}
-
-export function Palette({ commands, close }: { commands: Command[]; close: () => void }) {
-  const [q, setQ] = useState("");
-  const [hi, setHi] = useState(0);
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => input.current?.focus(), []);
-  useCommands("palette", [{ id: "palette.close", label: "Close", group: "Palette", keys: ["escape"], inInput: true, run: close }], { priority: 300, exclusive: true });
-
-  const list = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const recent = recentIds();
-    const rank = (c: Command) => {
-      const r = recent.indexOf(c.id);
-      return r >= 0 ? r - 10 : paletteSection(c);
-    };
-    if (!needle) return [...commands].sort((a, b) => rank(a) - rank(b));
-    const words = needle.split(/\s+/);
-    return commands
-      .filter((c) => words.every((w) => `${c.label} ${c.group}`.toLowerCase().includes(w)))
-      .sort((a, b) => Number(!a.label.toLowerCase().startsWith(needle)) - Number(!b.label.toLowerCase().startsWith(needle)) || rank(a) - rank(b));
-  }, [q, commands]);
-  useEffect(() => setHi(0), [q]);
-  useEffect(() => {
-    document.getElementById(`pal-${hi}`)?.scrollIntoView({ block: "nearest" });
-  }, [hi]);
-
-  const run = (c?: Command) => {
-    if (!c) return;
-    rememberCommand(c.id);
-    close();
-    window.setTimeout(() => c.run(), 0);
-  };
-
-  return (
-    <div className="overlay" onMouseDown={close}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onMouseDown={(e) => e.stopPropagation()}>
-        <input
-          ref={input}
-          className="palette-input"
-          value={q}
-          placeholder="Type a command"
-          role="combobox"
-          aria-label="Command"
-          aria-expanded="true"
-          aria-autocomplete="list"
-          aria-controls="palette-list"
-          aria-activedescendant={`pal-${hi}`}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              setHi((h) => Math.min(list.length - 1, h + 1));
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              setHi((h) => Math.max(0, h - 1));
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              run(list[hi]);
-            }
-          }}
-        />
-        <ul className="palette-list" id="palette-list" role="listbox">
-          {list.map((c, i) => [
-            // Section headings (only while browsing, not filtering): Recent · This screen · Go to and more · Moving around.
-            !q.trim() && (i === 0 || paletteSection(list[i - 1]) !== paletteSection(c)) && (
-              <li key={`h-${paletteSection(c)}`} className="pal-section" role="presentation">
-                {PALETTE_SECTIONS[paletteSection(c)]}
-              </li>
-            ),
-            <li
-              key={c.id}
-              id={`pal-${i}`}
-              role="option"
-              aria-selected={i === hi}
-              className={i === hi ? "is-hi" : ""}
-              onMouseEnter={() => setHi(i)}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                run(c);
-              }}
-            >
-              <span className="pal-label">{c.label}</span>
-              <span className="pal-group">{c.group}</span>
-              <span className="pal-keys">{(c.keys?.[0] ?? c.displayKeys?.[0]) && <Kbd k={(c.keys?.[0] ?? c.displayKeys?.[0])!} />}</span>
-            </li>,
-          ])}
-          {list.length === 0 && <li className="is-hint">No command matches “{q}”.</li>}
-        </ul>
-      </div>
-    </div>
-  );
-}
 
 // The app-wide keys, regrouped by what they are for (their palette groups are finer than a cheat sheet needs).
 const EVERYWHERE: { title: string; groups: string[]; order?: string[] }[] = [
@@ -730,94 +629,173 @@ const EVERYWHERE: { title: string; groups: string[]; order?: string[] }[] = [
 // A screen's own list movement is the same on every list: it goes after what the screen itself does.
 const LAST = ["Move", "Select"];
 
-export function HelpOverlay({ close }: { close: () => void }) {
-  const ui = useUI();
-  const [snapshot] = useState(() => activeCommandsByLayer().filter(({ command: c }) => (c.keys?.length || c.displayKeys?.length) && !c.hidden));
-  // Take focus so a screen reader reads the dialog, and hand it back on close.
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const back = document.activeElement as HTMLElement | null;
-    box.current?.focus();
-    return () => back?.focus?.({ preventScroll: true });
-  }, []);
-  useCommands("help", [{ id: "help.close", label: "Close", group: "Help", keys: ["escape", "?"], inInput: true, run: close }], { priority: 300, exclusive: true });
-  const { here, everywhere, where } = useMemo(() => {
-    // A key does one thing at a time: list only the command it would run now (the first claimant).
-    const claimed = new Set<string>();
-    const page = new Map<string, Command[]>();
-    const global: Command[] = [];
-    for (const { layer, command: c } of snapshot) {
-      const keys = c.keys?.length ? c.keys : (c.displayKeys ?? []);
-      if (keys.length && keys.every((k) => claimed.has(k))) continue;
-      keys.forEach((k) => claimed.add(k));
-      if (layer === "global") global.push(c);
-      else page.set(c.group, [...(page.get(c.group) ?? []), c]);
+/** Where the keys view says it is: the topmost region that has keys of its own ("Details pane", "Weekly Review · Projects"). */
+export function paletteScope(entries: LayeredCommand[], viewTitle: string): string {
+  const top = entries.find((e) => e.layer !== "global" && e.layer !== "capture" && e.layer !== "searchbox");
+  if (!top) return viewTitle;
+  if (top.title) return top.title;
+  if (top.layer.startsWith("detail")) return "Details pane";
+  if (top.layer === "rail") return "Rail";
+  if (top.layer === "clarify") return "Clarify";
+  return viewTitle;
+}
+
+type Row = { c: Command; layer: string; head?: string; quiet?: boolean };
+
+/**
+ * The command palette, ⌘K: every command, found by typing. ⇧? opens it on the keys of the place you are (the keys
+ * view, which replaced the separate cheat sheet): that region's commands under their own groups, each with every key
+ * it answers to, then the app-wide ones, quieter, under Everywhere. Typing searches every command either way;
+ * Backspace on an empty line leaves the keys view for the whole palette.
+ */
+export function Palette({ entries, mode: start, where, close }: { entries: LayeredCommand[]; mode: "all" | "keys"; where: string; close: () => void }) {
+  const [q, setQ] = useState("");
+  const [mode, setMode] = useState(start);
+  const [hi, setHi] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
+  useCommands("palette", [{ id: "palette.close", label: "Close", group: "Palette", keys: ["escape"], inInput: true, run: close }], { priority: 300, exclusive: true });
+  const layer = useMemo(() => new Map(entries.map((e) => [e.command.id, e.layer])), [entries]);
+  const section = (c: Command): 0 | 1 | 2 | 3 => {
+    if (recentIds().includes(c.id)) return 0;
+    if (GENERIC_GROUPS[c.group] === 3) return 3;
+    return layer.get(c.id) === "global" ? 2 : 1;
+  };
+
+  const rows: Row[] = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const commands = entries.map((e) => e.command);
+    if (mode === "keys" && !needle) {
+      // A key does one thing at a time: list only the command it would run now (the first claimant).
+      const claimed = new Set<string>();
+      const page = new Map<string, Row[]>();
+      const global: Row[] = [];
+      for (const { layer: l, command: c } of entries) {
+        const keys = c.keys?.length ? c.keys : (c.displayKeys ?? []);
+        if (keys.length && keys.every((k) => claimed.has(k))) continue;
+        keys.forEach((k) => claimed.add(k));
+        if (l === "global") global.push({ c, layer: l, quiet: true });
+        else page.set(c.group, [...(page.get(c.group) ?? []), { c, layer: l }]);
+      }
+      const rank = (g: string) => LAST.indexOf(g);
+      const out: Row[] = [];
+      for (const [g, rs] of [...page.entries()].sort(([a], [b]) => rank(a) - rank(b))) rs.forEach((r, i) => out.push({ ...r, head: i === 0 ? g : undefined }));
+      const used = new Set<string>();
+      for (const { title, groups, order } of EVERYWHERE) {
+        const rs = global.filter((r) => groups.includes(r.c.group));
+        if (order) rs.sort((x, y) => (order.indexOf(x.c.id) + 1 || 99) - (order.indexOf(y.c.id) + 1 || 99));
+        rs.forEach((r, i) => {
+          used.add(r.c.id);
+          out.push({ ...r, head: i === 0 ? `Everywhere · ${title}` : undefined });
+        });
+      }
+      global.filter((r) => !used.has(r.c.id)).forEach((r, i) => out.push({ ...r, head: i === 0 ? "Everywhere · More" : undefined }));
+      return out;
     }
-    const rank = (g: string) => LAST.indexOf(g);
-    const here = [...page.entries()].sort(([a], [b]) => rank(a) - rank(b));
-    const used = new Set<string>();
-    const everywhere = EVERYWHERE.map(({ title, groups, order }) => {
-      const cmds = global.filter((c) => groups.includes(c.group));
-      cmds.forEach((c) => used.add(c.id));
-      if (order) cmds.sort((x, y) => (order.indexOf(x.id) + 1 || 99) - (order.indexOf(y.id) + 1 || 99));
-      return [title, cmds] as [string, Command[]];
-    });
-    const rest = global.filter((c) => !used.has(c.id));
-    if (rest.length) everywhere.push(["More", rest]);
-    const inClarify = snapshot.some((x) => x.layer === "clarify");
-    return { here, everywhere: everywhere.filter(([, c]) => c.length), where: inClarify ? "Clarify" : (VIEW_TITLES[ui.view] ?? "This screen") };
+    const recent = recentIds();
+    const rank = (c: Command) => {
+      const r = recent.indexOf(c.id);
+      return r >= 0 ? r - 10 : section(c);
+    };
+    const sorted = !needle
+      ? [...commands].sort((a, b) => rank(a) - rank(b))
+      : commands
+          .filter((c) => needle.split(/\s+/).every((w) => `${c.label} ${c.group}`.toLowerCase().includes(w)))
+          .sort((a, b) => Number(!a.label.toLowerCase().startsWith(needle)) - Number(!b.label.toLowerCase().startsWith(needle)) || rank(a) - rank(b));
+    // Section headings only while browsing: Recent · This screen · Go to and more · Moving around.
+    return sorted.map((c, i) => ({ c, layer: layer.get(c.id) ?? "", head: !needle && (i === 0 || section(sorted[i - 1]) !== section(c)) ? PALETTE_SECTIONS[section(c)] : undefined }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot]);
-  // Under "Go to" the heading already says it: "Inbox", not "Go to Inbox"; "Weekly Review", not "Start the Weekly Review".
-  const label = (c: Command, section: string) => (section === "Go to" ? c.label.replace(/^(Go to|Start the) /, "").replace(/ \(.*\)$/, "") : c.label);
-  const list = (groups: [string, Command[]][]) =>
-    groups.map(([g, cmds]) => (
-      <section key={g} className="help-group" aria-label={g}>
-        <h4>{g}</h4>
-        <dl>
-          {cmds.map((c) => (
-            <div key={c.id}>
-              <dt>
-                {[...new Set([...(c.keys ?? []), ...(c.displayKeys ?? [])].map(keyLabel))].slice(0, 2).map((l) => (
-                  <kbd key={l} className="kbd">
-                    {l}
-                  </kbd>
-                ))}
-              </dt>
-              <dd>{label(c, g)}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    ));
+  }, [q, mode, entries]);
+  useEffect(() => setHi(0), [q, mode]);
+  useEffect(() => {
+    document.getElementById(`pal-${hi}`)?.scrollIntoView({ block: "nearest" });
+  }, [hi]);
+
+  const run = (c?: Command) => {
+    if (!c) return;
+    rememberCommand(c.id);
+    close();
+    window.setTimeout(() => c.run(), 0);
+  };
+  // Every key a command answers to, once each as it reads (Backspace and Delete are both "Del").
+  const keysOf = (c: Command) => {
+    const seen = new Set<string>();
+    return [...(c.keys ?? []), ...(c.displayKeys ?? [])].filter((k) => !seen.has(keyLabel(k)) && Boolean(seen.add(keyLabel(k))));
+  };
+  const keysView = mode === "keys" && !q.trim();
+
   return (
     <div className="overlay" onMouseDown={close}>
-      <div ref={box} className="help" role="dialog" aria-modal="true" aria-labelledby="help-title" tabIndex={-1} onMouseDown={(e) => e.stopPropagation()}>
-        <div className="help-head">
-          <h2 className="help-title" id="help-title">
-            <Tag size="md">Keys</Tag>
-          </h2>
-          <span className="muted-text small">
-            <Kbd k="mod+k" /> finds every command
-          </span>
-        </div>
-        <div className="help-body">
-          {here.length > 0 && (
-            <section className="help-scope" aria-labelledby="help-here">
-              <h3 id="help-here">
-                On {where}
-              </h3>
-              <div className="help-cols">{list(here)}</div>
-            </section>
-          )}
-          <section className="help-scope" aria-labelledby="help-everywhere">
-            <h3 id="help-everywhere">Everywhere</h3>
-            <div className="help-cols">{list(everywhere)}</div>
-          </section>
-        </div>
+      <div className={`palette ${keysView ? "is-keys" : ""}`} role="dialog" aria-modal="true" aria-label={keysView ? `Keys: ${where}` : "Command palette"} onMouseDown={(e) => e.stopPropagation()}>
+        {mode === "keys" && (
+          <div className="palette-scope">
+            <span className="palette-scope-name">Keys · {where}</span>
+            <span className="muted-text">Type to find any command</span>
+          </div>
+        )}
+        <input
+          ref={input}
+          className="palette-input"
+          value={q}
+          placeholder={mode === "keys" ? "Find a command" : "Type a command"}
+          role="combobox"
+          aria-label="Command"
+          aria-expanded="true"
+          aria-autocomplete="list"
+          aria-controls="palette-list"
+          aria-activedescendant={`pal-${hi}`}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setHi((h) => Math.min(rows.length - 1, h + 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHi((h) => Math.max(0, h - 1));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              run(rows[hi]?.c);
+            } else if (e.key === "Tab") {
+              // The palette is a modal: Tab stays on its line.
+              e.preventDefault();
+            } else if (e.key === "Backspace" && !q && mode === "keys") {
+              // Out of the keys view, to every command.
+              e.preventDefault();
+              setMode("all");
+            }
+          }}
+        />
+        <ul className="palette-list" id="palette-list" role="listbox" aria-label={keysView ? `Keys: ${where}` : "Commands"}>
+          {rows.map((r, i) => [
+            r.head && (
+              <li key={`h-${i}`} className={`pal-section ${r.quiet ? "is-quiet" : ""}`} role="presentation">
+                {r.head}
+              </li>
+            ),
+            <li
+              key={r.c.id}
+              id={`pal-${i}`}
+              role="option"
+              aria-selected={i === hi}
+              className={`${i === hi ? "is-hi" : ""} ${r.quiet && keysView ? "is-quiet" : ""}`}
+              onMouseEnter={() => setHi(i)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                run(r.c);
+              }}
+            >
+              <span className="pal-label">{r.c.label}</span>
+              {!keysView && <span className="pal-group">{r.c.group}</span>}
+              <span className="pal-keys">
+                {keysOf(r.c).map((k) => (
+                  <Kbd key={k} k={k} />
+                ))}
+              </span>
+            </li>,
+          ])}
+          {rows.length === 0 && <li className="is-hint">No command matches “{q}”.</li>}
+        </ul>
       </div>
     </div>
   );
 }
-
-export { allCommandsForPalette };

@@ -356,64 +356,85 @@ export function useListNav(
 
   const page = () => Math.max(5, Math.floor((window.innerHeight - 160) / 30));
 
+  // The keys view lists only what can act here: no row moves on an empty list, no ticking where nothing can be
+  // ticked, no folding without groups. The keys still answer (so ⌘A never selects the page's text instead).
+  const rowCount = items.filter((k) => !isGroupKey(k)).length;
+  const tickCount = items.filter(tickable).length;
+  const hasGroups = items.some(isGroupKey);
+  const quiet = (cmds: Command[], when: boolean): Command[] => cmds.map((c) => ({ ...c, hidden: c.hidden || !when }));
   const commands: Command[] = [
-    { id: "nav.down", label: "Next row", group: "Move", keys: ["arrowdown"], run: () => move(1) },
-    { id: "nav.up", label: "Previous row", group: "Move", keys: ["arrowup"], run: () => move(-1) },
-    { id: "nav.first", label: "First row", group: "Move", keys: ["mod+arrowup", "home"], run: () => move(-1e6) },
-    { id: "nav.last", label: "Last row", group: "Move", keys: ["mod+arrowdown", "end"], run: () => move(1e6) },
-    { id: "nav.pagedown", label: "Page down", group: "Move", keys: ["pagedown"], run: () => move(page()) },
-    { id: "nav.pageup", label: "Page up", group: "Move", keys: ["pageup"], run: () => move(-page()) },
-    { id: "nav.extdown", label: "Extend selection down", group: "Select", keys: ["shift+arrowdown"], run: () => move(1, true) },
-    { id: "nav.extup", label: "Extend selection up", group: "Select", keys: ["shift+arrowup"], run: () => move(-1, true) },
-    { id: "nav.extfirst", label: "Extend selection to the first row", group: "Select", keys: ["shift+home", "mod+shift+arrowup"], run: () => move(-1e6, true) },
-    { id: "nav.extlast", label: "Extend selection to the last row", group: "Select", keys: ["shift+end", "mod+shift+arrowdown"], run: () => move(1e6, true) },
-    { id: "nav.extpagedown", label: "Extend selection a page down", group: "Select", keys: ["shift+pagedown"], hidden: true, run: () => move(page(), true) },
-    { id: "nav.extpageup", label: "Extend selection a page up", group: "Select", keys: ["shift+pageup"], hidden: true, run: () => move(-page(), true) },
-    {
-      id: "nav.tick",
-      label: "Tick / untick row",
-      group: "Select",
-      keys: ["space"],
-      run: () => {
-        if (!focus || !tickable(focus)) return;
-        const s = new Set(selected);
-        if (s.has(focus)) s.delete(focus);
-        else s.add(focus);
-        setSelected(s);
-        setAnchor(focus);
-      },
-    },
-    {
-      id: "nav.all",
-      label: "Select all",
-      group: "Select",
-      keys: ["mod+a"],
-      run: () => setSelected(new Set(items.filter(tickable))),
-    },
-    {
-      id: "nav.collapse",
-      label: "Collapse group",
-      group: "Move",
-      keys: ["arrowleft"],
-      run: () => {
-        if (!focus) return;
-        if (isGroupKey(focus)) toggleGroup(focus.slice(6), false);
-        else {
-          const g = rowOwner.get(focus);
-          const header = g ? groupKey(g) : null;
-          if (header && items.includes(header)) setFocus(header);
-        }
-      },
-    },
-    {
-      id: "nav.expand",
-      label: "Expand group",
-      group: "Move",
-      keys: ["arrowright"],
-      run: () => {
-        if (focus && isGroupKey(focus)) toggleGroup(focus.slice(6), true);
-      },
-    },
+    ...quiet(
+      [
+        { id: "nav.down", label: "Next row", group: "Move", keys: ["arrowdown"], run: () => move(1) },
+        { id: "nav.up", label: "Previous row", group: "Move", keys: ["arrowup"], run: () => move(-1) },
+        { id: "nav.first", label: "First row", group: "Move", keys: ["mod+arrowup", "home"], run: () => move(-1e6) },
+        { id: "nav.last", label: "Last row", group: "Move", keys: ["mod+arrowdown", "end"], run: () => move(1e6) },
+        { id: "nav.pagedown", label: "Page down", group: "Move", keys: ["pagedown"], run: () => move(page()) },
+        { id: "nav.pageup", label: "Page up", group: "Move", keys: ["pageup"], run: () => move(-page()) },
+      ],
+      rowCount > 1,
+    ),
+    ...quiet(
+      [
+        { id: "nav.extdown", label: "Extend selection down", group: "Select", keys: ["shift+arrowdown"], run: () => move(1, true) },
+        { id: "nav.extup", label: "Extend selection up", group: "Select", keys: ["shift+arrowup"], run: () => move(-1, true) },
+        { id: "nav.extfirst", label: "Extend selection to the first row", group: "Select", keys: ["shift+home", "mod+shift+arrowup"], run: () => move(-1e6, true) },
+        { id: "nav.extlast", label: "Extend selection to the last row", group: "Select", keys: ["shift+end", "mod+shift+arrowdown"], run: () => move(1e6, true) },
+        { id: "nav.extpagedown", label: "Extend selection a page down", group: "Select", keys: ["shift+pagedown"], run: () => move(page(), true) },
+        { id: "nav.extpageup", label: "Extend selection a page up", group: "Select", keys: ["shift+pageup"], run: () => move(-page(), true) },
+        {
+          id: "nav.tick",
+          label: "Tick / untick row",
+          group: "Select",
+          keys: ["space"],
+          run: () => {
+            if (!focus || !tickable(focus)) return;
+            const s = new Set(selected);
+            if (s.has(focus)) s.delete(focus);
+            else s.add(focus);
+            setSelected(s);
+            setAnchor(focus);
+          },
+        },
+        {
+          id: "nav.all",
+          label: "Select all",
+          group: "Select",
+          keys: ["mod+a"],
+          run: () => setSelected(new Set(items.filter(tickable))),
+        },
+      ],
+      tickCount > 1,
+    ),
+    ...quiet(
+      [
+        {
+          id: "nav.collapse",
+          label: "Collapse group",
+          group: "Move",
+          keys: ["arrowleft"],
+          run: () => {
+            if (!focus) return;
+            if (isGroupKey(focus)) toggleGroup(focus.slice(6), false);
+            else {
+              const g = rowOwner.get(focus);
+              const header = g ? groupKey(g) : null;
+              if (header && items.includes(header)) setFocus(header);
+            }
+          },
+        },
+        {
+          id: "nav.expand",
+          label: "Expand group",
+          group: "Move",
+          keys: ["arrowright"],
+          run: () => {
+            if (focus && isGroupKey(focus)) toggleGroup(focus.slice(6), true);
+          },
+        },
+      ],
+      hasGroups,
+    ),
     {
       id: "nav.clear",
       label: "Clear selection",

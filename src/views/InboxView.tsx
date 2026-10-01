@@ -109,7 +109,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     { id: "inbox.new", label: "Capture", group: "Inbox", keys: ["n"], run: ui.focusCapture },
     { id: "inbox.clarify", label: "Clarify", group: "Inbox", keys: ["k"], run: () => ui.startClarify(), enabled: rows.length > 0 },
     { id: "inbox.open", label: "Open details", group: "Inbox", keys: ["enter"], run: () => focusId && ui.openDetail({ kind: "stuff", id: focusId }, true), enabled: Boolean(focusId) },
-    { id: "inbox.rename", label: "Edit text", group: "Inbox", keys: ["f2"], run: () => focusId && setEditing(focusId), enabled: Boolean(focusId) },
+    { id: "inbox.rename", label: "Rename", group: "Inbox", keys: ["f2"], run: () => focusId && setEditing(focusId), enabled: Boolean(focusId) },
     { id: "inbox.file", label: "File", group: "Inbox", keys: ["v"], run: () => fileStuff(ui, nav.targets()), enabled: Boolean(focusId) },
     {
       id: "inbox.done",

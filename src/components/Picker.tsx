@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEve
 import { Named } from "./bits.tsx";
 import type { PickerSpec, ListItem } from "../ui.tsx";
 import { useCommands } from "../keys.ts";
+import { useUI } from "../ui.tsx";
 import { parseDate, formatLong, TIME_PRESETS, formatTime, parseTime, today, addDays, fromIso } from "../../shared/dates.ts";
 
 /*
@@ -25,6 +26,7 @@ interface Props {
 type Option = { id: string | null; label: string; hint?: string; color?: string; create?: string; section?: string };
 
 export function Picker({ spec, close }: Props) {
+  const ui = useUI();
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -54,10 +56,21 @@ export function Picker({ spec, close }: Props) {
     return () => window.removeEventListener("pointerdown", outside, true);
   }, [close]);
 
-  useCommands("picker", [{ id: "picker.close", label: "Cancel", group: "Picker", keys: ["escape"], inInput: true, run: close }], {
-    priority: 200,
-    exclusive: true,
-  });
+  // The picker's own keys (its field handles them) are listed for the keys view, which ⇧? opens here too.
+  const noop = () => {};
+  useCommands(
+    "picker",
+    [
+      { id: "picker.close", label: "Cancel", group: "Picker", keys: ["escape"], inInput: true, run: close },
+      { id: "picker.move", label: "Move up or down the choices", group: "Picker", displayKeys: ["arrowup", "arrowdown"], run: noop },
+      { id: "picker.pick", label: spec.type === "text" ? "Done" : "Pick", group: "Picker", displayKeys: ["enter"], run: noop },
+      ...(spec.type === "list" && spec.onPickMore ? [{ id: "picker.more", label: "Pick this and keep choosing", group: "Picker", displayKeys: ["shift+enter"], run: noop }] : []),
+      ...(spec.type === "time" ? [{ id: "picker.digits", label: "A length by its number (0 clears)", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),
+      ...(spec.type === "energy" ? [{ id: "picker.digits", label: "A level by its number (0 clears)", group: "Picker", displayKeys: ["1–3"], run: noop }] : []),
+      { id: "picker.keys", label: "Keys on this screen", group: "Help", keys: ["?"], inEmptyInput: true, run: ui.openHelp },
+    ],
+    { priority: 200, exclusive: true, title: spec.type === "time" ? "Time estimate" : spec.type === "energy" ? "Energy" : spec.title },
+  );
 
   // Anchor at the pointer when opened by a press, else under the focused row, field or calendar item; clamped to the viewport.
   useLayoutEffect(() => {

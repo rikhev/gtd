@@ -2333,8 +2333,15 @@ textarea.field-text {
 .palette-list {
   max-height: 55vh;
 }
+/* A long label wraps (a phone) and its row grows with it, never into the next. */
+.palette-list li:not(.pal-section) {
+  height: auto;
+  min-height: 28px;
+  padding-block: 4px;
+}
 .pal-label {
   flex: 1;
+  line-height: 1.3;
 }
 .pal-group {
   color: var(--ink-3);
@@ -2343,8 +2350,41 @@ textarea.field-text {
   text-align: right;
 }
 .pal-keys {
-  width: 76px;
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-xs);
+  min-width: 76px;
+}
+/* The list shows when there is more below (or above) it: a soft ink shade at the scrolling edge, covered at rest. */
+.palette-list {
+  background:
+    linear-gradient(var(--sheet) 40%, transparent) top / 100% 18px no-repeat local,
+    linear-gradient(transparent, var(--sheet) 60%) bottom / 100% 18px no-repeat local,
+    linear-gradient(color-mix(in srgb, var(--ink) 9%, transparent), transparent) top / 100% 8px no-repeat scroll,
+    linear-gradient(transparent, color-mix(in srgb, var(--ink) 9%, transparent)) bottom / 100% 8px no-repeat scroll;
+}
+/* The keys view (⇧?): where it is, then that place's keys; the app-wide ones follow, quieter. */
+.palette-scope {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-md);
+  padding: 2px 2px 8px;
+  font-size: var(--fs-small);
+}
+.palette-scope-name {
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--ink);
+}
+.palette.is-keys .palette-list {
+  max-height: 64vh;
+}
+.palette-list li.is-quiet:not(.is-hi) {
+  color: var(--ink-2);
+}
+.palette-list li.pal-section.is-quiet {
+  color: var(--ink-3);
 }
 .is-hi .kbd {
   background: rgb(255 255 255 / 0.55);
@@ -2352,111 +2392,6 @@ textarea.field-text {
   color: var(--select-ink);
 }
 
-.help {
-  width: min(1200px, 100%);
-  max-height: 84vh;
-  overflow: auto;
-  background: var(--sheet);
-  border: 1px solid var(--rule-strong);
-  border-radius: 5px;
-  box-shadow: var(--shadow);
-  padding: 18px 22px 22px;
-  animation: pop 160ms var(--ease) both;
-}
-.help-title {
-  margin: 0;
-  font: inherit;
-}
-.help-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-/* Two scopes side by side: what this screen does, then the keys that work everywhere, split by a hairline. */
-.help-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 28px;
-}
-.help-scope + .help-scope {
-  border-left: 1px solid var(--rule);
-  padding-left: 28px;
-}
-.help-scope > h3 {
-  margin: 0 0 12px;
-  font-size: var(--fs-title);
-  font-weight: 600;
-  color: var(--ink);
-}
-.help-cols {
-  columns: 2 200px;
-  column-gap: 28px;
-}
-.help-group {
-  break-inside: avoid;
-  margin-bottom: 20px;
-}
-.help h4 {
-  font-family: var(--font-label);
-  font-stretch: 75%;
-  font-weight: 600;
-  font-size: var(--fs-head);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-  margin: 0 0 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid var(--rule);
-  /* The heading starts where its descriptions do; the keys hang in the gutter before it. */
-  padding-left: 96px;
-}
-@media (max-width: 900px) {
-  .help-body {
-    grid-template-columns: 1fr;
-  }
-  .help-scope + .help-scope {
-    border-left: 0;
-    padding-left: 0;
-    border-top: 1px solid var(--rule);
-    padding-top: 14px;
-  }
-}
-/* Each group's keys form one column as wide as its widest key, so the words get the rest and seldom wrap. */
-/* One key column per sheet, its caps set flush right against the words: every description in a column starts at the
-   same edge, whatever its keys. A second key for the same command sits beside the first, or under it if it can't fit. */
-.help dl {
-  margin: 0;
-  display: grid;
-  grid-template-columns: 84px 1fr;
-  gap: var(--sp-sm) var(--sp-lg);
-  align-items: start;
-}
-.help dl div {
-  display: contents;
-}
-.help dt {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--sp-xs);
-  margin: 0;
-}
-.help dd {
-  margin: 0;
-  padding-top: 1px;
-  color: var(--ink-2);
-  line-height: 18px;
-}
-.help .kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  min-width: 22px;
-  padding: 0 5px;
-  line-height: 1;
-}
 
 /* ------------------------------------------------------------------ */
 /* Toast: action feedback, only while there is something to say         */
@@ -2973,9 +2908,6 @@ textarea.field-text {
 }
 .review-head p {
   margin: 0;
-}
-.help:focus {
-  outline: none;
 }
 .review-title:focus {
   outline: none;

@@ -5,9 +5,9 @@ import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, onHold, plural, signOut } from "./store.ts";
-import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, runKey, type Command } from "./keys.ts";
+import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
-import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, HelpOverlay } from "./components/Chrome.tsx";
+import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView } from "./views/TrashView.tsx";
@@ -116,14 +116,14 @@ export default function App() {
   }, []);
   const [picker, setPicker] = useState<PickerSpec | null>(null);
   const [pickerSeq, setPickerSeq] = useState(0);
-  const [palette, setPalette] = useState<Command[] | null>(null);
-  const [help, setHelp] = useState(false);
+  // The palette, ⌘K, or its keys view, ⇧?: what it lists is taken as it opens, before it takes the keys.
+  const [palette, setPalette] = useState<{ entries: LayeredCommand[]; mode: "all" | "keys"; where: string } | null>(null);
 
   // A press outside the detail pane takes the keys out of it (owner's request): on a list row the row's list becomes
   // the active region with that row under the cursor, anywhere else the list does, and a control outside (the rail,
   // capture, search) takes focus as it would anyway. While a picker or dialog is open the press belongs to it.
   const outside = useRef({ region, overlay: false });
-  outside.current = { region, overlay: Boolean(picker || palette || help) };
+  outside.current = { region, overlay: Boolean(picker || palette) };
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0 || outside.current.region !== "detail" || outside.current.overlay) return;
@@ -294,8 +294,11 @@ export default function App() {
       },
       pickerOpen: Boolean(picker),
       focusCapture: () => captureRef.current?.focus(),
-      openPalette: () => setPalette(allCommandsForPalette()),
-      openHelp: () => setHelp(true),
+      openPalette: () => setPalette({ entries: paletteSnapshot(), mode: "all", where: "" }),
+      openHelp: () => {
+        const entries = paletteSnapshot();
+        setPalette({ entries, mode: "keys", where: paletteScope(entries, VIEW_TITLES[viewNow.current] ?? "This screen") });
+      },
       openSearch: () => {
         if (view !== "search") prevView.current = view;
         setView("search");
@@ -440,7 +443,8 @@ export default function App() {
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
     { id: "g.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
-    { id: "g.help", label: "Keys on this screen", group: "Help", keys: ["?"], run: () => setHelp(true) },
+    // ⇧? works from an empty text field too (the review's Mind sweep opens in one); with words in it, ? is typed.
+    { id: "g.help", label: "Keys on this screen", group: "Help", keys: ["?"], inEmptyInput: true, run: ui.openHelp },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
     // K clarifies: you decide, one item at a time.
     { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
@@ -513,7 +517,7 @@ export default function App() {
     };
   }, []);
 
-  const listActive = region === "list" && !picker && !palette && !help;
+  const listActive = region === "list" && !picker && !palette;
   const t = today();
   const deferredNext = s.actions.filter((a) => a.status === "next" && !onHold(a, s) && isDeferred(a, t)).length;
   const fitNow = useFit();
@@ -615,7 +619,7 @@ export default function App() {
   return (
     <UIContext.Provider value={ui}>
       <div className={`app ${detail || detailPinned ? "has-detail" : ""}`} data-region={region}>
-        <Rail active={region === "rail" && !picker && !palette && !help} />
+        <Rail active={region === "rail" && !picker && !palette} />
         <TabBar />
         <main className="main">
           <header className="topbar">
@@ -693,14 +697,13 @@ export default function App() {
             >
               {meta.loaded ? <Suspense fallback={<div className="loading" aria-busy="true" />}>{body}</Suspense> : <div className="loading" aria-busy="true" />}
             </section>
-            {(detail || detailPinned) && <Detail target={detail} active={region === "detail" && !picker && !palette && !help} />}
+            {(detail || detailPinned) && <Detail target={detail} active={region === "detail" && !picker && !palette} />}
           </div>
         </main>
         <Toast />
         <DropZone detail={detail} />
         {picker && <Picker key={pickerSeq} spec={picker} close={() => setPicker(null)} />}
-        {palette && <Palette commands={palette} close={() => setPalette(null)} />}
-        {help && <HelpOverlay close={() => setHelp(false)} />}
+        {palette && <Palette {...palette} close={() => setPalette(null)} />}
         <input
           id="global-upload"
           type="file"

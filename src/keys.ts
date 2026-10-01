@@ -20,6 +20,8 @@ export interface Command {
   run: () => void;
   /** Also fire while a text field has focus. */
   inInput?: boolean;
+  /** Also fire in a text field, but only while it is empty (⇧? there has nothing to be a "?" in yet). */
+  inEmptyInput?: boolean;
   enabled?: boolean;
   /** Hidden from palette/help (e.g. aliases). */
   hidden?: boolean;
@@ -27,6 +29,8 @@ export interface Command {
 
 interface Layer {
   id: string;
+  /** What the layer is, as the keys view names it ("Weekly Review · Projects"); unnamed layers are named by their id. */
+  title?: string;
   priority: number;
   exclusive: boolean;
   commands: Command[];
@@ -57,15 +61,34 @@ export function activeCommands(): Command[] {
   return out;
 }
 
-/** The same, each with the id of the layer it came from (the help overlay tells app-wide keys from the screen's). */
-export function activeCommandsByLayer(): { layer: string; command: Command }[] {
+export interface LayeredCommand {
+  layer: string;
+  title?: string;
+  command: Command;
+}
+
+/** The same, each with the layer it came from (the keys view tells app-wide keys from the screen's and names the screen). */
+export function activeCommandsByLayer(): LayeredCommand[] {
   const sorted = [...layers.values()].sort((a, b) => b.priority - a.priority);
-  const out: { layer: string; command: Command }[] = [];
+  const out: LayeredCommand[] = [];
   for (const l of sorted) {
-    out.push(...l.commands.filter((c) => c.enabled !== false).map((command) => ({ layer: l.id, command })));
+    out.push(...l.commands.filter((c) => c.enabled !== false).map((command) => ({ layer: l.id, title: l.title, command })));
     if (l.exclusive) break;
   }
   return out;
+}
+
+/**
+ * What the palette shows, taken the moment it opens: before it takes the keys, so every region still has its own
+ * (the details pane's Delete on a file, a list's row keys). A command listed twice keeps its first, live, entry.
+ */
+export function paletteSnapshot(): LayeredCommand[] {
+  const seen = new Set<string>();
+  return activeCommandsByLayer().filter(({ command: c }) => {
+    if (c.hidden || seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
 }
 
 /** Run whatever the key does right now, as if it were pressed: lets a tap on a key hint do the key's work. */
@@ -98,21 +121,13 @@ export function layerOf(cmd: Command): string | undefined {
   return undefined;
 }
 
-export function allCommandsForPalette(): Command[] {
-  const seen = new Set<string>();
-  return activeCommands().filter((c) => {
-    if (c.hidden || seen.has(c.id)) return false;
-    seen.add(c.id);
-    return true;
-  });
-}
 
 export function useCommands(
   id: string,
   commands: Command[],
-  opts: { priority?: number; exclusive?: boolean; active?: boolean } = {},
+  opts: { priority?: number; exclusive?: boolean; active?: boolean; title?: string } = {},
 ) {
-  const { priority = 10, exclusive = false, active = true } = opts;
+  const { priority = 10, exclusive = false, active = true, title } = opts;
   const ref = useRef(commands);
   ref.current = commands;
   const sig = commands.map((c) => `${c.id}:${c.enabled !== false}:${(c.keys ?? []).join("|")}:${c.label}`).join(",");
@@ -120,6 +135,7 @@ export function useCommands(
     if (!active) return;
     layers.set(id, {
       id,
+      title,
       priority,
       exclusive,
       get commands() {
@@ -131,7 +147,7 @@ export function useCommands(
       layers.delete(id);
       bump();
     };
-  }, [id, priority, exclusive, active]);
+  }, [id, priority, exclusive, active, title]);
   useEffect(() => {
     if (active) bump();
   }, [sig, active]);
@@ -186,7 +202,7 @@ export function installKeyHandler() {
     for (const cmd of activeCommands()) {
       if (!cmd.keys) continue;
       if (!cmd.keys.some((k) => candidates.includes(k))) continue;
-      if (editing && !cmd.inInput) continue;
+      if (editing && !cmd.inInput && !(cmd.inEmptyInput && !(e.target as HTMLInputElement).value)) continue;
       e.preventDefault();
       e.stopPropagation();
       cmd.run();
@@ -232,6 +248,35 @@ export function keyLabel(k: string): string {
 }
 
 const ARIA: Record<string, string> = { mod: IS_MAC ? "Meta" : "Control", ctrl: "Control", alt: "Alt", shift: "Shift", ",": "Comma", ".": "Period", space: "Space" };
+
+const SPOKEN: Record<string, string> = {
+  mod: IS_MAC ? "Command" : "Control",
+  ctrl: "Control",
+  alt: IS_MAC ? "Option" : "Alt",
+  shift: "Shift",
+  enter: "Return",
+  escape: "Escape",
+  arrowup: "Up arrow",
+  arrowdown: "Down arrow",
+  arrowleft: "Left arrow",
+  arrowright: "Right arrow",
+  backspace: "Delete",
+  delete: "Delete",
+  pageup: "Page up",
+  pagedown: "Page down",
+  "?": "Question mark",
+  ",": "Comma",
+  ".": "Period",
+  "/": "Slash",
+};
+
+/** A key as a screen reader should say it ("Command Shift K", "Option Up arrow"), not its glyphs' names. */
+export function keySpoken(k: string): string {
+  return k
+    .split("+")
+    .map((p) => SPOKEN[p] ?? (p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)))
+    .join(" ");
+}
 
 /** The key string as an aria-keyshortcuts value, e.g. "Control+1". */
 export function keyAria(k: string): string {
