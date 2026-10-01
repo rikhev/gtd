@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ListChecks } from "lucide-react";
-import { getState, mutate, notify, patchMany, plural, stamp, uid, useTables } from "../store.ts";
+import { forgetUndo, getMeta, getState, mutate, notify, patchMany, plural, stamp, uid, useTables } from "../store.ts";
 import { useUI, type UI } from "../ui.tsx";
 import { pressedByTouch, useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -13,7 +13,10 @@ import {
   history,
   historyTitle,
   isTicked,
+  itemsFromText,
   itemsOf,
+  landed,
+  landingItem,
   newChecklist,
   openChecklist,
   progress,
@@ -113,7 +116,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
       if (g && areaById.has(g)) area = g;
     }
     const c = newChecklist({ area_id: area });
-    mutate("New checklist", [{ type: "create", table: "checklists", row: { ...c } }], { silent: true });
+    mutate("New checklist", [{ type: "create", table: "checklists", row: { ...c } }], { silent: true, key: `new:${c.id}` });
     nav.setFocus(c.id);
     setEditing({ id: c.id, fresh: true });
   };
@@ -175,12 +178,14 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
           <InlineEdit
             value={c.title}
             placeholder="Name the checklist: Packing for a trip, Closing the month…"
+            label="Checklist name"
             onDone={(v, how) => {
               const fresh = editing.fresh;
               setEditing(null);
               const title = v.trim();
-              if (!title && !c.title) return mutate("Discarded", [{ type: "delete", table: "checklists", id: c.id }], { silent: true });
-              if (title && title !== c.title) mutate(fresh ? `New checklist “${title}”` : "Renamed", [{ type: "patch", table: "checklists", id: c.id, data: { title, updated_at: stamp() } }]);
+              if (!title && !c.title) return discard("checklists", c.id);
+              // A new checklist and its name are one ⌘Z.
+              if (title && title !== c.title) mutate(fresh ? `New checklist “${title}”` : "Renamed", [{ type: "patch", table: "checklists", id: c.id, data: { title, updated_at: stamp() } }], { join: `new:${c.id}` });
               // Named with Enter, a new checklist opens at once, ready for its first item.
               if (fresh && title && how === "enter") openChecklist(c.id);
             }}
@@ -282,6 +287,14 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
   );
 }
 
+/**
+ * A new row left blank goes without a trace: its own "new" step is taken back with it, so ⌘Z never brings back a
+ * blank row that was never really there.
+ */
+function discard(table: "checklists" | "checklist_items", id: ID) {
+  mutate("Discarded", [{ type: "delete", table, id }], { silent: true, undoable: !forgetUndo(`new:${id}`) });
+}
+
 /** A checklist's area, or none; a new one can be typed. */
 function setArea(ui: UI, ids: ID[]) {
   if (!ids.length) return;
@@ -324,6 +337,18 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
   const targets = () => nav.targets().filter((id) => items.some((i) => i.id === id));
   const done = (i: ChecklistItem) => !i.section && isTicked(s, i);
   const ticked = items.filter(done).length;
+  /** A section is its heading and the items under it, down to the next heading. */
+  const sectionItems = (heading: ChecklistItem) => {
+    const at = items.indexOf(heading);
+    const end = items.findIndex((x, n) => n > at && x.section);
+    return items.slice(at + 1, end < 0 ? items.length : end);
+  };
+  /** A heading's quiet count: how many it holds, then how far this run has got through them ("3 of 7", "All 7"). */
+  const sectionCount = (heading: ChecklistItem) => {
+    const under = sectionItems(heading);
+    const k = under.filter(done).length;
+    return !under.length ? "" : !k ? String(under.length) : k === under.length ? `All ${under.length}` : `${k} of ${under.length}`;
+  };
 
   /** A new row below the cursor (or at the end), named in place. */
   const add = (section: 0 | 1 = 0, after: ChecklistItem | undefined = focus) => {
@@ -332,18 +357,27 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     const next = i >= 0 ? all[i + 1] : undefined;
     const sort = after ? (next ? (after.sort + next.sort) / 2 : after.sort + 1) : Math.max(0, ...all.map((x) => x.sort)) + 1;
     const row: ChecklistItem = { id: uid(), checklist_id: list.id, title: "", section, checked_at: null, sort, created_at: stamp() };
-    mutate(section ? "New section heading" : "New item", [{ type: "create", table: "checklist_items", row: { ...row } }], { silent: true });
+    mutate(section ? "New section heading" : "New item", [{ type: "create", table: "checklist_items", row: { ...row } }], { silent: true, key: `new:${row.id}` });
     nav.setFocus(row.id);
     setEditing({ id: row.id, fresh: true });
   };
-  // An empty checklist is opened to be filled: the first item is ready to be typed (once, however often React mounts).
+  // An empty checklist is opened to be filled: the first item is ready to be typed (once, however often React mounts),
+  // as soon as the list has the keys, if it hasn't on opening.
   const started = useRef(false);
   useEffect(() => {
-    if (started.current) return;
+    if (started.current || !regionActive) return;
     started.current = true;
-    if (!items.length && regionActive) add();
+    if (!items.length) add();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [regionActive]);
+  // Opened from a search hit on one of its items, the cursor starts there (and stays put once it is).
+  useEffect(() => {
+    const at = landingItem();
+    if (!at) return;
+    if (nav.focus === at || !items.some((i) => i.id === at)) landed();
+    else nav.setFocus(at);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav.focus, items]);
   // Leaving while a new row is still blank (Back, the rail) leaves no blank row behind.
   const editingRef = useRef(editing);
   editingRef.current = editing;
@@ -351,7 +385,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     () => () => {
       const e = editingRef.current;
       const row = e?.fresh ? getState().checklist_items.find((x) => x.id === e.id) : undefined;
-      if (row && !row.title.trim()) mutate("Discarded", [{ type: "delete", table: "checklist_items", id: row.id }], { silent: true });
+      if (row && !row.title.trim()) discard("checklist_items", row.id);
     },
     [],
   );
@@ -367,12 +401,35 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       const nextOpen = items.slice(at + 1).find((i) => !i.section && !done(i));
       if (nextOpen) nav.setFocus(nextOpen.id);
     }
+    // The tick lands at once, so ⌘Z right after it undoes the tick; the pen only draws the line.
     const open = rows.filter((i) => !done(i)).map((i) => i.id);
+    tickItems(rows.map((i) => i.id));
     setStriking((p) => new Set([...p, ...open]));
-    window.setTimeout(() => {
-      tickItems(rows.map((i) => i.id));
-      setStriking((p) => new Set([...p].filter((id) => !open.includes(id))));
-    }, 220);
+    window.setTimeout(() => setStriking((p) => new Set([...p].filter((id) => !open.includes(id)))), 220);
+  };
+  /**
+   * A list pasted into an item becomes items, one a line, as filing a capture as a checklist reads it: an empty row
+   * takes the first line, the rest follow below. A new row and its paste are one ⌘Z.
+   */
+  const pasteLines = (row: ChecklistItem, text: string, current: string, fresh: boolean) => {
+    const lines = itemsFromText(text, list.id);
+    if (!lines.length) return false;
+    setEditing(null);
+    const ops: Op[] = [];
+    const words = current.trim();
+    if (!words) {
+      const first = lines.shift()!;
+      ops.push({ type: "patch", table: "checklist_items", id: row.id, data: { title: first.title, section: first.section } });
+    } else if (words !== row.title) ops.push({ type: "patch", table: "checklist_items", id: row.id, data: { title: words } });
+    const all = itemsOf(getState(), list.id);
+    const next = all[all.findIndex((x) => x.id === row.id) + 1];
+    const step = next ? (next.sort - row.sort) / (lines.length + 1) : 1;
+    lines.forEach((l, k) => ops.push({ type: "create", table: "checklist_items", row: { ...l, sort: row.sort + step * (k + 1) } }));
+    ops.push(touchChecklist(list.id));
+    const n = lines.length + (words ? 0 : 1);
+    mutate(`${plural(n, "item")} pasted`, ops, { join: fresh ? `new:${row.id}` : undefined });
+    nav.setFocus(lines.length ? lines[lines.length - 1].id : row.id);
+    return true;
   };
   const remove = (ids: ID[]) => {
     const rows = items.filter((i) => ids.includes(i.id));
@@ -396,6 +453,20 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     ]);
   };
   const reorder = (dir: -1 | 1) => {
+    // A section heading moves with its items, past the whole section above or below it.
+    const ids = targets();
+    const heading = ids.length === 1 ? items.find((i) => i.id === ids[0] && i.section) : undefined;
+    if (heading) {
+      const blocks: ChecklistItem[][] = [];
+      for (const i of items) (i.section || !blocks.length ? blocks.push([i]) : blocks[blocks.length - 1].push(i));
+      const at = blocks.findIndex((b) => b[0].id === heading.id);
+      const to = at + dir;
+      if (to < 0 || to >= blocks.length) return;
+      [blocks[at], blocks[to]] = [blocks[to], blocks[at]];
+      const ops = blocks.flat().flatMap((i, n): Op[] => (i.sort !== n + 1 ? [{ type: "patch", table: "checklist_items", id: i.id, data: { sort: n + 1 } }] : []));
+      if (ops.length) mutate("Reordered", ops, { silent: true });
+      return;
+    }
     const moved = stepRows([{ key: "items", label: "", rows: items }], (i) => i.id, (i) => i.sort, () => true, targets(), dir);
     if (!moved) return;
     mutate("Reordered", [...moved].map(([id, at]): Op => ({ type: "patch", table: "checklist_items", id, data: { sort: at } })), { silent: true });
@@ -420,10 +491,10 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.makesection", label: focus?.section ? "Make it an item" : "Make it a section heading", group: "Checklist", keys: ["l"], enabled: Boolean(focus), run: () => toggleSection(targets()) },
     { id: "ci.rename", label: "Rewrite", group: "Checklist", keys: ["f2", "enter"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
     // GTD: a checklist is a trigger for new actions. The item stays as it is; ticking still only ticks.
-    { id: "ci.action", label: "New next action from this item", group: "Checklist", keys: ["t"], enabled: Boolean(focus && !focus.section), run: () => focus && quickAddNextAction(ui, focus.title) },
+    { id: "ci.action", label: "New next action from this item", group: "Checklist", keys: ["t"], enabled: Boolean(focus && !focus.section), run: () => focus && quickAddNextAction(ui, focus.title, list.project_id ?? null) },
     { id: "ci.remove", label: "Remove", group: "Checklist", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => remove(targets()) },
-    { id: "ci.up", label: "Move row up", group: "Checklist", keys: ["alt+arrowup"], enabled: Boolean(focus), run: () => reorder(-1) },
-    { id: "ci.down", label: "Move row down", group: "Checklist", keys: ["alt+arrowdown"], enabled: Boolean(focus), run: () => reorder(1) },
+    { id: "ci.up", label: focus?.section ? "Move the section up" : "Move row up", group: "Checklist", keys: ["alt+arrowup"], enabled: Boolean(focus), run: () => reorder(-1) },
+    { id: "ci.down", label: focus?.section ? "Move the section down" : "Move row down", group: "Checklist", keys: ["alt+arrowdown"], enabled: Boolean(focus), run: () => reorder(1) },
     { id: "ci.over", label: "Start over (clear the ticks)", group: "Checklist", enabled: ticked > 0 && !repeats, run: () => startOver([list.id]) },
     { id: "ci.repeat", label: repeats ? `Repeats ${repeatsLabel(repeats).toLowerCase()}: change` : "Repeat (a routine: every day or every week)", group: "Fields", keys: ["r"], run: () => pickRepeats(ui, [list.id]) },
     { id: "ci.renamelist", label: "Rename checklist", group: "Checklist", run: rename },
@@ -487,12 +558,15 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
           <InlineEdit
             value={i.title}
             placeholder={i.section ? "Name the section: Clothes, Papers…" : "What to check or do"}
+            label={i.section ? "Section heading" : "Item"}
+            onPasteLines={(text, cur) => pasteLines(i, text, cur, editing.fresh)}
             onDone={(v, how) => {
               const fresh = editing.fresh;
               setEditing(null);
               const title = v.trim();
-              if (!title && !i.title) return mutate("Discarded", [{ type: "delete", table: "checklist_items", id: i.id }], { silent: true });
-              if (title && title !== i.title) mutate(fresh ? `Added “${title}”` : "Rewritten", [{ type: "patch", table: "checklist_items", id: i.id, data: { title } }, touchChecklist(list.id)], { silent: fresh });
+              if (!title && !i.title) return discard("checklist_items", i.id);
+              // A new item and its words are one ⌘Z.
+              if (title && title !== i.title) mutate(fresh ? `Added “${title}”` : "Rewritten", [{ type: "patch", table: "checklist_items", id: i.id, data: { title } }, touchChecklist(list.id)], { silent: fresh, join: `new:${i.id}` });
               // Enter after a new item starts the next one, so a list is typed in one go; Enter on an empty one stops.
               if (fresh && title && how === "enter") window.setTimeout(() => add(0, getState().checklist_items.find((x) => x.id === i.id)), 0);
             }}
@@ -501,9 +575,11 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
           <span className="cl-section">
             <span className="visually-hidden">Section: </span>
             {i.title || "Untitled section"}
+            {sectionCount(i) && <span className="cl-section-count num">{sectionCount(i)}</span>}
           </span>
         ) : (
           <span className="subject">
+            {done(i) && <span className="visually-hidden">Ticked: </span>}
             <span className="subject-text">{i.title || "Untitled"}</span>
           </span>
         ),
@@ -562,8 +638,8 @@ function pickRepeats(ui: UI, ids: ID[]) {
     type: "list",
     title: "Repeat",
     items: [
-      { id: "day", label: "Every day", hint: "Starts over each morning" },
-      { id: "week", label: "Every week", hint: "Starts over each week" },
+      { id: "day", label: "Every day", hint: "Starts over at midnight" },
+      { id: "week", label: "Every week", hint: `Starts over each ${getMeta().weekStart ? "Monday" : "Sunday"}` },
     ],
     current: cur,
     noneLabel: "Don't repeat",

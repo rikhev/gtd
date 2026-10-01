@@ -11,7 +11,7 @@ import { itemsFromText, newChecklist } from "../checklists.ts";
 import { reminderChoices, reminderOf, reminderWhere } from "../reminders.ts";
 import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
-import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
+import type { ID, Op, Proposal, ProposedAction, Stuff } from "../../shared/types.ts";
 
 type Draft = Omit<Proposal, "actions"> & { actions: (ProposedAction & { done?: boolean })[] };
 
@@ -59,6 +59,9 @@ export interface ClarifyHost {
 }
 
 /** Sizes a one-line-of-meaning textarea to its wrapped lines. */
+/** The lines a checklist is made from: those under the title, or every line once the checklist is given a title of its own (as Reference keeps the whole capture). */
+const checklistLines = (st: Stuff, title: string | undefined) => (!title?.trim() || title.trim() === stuffTitle(st) ? splitStuff(st).rest : st.text);
+
 const fitHeight = (el: HTMLTextAreaElement | null) => {
   if (!el) return;
   el.style.height = "auto";
@@ -175,7 +178,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       }
       const c = newChecklist({ title: d.reference.title.trim() || stuffTitle(current) || "Untitled checklist" });
       ops.push({ type: "create", table: "checklists", row: { ...c } });
-      for (const item of itemsFromText(splitStuff(current).rest, c.id)) ops.push({ type: "create", table: "checklist_items", row: { ...item } });
+      for (const item of itemsFromText(checklistLines(current, d.reference.title), c.id)) ops.push({ type: "create", table: "checklist_items", row: { ...item } });
       label = `Filed as checklist: ${c.title}`;
     } else if (d.disposition === "reference") {
       const rid = uid();
@@ -606,7 +609,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                     />
                   </label>
                   {draft.reference?.checklist ? (
-                    <ChecklistPreview text={current ? splitStuff(current).rest : ""} />
+                    <ChecklistPreview text={current ? checklistLines(current, draft.reference?.title) : ""} />
                   ) : (
                   <label className="field">
                     <span className="field-label">Notes</span>

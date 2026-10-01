@@ -192,16 +192,31 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   /** Back from the tickler and not yet decided again: its "Due back" entry waits in the Inbox (or its date has come). */
   const dueBack = (id: ID, back: string | null) => Boolean((back && back <= t) || s.stuff.some((x) => x.status === "inbox" && x.back_id === id));
   /**
-   * How a routine's week went, to ask whether each habit still serves you: a daily one counts the days of the last
-   * seven on which everything was done, a weekly one whether it was all done this week.
+   * How a routine went, to ask whether each habit still serves you: a daily one counts the last seven days on which
+   * everything was done, a weekly one this week; either names the habit kept least, when one lags. Today (or this
+   * week) isn't over, so the counts look at the days and weeks before it.
    */
   const routineWeek = (id: ID, repeats: "day" | "week") => {
     const habits = itemsOf(s, id).filter((i) => !i.section);
     if (!habits.length) return repeatsLabel(repeats);
-    if (repeats === "week") return `${repeatsLabel(repeats)} · ${habits.every((i) => isTicked(s, i, t)) ? "all done this week" : `${habits.filter((i) => isTicked(s, i, t)).length} of ${habits.length} done this week`}`;
-    const days = Array.from({ length: 7 }, (_, k) => addDays(t, -k));
-    const full = days.filter((d) => habits.every((i) => s.checklist_ticks.some((k) => k.item_id === i.id && periodOf(k.day, "day") === d))).length;
-    return `${repeatsLabel(repeats)} · all done ${full} of the last 7 days`;
+    const step = repeats === "day" ? 1 : 7;
+    const n = repeats === "day" ? 7 : 4;
+    const now = periodOf(t, repeats);
+    const periods = Array.from({ length: n }, (_, k) => addDays(now, -(k + 1) * step));
+    const kept = (i: (typeof habits)[number]) => {
+      const done = new Set(s.checklist_ticks.filter((k) => k.item_id === i.id).map((k) => periodOf(k.day, repeats)));
+      return periods.filter((d) => done.has(d)).length;
+    };
+    const counts = habits.map((i) => ({ i, n: kept(i) }));
+    const least = counts.reduce((a, b) => (b.n < a.n ? b : a));
+    const lags = habits.length > 1 && least.n < Math.max(...counts.map((c) => c.n));
+    const laggard = lags ? ` · ${least.i.title || "Untitled"} ${least.n} of ${n}${repeats === "week" ? " weeks" : ""}` : "";
+    if (repeats === "week") {
+      const ticked = habits.filter((i) => isTicked(s, i, t)).length;
+      return `${repeatsLabel(repeats)} · ${ticked === habits.length ? "all done this week" : `${ticked} of ${habits.length} done this week`}${laggard}`;
+    }
+    const full = periods.filter((d) => habits.every((i) => s.checklist_ticks.some((k) => k.item_id === i.id && k.day === d))).length;
+    return `${repeatsLabel(repeats)} · all done ${full} of the last 7 days${laggard}`;
   };
 
   // The subscribed Outlook calendar, two weeks either side: Look back reads what meetings left behind, Upcoming what's ahead.
@@ -538,7 +553,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       },
     },
     // Checklists: a checklist is a trigger for new actions (GTD); its items stay as they are.
-    { id: "rv.checkaction", label: "New next action", group: "Review", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui) },
+    { id: "rv.checkaction", label: "New next action", group: "Review", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui, "", focusRow?.kind === "checklist" ? (s.checklists.find((c) => c.id === focusRow.id)?.project_id ?? null) : null) },
     ...notClear.slice(0, 10).map((x, n) => ({
       id: `rv.jump${n + 1}`,
       label: `Go to step: ${x.st.title}`,
@@ -687,7 +702,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects", checklists: "Items" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects", checklists: "Progress" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
     { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date", checklists: "Last finished" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={["someday", "clear", "lookback", "checklists"].includes(step.id) ? "plain" : "due"} /> },
   ];

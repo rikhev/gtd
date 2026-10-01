@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { getMeta, getState, mutate, notify, plural, stamp, uid } from "./store.ts";
-import { addDays, formatLong, fromIso, today } from "../shared/dates.ts";
+import { addDays, formatLong, fromIso, iso, today } from "../shared/dates.ts";
 import type { Checklist, ChecklistItem, ChecklistTick, ID, Op, State } from "../shared/types.ts";
 
 /**
@@ -46,11 +46,17 @@ export function useOpenChecklist(): ID | null {
 }
 export const openChecklistId = () => open;
 
+/** The item a checklist opens on (a search hit names one), kept until the cursor is there. */
+let landing: ID | null = null;
+export const landingItem = () => landing;
+export const landed = () => void (landing = null);
+
 /**
  * Opens a checklist (or, with null, goes back to every checklist). Inside the Checklists view each step is a history
  * entry; from elsewhere the view change makes the entry, so `history: false` only sets where it will land.
  */
-export function openChecklist(id: ID | null, history = true) {
+export function openChecklist(id: ID | null, history = true, at: ID | null = null) {
+  landing = at;
   if (id === open) return;
   open = id;
   if (history) window.history.pushState(null, "", id ? `#checklists/${encodeURIComponent(id)}` : "#checklists");
@@ -138,8 +144,8 @@ export function progress(s: Lists, id: ID, t = today()) {
 }
 
 /**
- * Repeat every day or every week, or not at all. Turning it on carries today's ticks over as today's records;
- * turning it off keeps the records (the history) and leaves this period's ticks ticked.
+ * Repeat every day or every week, or not at all. Turning it on carries today's ticks over as today's records and
+ * clears older ones (they are no record of any day the habit was kept); turning it off keeps the records (the history) and leaves this period's ticks ticked.
  */
 export function setRepeats(ids: ID[], repeats: Repeats | null) {
   const s = getState();
@@ -150,7 +156,8 @@ export function setRepeats(ids: ID[], repeats: Repeats | null) {
     for (const i of itemsOf(s, c.id).filter((x) => !x.section)) {
       if (repeats && !c.repeats && i.checked_at) {
         ops.push({ type: "patch", table: "checklist_items", id: i.id, data: { checked_at: null } });
-        if (!ticksNow(s, i, repeats, t).length) ops.push({ type: "create", table: "checklist_ticks", row: { id: uid(), item_id: i.id, checklist_id: c.id, day: t, created_at: stamp() } });
+        // Only a tick made today is a record of today; older ones are cleared, never dated today.
+        if (iso(new Date(i.checked_at)) === t && !ticksNow(s, i, repeats, t).length) ops.push({ type: "create", table: "checklist_ticks", row: { id: uid(), item_id: i.id, checklist_id: c.id, day: t, created_at: stamp() } });
       }
       if (!repeats && c.repeats && ticksNow(s, i, c.repeats, t).length) ops.push({ type: "patch", table: "checklist_items", id: i.id, data: { checked_at: stamp() } });
     }

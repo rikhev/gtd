@@ -142,6 +142,8 @@ export function useNotice() {
 interface UndoEntry {
   label: string;
   inverse: Op[];
+  /** Names a step a later one may join or take back (a new row, before it is named). */
+  key?: string;
 }
 const undoStack: UndoEntry[] = [];
 
@@ -249,15 +251,33 @@ function stampTrash(ops: Op[]): Op[] {
   });
 }
 
-export function mutate(label: string, rawOps: Op[], opts: { silent?: boolean } = {}) {
+/**
+ * Applies ops as one undoable step. `key` names the step; `join` folds this one into the last step when that step
+ * has the key (a new row and its name are one ⌘Z); `undoable: false` keeps it off the stack.
+ */
+export function mutate(label: string, rawOps: Op[], opts: { silent?: boolean; key?: string; join?: string; undoable?: boolean } = {}) {
   if (!rawOps.length) return;
   const ops = stampTrash(touchActions(dropStaleWaiting(rawOps)));
   const inverse = invert(ops);
   applyLocal(ops);
   void send(ops);
-  undoStack.push({ label, inverse });
-  if (undoStack.length > 200) undoStack.shift();
+  const top = undoStack[undoStack.length - 1];
+  if (opts.undoable === false) {
+    // Kept off the stack.
+  } else if (opts.join && top?.key === opts.join) {
+    undoStack[undoStack.length - 1] = { label, inverse: [...inverse, ...top.inverse] };
+  } else {
+    undoStack.push({ label, inverse, key: opts.key });
+    if (undoStack.length > 200) undoStack.shift();
+  }
   if (!opts.silent) notify(label, { undo: true });
+}
+
+/** Takes back the last step if it has this key (a new row left blank was never really there). */
+export function forgetUndo(key: string): boolean {
+  if (undoStack[undoStack.length - 1]?.key !== key) return false;
+  undoStack.pop();
+  return true;
 }
 
 export function undo() {

@@ -37,8 +37,9 @@ export function DoneBox({ done, title, onToggle, label }: { done: boolean; title
       type="button"
       role="checkbox"
       aria-checked={done}
-      // A checklist ticks rather than marks done ("Tick “Passport”"): the words are then the caller's.
-      aria-label={label ? `${done ? label[1] : label[0]} “${title}”` : done ? `Mark “${title}” not done` : `Mark “${title}” done`}
+      // A checklist ticks rather than marks done: its box keeps one name ("Tick “Passport”") and says checked or not,
+      // so a screen reader never hears "Untick …, checked".
+      aria-label={label ? `${label[0]} “${title}”` : done ? `Mark “${title}” not done` : `Mark “${title}” done`}
       title={label ? (done ? label[1] : label[0]) : done ? "Mark not done" : "Mark done"}
       tabIndex={-1}
       className={`done-box ${done ? "is-checked" : ""}`}

@@ -480,7 +480,7 @@ export default function App() {
     },
     { id: "g.paste", label: "Paste into the Inbox", group: "Capture", displayKeys: ["mod+v"], run: () => notify(`Press ${keyLabel("mod+v")} with a list focused to paste into the Inbox`) },
     { id: "g.upload", label: "Upload files to the Inbox", group: "Capture", keys: ["mod+o"], hidden: view === "inbox", run: () => document.querySelector<HTMLInputElement>("#global-upload")?.click() },
-    { id: "g.exportzip", label: "Export everything as Markdown (.zip)", group: "Data", run: () => (window.location.href = "/api/export/zip") },
+    { id: "g.exportzip", label: "Export everything as Markdown (.zip)", group: "Data", run: () => (window.location.href = `/api/export/zip?today=${today()}`) },
     { id: "g.exportjson", label: "Export everything as JSON", group: "Data", run: () => (window.location.href = "/api/export/json") },
     { id: "g.reload", label: "Reload lists", group: "Data", run: () => void load().then(() => notify("Reloaded")) },
     { id: "g.signout", label: "Sign out", group: "Account", enabled: meta.authRequired, run: () => void signOut() },

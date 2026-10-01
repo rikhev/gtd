@@ -143,14 +143,15 @@ export function destinationItems(prefix = "") {
  * The last step of adding from anywhere: the item's project, if it has one ("No project" first; typing a new name
  * creates the project). `make` builds the action for the chosen project.
  */
-function askProjectThenCreate(ui: UI, title: string, extra: Op[], make: (project_id: ID | null) => Action, what: string) {
+function askProjectThenCreate(ui: UI, title: string, extra: Op[], make: (project_id: ID | null) => Action, what: string, project: ID | null = null) {
   window.setTimeout(
     () =>
       ui.openPicker({
         type: "list",
         title: `Project for “${title}”`,
         items: projectItems(),
-        current: null,
+        // Offered first when the words come from something that supports a project (a checklist's item).
+        current: project && getState().projects.some((p) => p.id === project && p.status !== "trashed") ? project : null,
         noneLabel: "No project",
         createLabel: (q) => `Create project “${q}”`,
         onCreate: (q) => {
@@ -170,7 +171,7 @@ function askProjectThenCreate(ui: UI, title: string, extra: Op[], make: (project
  * A next action from anywhere (⌥T): what to do, where (a context, required as everywhere), then its project if it
  * has one. It lands on Next Actions; the view stays put.
  */
-export function quickAddNextAction(ui: UI, words = "") {
+export function quickAddNextAction(ui: UI, words = "", project: ID | null = null) {
   ui.openPicker({
     type: "text",
     title: "New next action",
@@ -180,7 +181,7 @@ export function quickAddNextAction(ui: UI, words = "") {
       const title = (v ?? "").trim();
       if (!title) return;
       askContext(ui, `Context for “${title}”`, (context_id, extra) =>
-        askProjectThenCreate(ui, title, extra, (project_id) => newAction({ title, context_id, project_id, status: "next" }), "Next action"),
+        askProjectThenCreate(ui, title, extra, (project_id) => newAction({ title, context_id, project_id, status: "next" }), "Next action", project),
       );
     },
   });

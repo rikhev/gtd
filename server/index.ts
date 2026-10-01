@@ -289,8 +289,9 @@ app.get("/api/export/json", (c) =>
   }),
 );
 
+// The browser sends its own today, so a routine's last four weeks are the owner's days, not the server's.
 app.get("/api/export/zip", (c) =>
-  c.body(Buffer.from(exportZip()), 200, {
+  c.body(Buffer.from(exportZip({ day: /^\d{4}-\d{2}-\d{2}$/.test(c.req.query("today") ?? "") ? c.req.query("today") : undefined, weekStart: weekStart() })), 200, {
     "Content-Type": "application/zip",
     "Content-Disposition": `attachment; filename="gtd-${today()}.zip"`,
   }),

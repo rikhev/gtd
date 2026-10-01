@@ -25,21 +25,39 @@ const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on",
 /** The View menu's sorts: the same state the column headings set (null is the list's own, manual order). */
 const SORTS: [string | null, string][] = [[null, "Manual order"], ["due", "Due date"], ["subject", "Subject"], ["ctx", "Context"], ["time", "Time estimate"], ["energy", "Energy"]];
 
-export function InlineEdit({ value, onDone, placeholder }: { value: string; onDone: (v: string, how: "enter" | "cancel" | "blur") => void; placeholder: string }) {
+/**
+ * A subject edited in place. `onPasteLines` gets a pasted text of several lines (and what the field held): when it
+ * takes them (returns true), the edit ends there and the caller has done the rest.
+ */
+export function InlineEdit({
+  value,
+  onDone,
+  placeholder,
+  label = "Subject",
+  onPasteLines,
+}: {
+  value: string;
+  onDone: (v: string, how: "enter" | "cancel" | "blur") => void;
+  placeholder: string;
+  label?: string;
+  onPasteLines?: (text: string, current: string) => boolean;
+}) {
   const ref = useRef<HTMLInputElement>(null);
   const done = useRef(false);
   useEffect(() => {
     ref.current?.focus();
     ref.current?.select();
   }, []);
+  // Hand focus back to the list, so the keyboard (and a screen reader) is on the row again, not the page.
+  const backToList = () =>
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true });
+    });
   const finish = (v: string, how: "enter" | "cancel" | "blur") => {
     if (done.current) return;
     done.current = true;
     onDone(v, how);
-    // Hand focus back to the list, so the keyboard (and a screen reader) is on the row again, not the page.
-    requestAnimationFrame(() => {
-      if (document.activeElement === document.body) document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true });
-    });
+    backToList();
   };
   return (
     <input
@@ -47,7 +65,7 @@ export function InlineEdit({ value, onDone, placeholder }: { value: string; onDo
       className="inline-edit"
       defaultValue={value}
       placeholder={placeholder}
-      aria-label="Subject"
+      aria-label={label}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === "Tab") {
           e.preventDefault();
@@ -57,6 +75,14 @@ export function InlineEdit({ value, onDone, placeholder }: { value: string; onDo
           e.stopPropagation();
           finish(value, "cancel");
         }
+      }}
+      onPaste={(e) => {
+        const text = e.clipboardData.getData("text/plain");
+        if (!onPasteLines || !text.trim().includes("\n") || done.current) return;
+        if (!onPasteLines(text, e.currentTarget.value)) return;
+        e.preventDefault();
+        done.current = true;
+        backToList();
       }}
       onBlur={(e) => finish(e.currentTarget.value, "blur")}
     />

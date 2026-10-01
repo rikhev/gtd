@@ -1447,6 +1447,24 @@ body.is-col-resizing * {
 .is-focus.is-section .cl-section {
   color: var(--select-ink);
 }
+/* How many the section holds, and how far this run has got through them: quiet, at the heading's end. */
+.row.is-section .cl-section {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  min-width: 0;
+}
+.cl-section-count {
+  margin-left: auto;
+  padding-left: 12px;
+  font: 400 12px var(--font-ui);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+}
+.is-focus.is-section .cl-section-count {
+  color: var(--select-ink);
+}
 /* A habit's last four weeks: small squares, oldest first, filled in the done-mark ink where it was done and empty
    (a hairline box) where not; the current day or week sits outlined at the end. No colour: green is project health. */
 .hstrip {
@@ -1489,7 +1507,6 @@ body.is-col-resizing * {
   display: none;
 }
 
-/* A ticked checklist item is greyed and struck through like a done action, but it keeps its place. */
 .cl-run {
   color: var(--ink-2);
 }
@@ -1504,6 +1521,11 @@ body.is-col-resizing * {
 /* Only a row that is leaving folds away (done actions hidden); otherwise it stays, struck through, and sinks. */
 .row.is-striking.is-leaving {
   animation: fold 180ms 190ms ease-in forwards;
+}
+/* A ticked checklist item is greyed and struck through like a done action, but it keeps its place: the tick lands
+   at once, and while the pen draws, its line stands in for the struck-through text. */
+.row.is-done.is-striking .subject-text {
+  text-decoration: none;
 }
 .is-focus.is-striking .subject-text {
   background-image: linear-gradient(var(--select-ink), var(--select-ink));

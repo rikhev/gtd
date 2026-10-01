@@ -188,12 +188,14 @@ export function fileStuff(ui: UI, ids: ID[]) {
     const withFiles = items.filter((st) => getState().files.some((f) => f.owner_kind === "stuff" && f.owner_id === st.id));
     if (withFiles.length) return notify(`${named("stuff", withFiles.map((x) => x.id), "item")} ${withFiles.length === 1 ? "has" : "have"} files attached, and a checklist can't keep files. File as Reference to keep them.`, { tone: "error" });
     const ops: Op[] = [];
-    for (const st of items) {
+    // Each takes its own place in the manual order, one after another.
+    items.forEach((st, k) => {
       const c = newChecklist({ title: stuffTitle(st) || "Untitled checklist" });
+      c.sort += k;
       ops.push({ type: "create", table: "checklists", row: { ...c } });
       for (const it of itemsFromText(splitStuff(st).rest, c.id)) ops.push({ type: "create", table: "checklist_items", row: { ...it } });
       ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } });
-    }
+    });
     mutate(`${n(ids)} → ${items.length === 1 ? "a checklist" : "checklists"}`, ops);
   }
   /** Someday/Maybe and Reference keep the captured words as they are: there is no next action to decide yet. */

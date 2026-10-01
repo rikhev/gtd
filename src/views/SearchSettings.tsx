@@ -1,6 +1,7 @@
 import { clearEvents, type FeedInfo } from "../calendarFeed.ts";
 import { useEffect, useMemo, useState } from "react";
 import { getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
+import { today } from "../../shared/dates.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { runKey, useCommands, type Command } from "../keys.ts";
 import { ChevronDown, Download } from "lucide-react";
@@ -25,6 +26,8 @@ interface Hit {
   title: string;
   where: string;
   home: ViewId;
+  /** A checklist hit found by one of its items: the item the checklist opens on. */
+  at?: ID;
 }
 
 export function SearchView({ regionActive, query }: { regionActive: boolean; query: string }) {
@@ -69,7 +72,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
         const items = s.checklist_items.filter((i) => i.checklist_id === c.id);
         const inItem = match(c.title) ? undefined : items.find((i) => match(c.title, i.title));
         if (!match(c.title) && !inItem) return [];
-        return [{ key: `c:${c.id}`, kind: "checklist" as const, id: c.id, title: c.title, where: inItem ? `Checklists · ${inItem.title}` : "Checklists", home: "checklists" as ViewId }];
+        return [{ key: `c:${c.id}`, kind: "checklist" as const, id: c.id, title: c.title || "Untitled checklist", where: inItem ? `Checklists · ${inItem.title}` : "Checklists", home: "checklists" as ViewId, at: inItem?.id }];
       });
     return [
       { key: "actions", label: "Actions", rows: actions },
@@ -93,7 +96,8 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
   const goTo = (h: Hit) => {
     if (h.kind !== "checklist") return ui.reveal({ kind: h.kind, id: h.id });
     ui.go("checklists");
-    openChecklist(h.id);
+    // A hit on an item opens the checklist with the cursor on it.
+    openChecklist(h.id, true, h.at ?? null);
   };
   const commands: Command[] = [
     ...nav.commands,
@@ -209,7 +213,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         label: "Export",
         hideCount: true,
         rows: [
-          { key: "zip", kind: "export" as const, id: "/api/export/zip", text: "Markdown files (.zip)" },
+          { key: "zip", kind: "export" as const, id: `/api/export/zip?today=${today()}`, text: "Markdown files (.zip)" },
           { key: "json", kind: "export" as const, id: "/api/export/json", text: "JSON" },
         ],
       },

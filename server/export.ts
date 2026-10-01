@@ -1,6 +1,6 @@
 import { zipSync, strToU8 } from "fflate";
 import { loadState } from "./db.ts";
-import { formatTime, recurrenceLabel, parseRecurrence } from "../shared/dates.ts";
+import { addDays, formatTime, fromIso, recurrenceLabel, parseRecurrence, today } from "../shared/dates.ts";
 import type { Action, State } from "../shared/types.ts";
 
 export function exportJson(): string {
@@ -28,7 +28,11 @@ function actionLine(s: State, a: Action): string {
   return `- ${box} ${a.title}${bits.length ? `  _(${bits.join(" · ")})_` : ""}${notes}`;
 }
 
-export function exportZip(): Uint8Array {
+/**
+ * `day` is the owner's today, as their browser has it (a server may keep another time zone); `weekStart` the week's
+ * first day (0 Sunday, 1 Monday), for routines that repeat weekly.
+ */
+export function exportZip({ day = today(), weekStart = 1 }: { day?: string; weekStart?: 0 | 1 } = {}): Uint8Array {
   const s = loadState();
   const files: Record<string, Uint8Array> = {};
   const md = (name: string, title: string, body: string) => (files[name] = strToU8(`# ${title}\n\n${body.trim()}\n`));
@@ -99,14 +103,17 @@ export function exportZip(): Uint8Array {
       .sort((a, b) => a.title.localeCompare(b.title))
       .map((c) => {
         const area = s.areas.find((a) => a.id === c.area_id)?.name;
-        // A routine lists each habit with how often it was done in the last four weeks.
-        const since = new Date(Date.now() - 27 * 86_400_000).toISOString().slice(0, 10);
-        const daysDone = (id: string) => new Set(s.checklist_ticks.filter((k) => k.item_id === id && k.day >= since).map((k) => k.day)).size;
+        // A routine lists each habit with how often it was done in the last four weeks: in days, or in weeks.
+        const weekOf = (d: string) => addDays(d, -((fromIso(d).getDay() - weekStart + 7) % 7));
+        const since = c.repeats === "week" ? addDays(weekOf(day), -21) : addDays(day, -27);
+        const kept = (id: string) =>
+          new Set(s.checklist_ticks.filter((k) => k.item_id === id && k.day >= since && k.day <= day).map((k) => (c.repeats === "week" ? weekOf(k.day) : k.day))).size;
+        const record = (id: string) => (c.repeats === "week" ? `done in ${kept(id)} of the last 4 weeks` : `done on ${kept(id)} of the last 28 days`);
         const items = s.checklist_items
           .filter((i) => i.checklist_id === c.id)
           .sort((a, b) => a.sort - b.sort)
           .map((i) =>
-            i.section ? `\n### ${i.title}\n` : c.repeats ? `- ${i.title}  _(done on ${daysDone(i.id)} of the last 28 days)_` : `- [${i.checked_at ? "x" : " "}] ${i.title}`,
+            i.section ? `\n### ${i.title}\n` : c.repeats ? `- ${i.title}  _(${record(i.id)})_` : `- [${i.checked_at ? "x" : " "}] ${i.title}`,
           );
         const repeats = c.repeats === "day" ? "Repeats every day\n" : c.repeats === "week" ? "Repeats every week\n" : "";
         const project = s.projects.find((p) => p.id === c.project_id)?.title;
