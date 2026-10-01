@@ -1,7 +1,7 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks } from "lucide-react";
-import { mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
+import { quote, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
@@ -104,7 +104,7 @@ function TextField({
   );
 }
 
-// The panes print no keys (owner's request: they are found in ⌘K and ⇧?, and each field announces its own). On a
+// The panes print no keys (owner's request: they are found in ⌘K, and each field announces its own). On a
 // touch screen an Inbox item's two ways forward stay, as buttons to tap.
 const STUFF_TOUCH: { k: string; label: string }[] = [
   { k: "v", label: "File as" },
@@ -442,7 +442,7 @@ function ActionDetail({ a }: { a: Action }) {
   return (
     <>
       {/* Important or done is the one thing the fields don't say, so its mark leads the subject, as on the list row. */}
-      <TextField label="Subject" lead={done ? <Marker done /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      <TextField label="Subject" lead={done ? <Marker done /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
       {/* The shared grid (see rows above): every kind's fields in the same places. */}
       <div className="field-grid">
         {layout}
@@ -656,7 +656,7 @@ function ProjectDetail({ p }: { p: Project }) {
   return (
     <>
       {/* Area and status live in their own fields below; the head only carries the project's health, beside its name. */}
-      <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} start={p.start} appt={nextAppt} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} start={p.start} appt={nextAppt} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
       {/* GTD's one planning question, optional and on one line (owner's rule: faithful, but no routine admin). */}
       <TextField label="Done looks like" value={p.outcome ?? ""} onCommit={(v) => patch("projects", p.id, { outcome: v })} placeholder="Optional: what will be true when it's done" />
       <div className="field-grid">
@@ -880,7 +880,7 @@ function RefDetail({ r }: { r: Ref }) {
   const proj = s.projects.find((p) => p.id === r.project_id);
   return (
     <>
-      <TextField label="Title" value={r.title} onCommit={(v) => patch("refs", r.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      <TextField label="Title" value={r.title} onCommit={(v) => patch("refs", r.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
       <PickField
         label="Project"
         k="P"

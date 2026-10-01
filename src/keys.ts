@@ -20,11 +20,11 @@ export interface Command {
   run: () => void;
   /** Also fire while a text field has focus. */
   inInput?: boolean;
-  /** Also fire in a text field, but only while it is empty (⇧? there has nothing to be a "?" in yet). */
-  inEmptyInput?: boolean;
   enabled?: boolean;
-  /** Hidden from palette/help (e.g. aliases). */
+  /** Hidden from the palette (e.g. aliases). */
   hidden?: boolean;
+  /** Acts on the row (or item) under the cursor: the palette lists it first, under that row's name. */
+  row?: boolean;
 }
 
 interface Layer {
@@ -202,7 +202,7 @@ export function installKeyHandler() {
     for (const cmd of activeCommands()) {
       if (!cmd.keys) continue;
       if (!cmd.keys.some((k) => candidates.includes(k))) continue;
-      if (editing && !cmd.inInput && !(cmd.inEmptyInput && !(e.target as HTMLInputElement).value)) continue;
+      if (editing && !cmd.inInput) continue;
       e.preventDefault();
       e.stopPropagation();
       cmd.run();

@@ -136,9 +136,9 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
 
   const commands: Command[] = [
     ...nav.commands,
-    { id: "del.restore", label: "Restore (put back where it was)", group: "Trash", keys: ["r"], enabled: Boolean(focus), run: () => restore(targets()) },
-    { id: "del.open", label: "Open details", group: "Trash", keys: ["enter"], enabled: Boolean(focus && opens(focus.kind)), run: () => focus && opens(focus.kind) && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
-    { id: "del.purge", label: "Delete for good", group: "Trash", keys: ["backspace", "delete", "shift+backspace", "shift+delete"], enabled: Boolean(focus), run: () => purge(targets()) },
+    { id: "del.restore", row: true, label: "Restore (put back where it was)", group: "Trash", keys: ["r"], enabled: Boolean(focus), run: () => restore(targets()) },
+    { id: "del.open", row: true, label: "Open details", group: "Trash", keys: ["enter"], enabled: Boolean(focus && opens(focus.kind)), run: () => focus && opens(focus.kind) && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
+    { id: "del.purge", row: true, label: "Delete for good", group: "Trash", keys: ["backspace", "delete", "shift+backspace", "shift+delete"], enabled: Boolean(focus), run: () => purge(targets()) },
     { id: "del.empty", label: `Empty the Trash${all.length ? ` (${plural(all.length, "item")})` : ""}`, group: "Trash", keys: [], enabled: all.length > 0, run: () => purge(all, `Trash emptied (${plural(all.length, "item")})`) },
   ];
   useCommands("list:trash", commands, { priority: 10, active: regionActive });

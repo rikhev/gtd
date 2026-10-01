@@ -56,7 +56,7 @@ export function Picker({ spec, close }: Props) {
     return () => window.removeEventListener("pointerdown", outside, true);
   }, [close]);
 
-  // The picker's own keys (its field handles them) are listed for the keys view, which ⇧? opens here too.
+  // The picker's own keys (its field handles them) are listed for the palette, which ⌘K opens here too.
   const noop = () => {};
   useCommands(
     "picker",
@@ -67,7 +67,8 @@ export function Picker({ spec, close }: Props) {
       ...(spec.type === "list" && spec.onPickMore ? [{ id: "picker.more", label: "Pick this and keep choosing", group: "Picker", displayKeys: ["shift+enter"], run: noop }] : []),
       ...(spec.type === "time" ? [{ id: "picker.digits", label: "A length by its number (0 clears)", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),
       ...(spec.type === "energy" ? [{ id: "picker.digits", label: "A level by its number (0 clears)", group: "Picker", displayKeys: ["1–3"], run: noop }] : []),
-      { id: "picker.keys", label: "Keys on this screen", group: "Help", keys: ["?"], inEmptyInput: true, run: ui.openHelp },
+      // ⌘K works in a picker too, listing its keys (it holds every other key while it is open).
+      { id: "picker.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     ],
     { priority: 200, exclusive: true, title: spec.type === "time" ? "Time estimate" : spec.type === "energy" ? "Energy" : spec.title },
   );

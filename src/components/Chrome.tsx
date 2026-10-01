@@ -599,8 +599,6 @@ export function Toast() {
 /* Command palette and shortcut overlay                                 */
 /* ------------------------------------------------------------------ */
 
-/** Palette order: what you used lately, then this screen's own commands, then going places, then cursor movement. */
-const GENERIC_GROUPS: Record<string, number> = { Details: 2, "Go to": 2, Capture: 2, Help: 2, Edit: 2, Data: 2, Settings: 2, Move: 3, Select: 3 };
 const RECENT_KEY = "palette:recent";
 function recentIds(): string[] {
   try {
@@ -617,8 +615,6 @@ function rememberCommand(id: string) {
   }
 }
 
-const PALETTE_SECTIONS = ["Recent", "This screen", "Go to and more", "Moving around"] as const;
-
 // The app-wide keys, regrouped by what they are for (their palette groups are finer than a cheat sheet needs).
 const EVERYWHERE: { title: string; groups: string[]; order?: string[] }[] = [
   { title: "Add", groups: ["Capture", "Projects", "Actions"], order: ["g.capture", "g.paste", "g.upload", "g.newaction", "g.newwaiting", "g.newproject"] },
@@ -629,7 +625,7 @@ const EVERYWHERE: { title: string; groups: string[]; order?: string[] }[] = [
 // A screen's own list movement is the same on every list: it goes after what the screen itself does.
 const LAST = ["Move", "Select"];
 
-/** Where the keys view says it is: the topmost region that has keys of its own ("Details pane", "Weekly Review · Projects"). */
+/** Where the palette says it is: the topmost region that has keys of its own ("Details pane", "Weekly Review · Projects"). */
 export function paletteScope(entries: LayeredCommand[], viewTitle: string): string {
   const top = entries.find((e) => e.layer !== "global" && e.layer !== "capture" && e.layer !== "searchbox");
   if (!top) return viewTitle;
@@ -640,73 +636,83 @@ export function paletteScope(entries: LayeredCommand[], viewTitle: string): stri
   return viewTitle;
 }
 
-type Row = { c: Command; layer: string; head?: string; quiet?: boolean };
+type Row = { c: Command; layer: string; head?: string; quiet?: boolean; named?: boolean; key: string };
 
 /**
- * The command palette, ⌘K: every command, found by typing. ⇧? opens it on the keys of the place you are (the keys
- * view, which replaced the separate cheat sheet): that region's commands under their own groups, each with every key
- * it answers to, then the app-wide ones, quieter, under Everywhere. Typing searches every command either way;
- * Backspace on an empty line leaves the keys view for the whole palette.
+ * The command palette, ⌘K. It follows focus (owner's decision after the keys critique, which folded the ⇧? cheat sheet
+ * into it): what you used lately first, then what you can do to the row (or item, or details pane) under the cursor,
+ * under its name, then the rest of the place you are in by group, moving around last; the app-wide commands follow,
+ * quieter, under Everywhere. Every command shows every key it answers to. Typing searches every command, nearest first.
  */
-export function Palette({ entries, mode: start, where, close }: { entries: LayeredCommand[]; mode: "all" | "keys"; where: string; close: () => void }) {
+export function Palette({ entries, where, rowName, close }: { entries: LayeredCommand[]; where: string; rowName: string; close: () => void }) {
   const [q, setQ] = useState("");
-  const [mode, setMode] = useState(start);
   const [hi, setHi] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   useCommands("palette", [{ id: "palette.close", label: "Close", group: "Palette", keys: ["escape"], inInput: true, run: close }], { priority: 300, exclusive: true });
-  const layer = useMemo(() => new Map(entries.map((e) => [e.command.id, e.layer])), [entries]);
-  const section = (c: Command): 0 | 1 | 2 | 3 => {
-    if (recentIds().includes(c.id)) return 0;
-    if (GENERIC_GROUPS[c.group] === 3) return 3;
-    return layer.get(c.id) === "global" ? 2 : 1;
-  };
 
   const rows: Row[] = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const commands = entries.map((e) => e.command);
-    if (mode === "keys" && !needle) {
-      // A key does one thing at a time: list only the command it would run now (the first claimant).
-      const claimed = new Set<string>();
-      const page = new Map<string, Row[]>();
-      const global: Row[] = [];
-      for (const { layer: l, command: c } of entries) {
-        const keys = c.keys?.length ? c.keys : (c.displayKeys ?? []);
-        if (keys.length && keys.every((k) => claimed.has(k))) continue;
-        keys.forEach((k) => claimed.add(k));
-        if (l === "global") global.push({ c, layer: l, quiet: true });
-        else page.set(c.group, [...(page.get(c.group) ?? []), { c, layer: l }]);
-      }
-      const rank = (g: string) => LAST.indexOf(g);
-      const out: Row[] = [];
-      for (const [g, rs] of [...page.entries()].sort(([a], [b]) => rank(a) - rank(b))) rs.forEach((r, i) => out.push({ ...r, head: i === 0 ? g : undefined }));
-      const used = new Set<string>();
-      for (const { title, groups, order } of EVERYWHERE) {
-        const rs = global.filter((r) => groups.includes(r.c.group));
-        if (order) rs.sort((x, y) => (order.indexOf(x.c.id) + 1 || 99) - (order.indexOf(y.c.id) + 1 || 99));
-        rs.forEach((r, i) => {
-          used.add(r.c.id);
-          out.push({ ...r, head: i === 0 ? `Everywhere · ${title}` : undefined });
-        });
-      }
-      global.filter((r) => !used.has(r.c.id)).forEach((r, i) => out.push({ ...r, head: i === 0 ? "Everywhere · More" : undefined }));
-      return out;
-    }
     const recent = recentIds();
-    const rank = (c: Command) => {
-      const r = recent.indexOf(c.id);
-      return r >= 0 ? r - 10 : section(c);
-    };
-    const sorted = !needle
-      ? [...commands].sort((a, b) => rank(a) - rank(b))
-      : commands
-          .filter((c) => needle.split(/\s+/).every((w) => `${c.label} ${c.group}`.toLowerCase().includes(w)))
-          .sort((a, b) => Number(!a.label.toLowerCase().startsWith(needle)) - Number(!b.label.toLowerCase().startsWith(needle)) || rank(a) - rank(b));
-    // Section headings only while browsing: Recent · This screen · Go to and more · Moving around.
-    return sorted.map((c, i) => ({ c, layer: layer.get(c.id) ?? "", head: !needle && (i === 0 || section(sorted[i - 1]) !== section(c)) ? PALETTE_SECTIONS[section(c)] : undefined }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, mode, entries]);
-  useEffect(() => setHi(0), [q, mode]);
+    // The details pane is about one item: all its commands act on it.
+    const onRow = (e: LayeredCommand) => e.layer !== "global" && (e.command.row || e.layer.startsWith("detail"));
+    // Nearest first: the row's commands, the place's own, app-wide ones, then moving around.
+    const rank = (e: LayeredCommand) => (onRow(e) ? 0 : LAST.includes(e.command.group) ? 3 : e.layer === "global" ? 2 : 1);
+    if (needle) {
+      return entries
+        .filter(({ command: c }) => needle.split(/\s+/).every((w) => `${c.label} ${c.group}`.toLowerCase().includes(w)))
+        .sort(
+          (a, b) =>
+            Number(!a.command.label.toLowerCase().startsWith(needle)) - Number(!b.command.label.toLowerCase().startsWith(needle)) ||
+            (recent.indexOf(a.command.id) + 1 || 99) - (recent.indexOf(b.command.id) + 1 || 99) ||
+            rank(a) - rank(b),
+        )
+        .map((e) => ({ c: e.command, layer: e.layer, key: e.command.id }));
+    }
+    // A key does one thing at a time: list only the command it would run now (the first claimant).
+    const claimed = new Set<string>();
+    const live = entries.filter(({ command: c }) => {
+      const keys = c.keys?.length ? c.keys : (c.displayKeys ?? []);
+      if (keys.length && keys.every((k) => claimed.has(k))) return false;
+      keys.forEach((k) => claimed.add(k));
+      return true;
+    });
+    const out: Row[] = [];
+    const add = (list: LayeredCommand[], head: string, quiet = false, prefix = "", named = false) =>
+      list.forEach((e, i) => out.push({ c: e.command, layer: e.layer, head: i === 0 ? head : undefined, quiet, named, key: `${prefix}${e.command.id}` }));
+    // Recent: the last five used that can run here; they stay in their own places below as well.
+    add(
+      recent.map((id) => live.find((e) => e.command.id === id)).filter((e): e is LayeredCommand => Boolean(e)),
+      "Recent",
+      false,
+      "recent:",
+    );
+    // The row under the cursor (or the item in the details pane), by name; its fields after.
+    const row = live.filter(onRow);
+    const name = rowName || "The row under the cursor";
+    add(row.filter((e) => e.command.group !== "Fields"), name, false, "", true);
+    add(row.filter((e) => e.command.group === "Fields"), `${name} · Fields`, false, "", true);
+    // The rest of this place, by group, moving around last.
+    const page = new Map<string, LayeredCommand[]>();
+    for (const e of live) if (e.layer !== "global" && !onRow(e)) page.set(e.command.group, [...(page.get(e.command.group) ?? []), e]);
+    for (const [g, list] of [...page.entries()].sort(([a], [b]) => LAST.indexOf(a) - LAST.indexOf(b))) add(list, g === where ? where : `${where} · ${g}`);
+    // Everywhere, quieter.
+    const global = live.filter((e) => e.layer === "global");
+    const used = new Set<string>();
+    for (const { title, groups, order } of EVERYWHERE) {
+      const list = global.filter((e) => groups.includes(e.command.group));
+      if (order) list.sort((x, y) => (order.indexOf(x.command.id) + 1 || 99) - (order.indexOf(y.command.id) + 1 || 99));
+      list.forEach((e) => used.add(e.command.id));
+      add(list, `Everywhere · ${title}`, true);
+    }
+    add(
+      global.filter((e) => !used.has(e.command.id)),
+      "Everywhere · More",
+      true,
+    );
+    return out;
+  }, [q, entries, where, rowName]);
+  useEffect(() => setHi(0), [q]);
   useEffect(() => {
     document.getElementById(`pal-${hi}`)?.scrollIntoView({ block: "nearest" });
   }, [hi]);
@@ -722,22 +728,19 @@ export function Palette({ entries, mode: start, where, close }: { entries: Layer
     const seen = new Set<string>();
     return [...(c.keys ?? []), ...(c.displayKeys ?? [])].filter((k) => !seen.has(keyLabel(k)) && Boolean(seen.add(keyLabel(k))));
   };
-  const keysView = mode === "keys" && !q.trim();
 
   return (
     <div className="overlay" onMouseDown={close}>
-      <div className={`palette ${keysView ? "is-keys" : ""}`} role="dialog" aria-modal="true" aria-label={keysView ? `Keys: ${where}` : "Command palette"} onMouseDown={(e) => e.stopPropagation()}>
-        {mode === "keys" && (
-          <div className="palette-scope">
-            <span className="palette-scope-name">Keys · {where}</span>
-            <span className="muted-text">Type to find any command</span>
-          </div>
-        )}
+      <div className="palette" role="dialog" aria-modal="true" aria-label={`Commands: ${where}`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="palette-scope">
+          <span className="palette-scope-name">{where}</span>
+          <span className="muted-text">Type to find any command</span>
+        </div>
         <input
           ref={input}
           className="palette-input"
           value={q}
-          placeholder={mode === "keys" ? "Find a command" : "Type a command"}
+          placeholder="Find a command"
           role="combobox"
           aria-label="Command"
           aria-expanded="true"
@@ -758,26 +761,22 @@ export function Palette({ entries, mode: start, where, close }: { entries: Layer
             } else if (e.key === "Tab") {
               // The palette is a modal: Tab stays on its line.
               e.preventDefault();
-            } else if (e.key === "Backspace" && !q && mode === "keys") {
-              // Out of the keys view, to every command.
-              e.preventDefault();
-              setMode("all");
             }
           }}
         />
-        <ul className="palette-list" id="palette-list" role="listbox" aria-label={keysView ? `Keys: ${where}` : "Commands"}>
+        <ul className="palette-list" id="palette-list" role="listbox" aria-label={`Commands: ${where}`}>
           {rows.map((r, i) => [
             r.head && (
-              <li key={`h-${i}`} className={`pal-section ${r.quiet ? "is-quiet" : ""}`} role="presentation">
+              <li key={`h-${i}`} className={`pal-section ${r.quiet ? "is-quiet" : ""} ${r.named ? "is-named" : ""}`} role="presentation">
                 {r.head}
               </li>
             ),
             <li
-              key={r.c.id}
+              key={r.key}
               id={`pal-${i}`}
               role="option"
               aria-selected={i === hi}
-              className={`${i === hi ? "is-hi" : ""} ${r.quiet && keysView ? "is-quiet" : ""}`}
+              className={`${i === hi ? "is-hi" : ""} ${r.quiet && !q.trim() ? "is-quiet" : ""}`}
               onMouseEnter={() => setHi(i)}
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -785,7 +784,7 @@ export function Palette({ entries, mode: start, where, close }: { entries: Layer
               }}
             >
               <span className="pal-label">{r.c.label}</span>
-              {!keysView && <span className="pal-group">{r.c.group}</span>}
+              {q.trim() && <span className="pal-group">{r.c.group}</span>}
               <span className="pal-keys">
                 {keysOf(r.c).map((k) => (
                   <Kbd key={k} k={k} />

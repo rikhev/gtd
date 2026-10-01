@@ -2331,7 +2331,7 @@ textarea.field-text {
   font-size: var(--fs-title);
 }
 .palette-list {
-  max-height: 55vh;
+  max-height: 64vh;
 }
 /* A long label wraps (a phone) and its row grows with it, never into the next. */
 .palette-list li:not(.pal-section) {
@@ -2363,7 +2363,7 @@ textarea.field-text {
     linear-gradient(color-mix(in srgb, var(--ink) 9%, transparent), transparent) top / 100% 8px no-repeat scroll,
     linear-gradient(transparent, color-mix(in srgb, var(--ink) 9%, transparent)) bottom / 100% 8px no-repeat scroll;
 }
-/* The keys view (⇧?): where it is, then that place's keys; the app-wide ones follow, quieter. */
+/* The palette (⌘K) names where it is, then lists that place's commands, nearest first; the app-wide ones follow, quieter. */
 .palette-scope {
   display: flex;
   align-items: baseline;
@@ -2377,11 +2377,15 @@ textarea.field-text {
   font-weight: 600;
   color: var(--ink);
 }
-.palette.is-keys .palette-list {
-  max-height: 64vh;
-}
 .palette-list li.is-quiet:not(.is-hi) {
   color: var(--ink-2);
+}
+/* The row's own group is headed by its name, in its own case: "“Launch the site”", not label caps. */
+.palette-list li.pal-section.is-named {
+  font: 600 var(--fs-body) var(--font-ui);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
 }
 .palette-list li.pal-section.is-quiet {
   color: var(--ink-3);

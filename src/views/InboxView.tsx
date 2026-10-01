@@ -108,11 +108,12 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "inbox.new", label: "Capture", group: "Inbox", keys: ["n"], run: ui.focusCapture },
     { id: "inbox.clarify", label: "Clarify", group: "Inbox", keys: ["k"], run: () => ui.startClarify(), enabled: rows.length > 0 },
-    { id: "inbox.open", label: "Open details", group: "Inbox", keys: ["enter"], run: () => focusId && ui.openDetail({ kind: "stuff", id: focusId }, true), enabled: Boolean(focusId) },
-    { id: "inbox.rename", label: "Rename", group: "Inbox", keys: ["f2"], run: () => focusId && setEditing(focusId), enabled: Boolean(focusId) },
-    { id: "inbox.file", label: "File", group: "Inbox", keys: ["v"], run: () => fileStuff(ui, nav.targets()), enabled: Boolean(focusId) },
+    { id: "inbox.open", row: true, label: "Open details", group: "Inbox", keys: ["enter"], run: () => focusId && ui.openDetail({ kind: "stuff", id: focusId }, true), enabled: Boolean(focusId) },
+    { id: "inbox.rename", row: true, label: "Rename", group: "Inbox", keys: ["f2"], run: () => focusId && setEditing(focusId), enabled: Boolean(focusId) },
+    { id: "inbox.file", row: true, label: "File", group: "Inbox", keys: ["v"], run: () => fileStuff(ui, nav.targets()), enabled: Boolean(focusId) },
     {
       id: "inbox.done",
+      row: true,
       label: "Done already (two-minute rule), or not done",
       group: "Inbox",
       keys: ["e"],
@@ -123,6 +124,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     { id: "inbox.showdone", label: showDone ? "Hide done items" : "Show done items", group: "View", run: () => setShowDone(!showDone) },
     {
       id: "inbox.trash",
+      row: true,
       label: "Trash",
       group: "Inbox",
       keys: ["backspace", "delete"],
@@ -131,6 +133,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "inbox.delete",
+      row: true,
       label: "Delete permanently",
       group: "Inbox",
       keys: ["shift+backspace", "shift+delete"],

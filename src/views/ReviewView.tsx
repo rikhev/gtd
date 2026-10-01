@@ -512,6 +512,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     { id: "rv.clarify", label: "Clarify", group: "Row", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: clarify },
     {
       id: "rv.addnext",
+      row: true,
       label: "Add a next action to this project",
       group: "Add",
       keys: ["t", "n"],
@@ -520,6 +521,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.addwaiting",
+      row: true,
       label: "Add a waiting for to this project",
       group: "Add",
       keys: ["w"],
@@ -530,6 +532,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     // Next actions and Waiting for steps T and W add beside the row, in its project, as they do on those lists.
     {
       id: "rv.followup",
+      row: true,
       label: step.id === "lookback" ? "Add a follow-up next action" : "Add a next action (to this row's project)",
       group: "Add",
       keys: ["t"],
@@ -542,6 +545,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.followwait",
+      row: true,
       label: step.id === "lookback" ? "Add a follow-up waiting for" : "Add a waiting for (to this row's project)",
       group: "Add",
       keys: ["w"],
@@ -553,7 +557,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       },
     },
     // Checklists: a checklist is a trigger for new actions (GTD); its items stay as they are.
-    { id: "rv.checkaction", label: "New next action", group: "Add", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui, "", focusRow?.kind === "checklist" ? (s.checklists.find((c) => c.id === focusRow.id)?.project_id ?? null) : null) },
+    { id: "rv.checkaction", row: true, label: "New next action", group: "Add", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui, "", focusRow?.kind === "checklist" ? (s.checklists.find((c) => c.id === focusRow.id)?.project_id ?? null) : null) },
     ...notClear.slice(0, 10).map((x, n) => ({
       id: `rv.jump${n + 1}`,
       label: `Go to step: ${x.st.title}`,
@@ -563,13 +567,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       hidden: true,
       run: () => setStepIdx(x.i),
     })),
-    { id: "rv.file", label: "File", group: "Row", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
+    { id: "rv.file", row: true, label: "File", group: "Row", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Step", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Step", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Reviewed: next step", group: "Step", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
     {
       // P as on every list: an appointment is linked to a project, an action set in one.
       id: "rv.project",
+      row: true,
       label: focusRow?.kind === "event" ? "Link the appointment to a project" : "Set project",
       group: "Fields",
       keys: ["p"],
@@ -583,6 +588,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.jump",
+      row: true,
       label: "Jump to its project",
       group: "Row",
       keys: ["j"],
@@ -591,6 +597,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.open",
+      row: true,
       label: focusRow?.kind === "checklist" ? "Open the checklist" : "Open details",
       group: "Row",
       keys: ["enter"],
@@ -607,6 +614,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.done",
+      row: true,
       label: step.id === "someday" ? "Activate" : "Mark done",
       group: "Row",
       // E is Done everywhere; bringing a someday item back to life is A (Activate).
@@ -627,6 +635,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.current",
+      row: true,
       label: "Reviewed: still current",
       group: "Row",
       keys: ["r"],
@@ -635,6 +644,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.rename",
+      row: true,
       label: "Rename",
       group: "Row",
       keys: ["f2"],
@@ -643,6 +653,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.newproject",
+      row: true,
       label: focusRow?.kind === "goal" ? "New project for this goal" : "New project in this area",
       group: "Add",
       keys: ["n"],
@@ -660,6 +671,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     }),
     {
       id: "rv.trash",
+      row: true,
       label: "Trash",
       group: "Row",
       keys: ["backspace", "delete"],

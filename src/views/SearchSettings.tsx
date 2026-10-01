@@ -103,6 +103,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
     ...nav.commands,
     {
       id: "search.go",
+      row: true,
       label: "Go to item",
       group: "Search",
       keys: ["enter"],
@@ -255,6 +256,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     ...TABS.map((t, i) => ({ id: `set.tab.${t.id}`, label: `Settings: ${t.title}`, group: "Settings", keys: [String(i + 1)], run: () => setTab(t.id) })),
     {
       id: "set.export",
+      row: true,
       label: "Download this export",
       group: "Settings",
       keys: ["enter"],
@@ -263,6 +265,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.stall",
+      row: true,
       label: "Change when projects count as idle",
       group: "Settings",
       keys: ["enter", "f2"],
@@ -285,6 +288,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.week",
+      row: true,
       label: "Choose the first day of the week",
       group: "Settings",
       keys: ["enter", "f2"],
@@ -303,6 +307,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.hours",
+      row: true,
       label: "Choose the hours the week shows",
       group: "Settings",
       keys: ["enter", "f2"],
@@ -331,6 +336,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     { id: "set.addfeed", label: "Add a calendar (Outlook, iCloud…)", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
     {
       id: "set.feedlink",
+      row: true,
       label: "Replace this calendar's link",
       group: "Settings",
       keys: ["enter"],
@@ -348,6 +354,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.feedname",
+      row: true,
       label: "Rename this calendar",
       group: "Settings",
       keys: ["f2"],
@@ -364,6 +371,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.feedcolor",
+      row: true,
       label: "Change this calendar's colour",
       group: "Settings",
       keys: ["c"],
@@ -380,6 +388,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.feeddelete",
+      row: true,
       label: "Remove this calendar",
       group: "Settings",
       keys: ["backspace", "delete"],
@@ -388,6 +397,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.trash",
+      row: true,
       label: "Change how long deleted items are kept",
       group: "Settings",
       keys: ["enter", "f2"],
@@ -409,6 +419,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.theme",
+      row: true,
       label: "Choose the theme: light, dark or the system's",
       group: "Settings",
       keys: ["enter", "f2"],
@@ -430,7 +441,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           },
         }),
     },
-    { id: "set.edit", label: "Rename", group: "Settings", keys: ["f2"], enabled: listRow, run: () => cur && setEditing(cur.key) },
+    { id: "set.edit", row: true, label: "Rename", group: "Settings", keys: ["f2"], enabled: listRow, run: () => cur && setEditing(cur.key) },
     {
       id: "set.new",
       label: groupOfFocus === "contexts" ? "New context" : "New area",
@@ -453,6 +464,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "set.delete",
+      row: true,
       label: "Delete",
       group: "Settings",
       keys: ["backspace", "delete"],
@@ -473,10 +485,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         }
       },
     },
-    { id: "set.areaup", label: "Move area up", group: "Settings", keys: ["alt+arrowup"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, -1) },
-    { id: "set.areadown", label: "Move area down", group: "Settings", keys: ["alt+arrowdown"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, 1) },
+    { id: "set.areaup", row: true, label: "Move area up", group: "Settings", keys: ["alt+arrowup"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, -1) },
+    { id: "set.areadown", row: true, label: "Move area down", group: "Settings", keys: ["alt+arrowdown"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, 1) },
     {
       id: "set.color",
+      row: true,
       label: cur?.kind === "area" ? "Change area colour" : "Change context colour",
       group: "Settings",
       keys: ["c"],

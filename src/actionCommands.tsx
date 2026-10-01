@@ -544,7 +544,7 @@ export function actionRowCommands(
     { id: "row.trash", label: "Trash", group: o.group, keys: ["backspace", "delete"], run: () => trash(false) },
     { id: "row.delete", label: "Delete permanently", group: o.group, keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },
   ];
-  return all.filter((c) => !o.skip?.includes(c.id)).map((c) => ({ ...c, enabled: has }));
+  return all.filter((c) => !o.skip?.includes(c.id)).map((c) => ({ ...c, enabled: has, row: true }));
 }
 
 export function useActionCommands(opts: {
@@ -631,6 +631,7 @@ export function useActionCommands(opts: {
     // T and W add, as on Projects and Agendas: a next action or a waiting for in the focused row's project (or on its own).
     {
       id: "act.addnext",
+      row: true,
       label: (() => {
         const row = opts.focusId ? getState().actions.find((a) => a.id === opts.focusId) : undefined;
         return row && isChase(row) ? "Chase it: make the follow-up a next action" : "Add a next action (to this row's project)";
@@ -639,13 +640,13 @@ export function useActionCommands(opts: {
       keys: ["t"],
       run: () => addBeside("next"),
     },
-    { id: "act.addwait", label: "Add a waiting for (to this row's project)", group: "Actions", keys: ["w"], run: () => addBeside("waiting") },
+    { id: "act.addwait", row: true, label: "Add a waiting for (to this row's project)", group: "Actions", keys: ["w"], run: () => addBeside("waiting") },
     opts.doneView
-      ? { id: "act.reopen", label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
-      : { id: "act.done", label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
+      ? { id: "act.reopen", row: true, label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
+      : { id: "act.done", row: true, label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
     ...actionRowCommands(ui, { targets: pick, focusId: opts.focusId, group: "Actions", rename: setEditing, waiting: opts.waitingView }),
-    { id: "act.up", label: "Move row up", group: "Actions", keys: ["alt+arrowup"], run: () => reorder(-1) },
-    { id: "act.down", label: "Move row down", group: "Actions", keys: ["alt+arrowdown"], run: () => reorder(1) },
+    { id: "act.up", row: true, label: "Move row up", group: "Actions", keys: ["alt+arrowup"], run: () => reorder(-1) },
+    { id: "act.down", row: true, label: "Move row down", group: "Actions", keys: ["alt+arrowdown"], run: () => reorder(1) },
   ].map((c) => (["act.new", "act.addnext", "act.addwait"].includes(c.id) || c.id.startsWith("row.") ? c : { ...c, enabled: c.enabled ?? has() }));
 
   const commitTitle = (id: ID, title: string) => {

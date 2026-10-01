@@ -4,7 +4,7 @@ import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, onHold, plural, signOut } from "./store.ts";
+import { quote, archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
@@ -42,6 +42,23 @@ const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "pr
 /** The view an address belongs to: "#checklists/…" (one checklist, open) is still Checklists. */
 const hashView = (hash: string) => hash.slice(1).split("/")[0];
 /** The address of the checklist open in Checklists, if one is. */
+/**
+ * The name of what the cursor is on, for the palette's first group ("“Launch the site”"): the item in the details
+ * pane when the pane has the keys, else the focused row of the active list, else the focused calendar item.
+ */
+function focusedName(): string {
+  const pane = document.querySelector<HTMLElement>(".detail .field-title");
+  if (pane && document.activeElement?.closest(".detail")) {
+    const field = pane.matches("input, textarea") ? pane : pane.querySelector<HTMLElement>("input, textarea");
+    return quote((field as HTMLInputElement | null)?.value ?? pane.textContent ?? "");
+  }
+  const row = document.querySelector<HTMLElement>(".grid.is-active .row.is-focus");
+  if (row) return quote((row.querySelector(".subject-text") ?? row.querySelector(".c-subject") ?? row).textContent ?? "");
+  const item = document.querySelector<HTMLElement>(".list-region [data-focused]");
+  if (item) return quote((item.getAttribute("title") ?? item.innerText).split("\n")[0]);
+  return "";
+}
+
 const openChecklistHash = () => (/^#checklists\/.+/.test(window.location.hash) ? window.location.hash : null);
 function viewFromHash(): ViewId | null {
   const h = hashView(window.location.hash) as ViewId;
@@ -116,8 +133,8 @@ export default function App() {
   }, []);
   const [picker, setPicker] = useState<PickerSpec | null>(null);
   const [pickerSeq, setPickerSeq] = useState(0);
-  // The palette, ⌘K, or its keys view, ⇧?: what it lists is taken as it opens, before it takes the keys.
-  const [palette, setPalette] = useState<{ entries: LayeredCommand[]; mode: "all" | "keys"; where: string } | null>(null);
+  // The palette, ⌘K: what it lists is taken as it opens, before it takes the keys, with where the focus is.
+  const [palette, setPalette] = useState<{ entries: LayeredCommand[]; where: string; rowName: string } | null>(null);
 
   // A press outside the detail pane takes the keys out of it (owner's request): on a list row the row's list becomes
   // the active region with that row under the cursor, anywhere else the list does, and a control outside (the rail,
@@ -294,10 +311,9 @@ export default function App() {
       },
       pickerOpen: Boolean(picker),
       focusCapture: () => captureRef.current?.focus(),
-      openPalette: () => setPalette({ entries: paletteSnapshot(), mode: "all", where: "" }),
-      openHelp: () => {
+      openPalette: () => {
         const entries = paletteSnapshot();
-        setPalette({ entries, mode: "keys", where: paletteScope(entries, VIEW_TITLES[viewNow.current] ?? "This screen") });
+        setPalette({ entries, where: paletteScope(entries, VIEW_TITLES[viewNow.current] ?? "This screen"), rowName: focusedName() });
       },
       openSearch: () => {
         if (view !== "search") prevView.current = view;
@@ -443,8 +459,6 @@ export default function App() {
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
     { id: "g.palette", label: "Command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
-    // ⇧? works from an empty text field too (the review's Mind sweep opens in one); with words in it, ? is typed.
-    { id: "g.help", label: "Keys on this screen", group: "Help", keys: ["?"], inEmptyInput: true, run: ui.openHelp },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
     // K clarifies: you decide, one item at a time.
     { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },

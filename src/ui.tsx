@@ -96,7 +96,6 @@ export interface UI {
   pickerOpen: boolean;
   focusCapture: () => void;
   openPalette: () => void;
-  openHelp: () => void;
   openSearch: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;

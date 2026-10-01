@@ -498,16 +498,17 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         else if (cursorItems.length) setItemKey(cursorItems[0].key);
       },
     },
-    { id: "cal.out", label: "Back to the day", group: "Calendar", keys: ["escape"], enabled: inItem, run: () => setItemKey(null) },
+    { id: "cal.out", row: true, label: "Back to the day", group: "Calendar", keys: ["escape"], enabled: inItem, run: () => setItemKey(null) },
     { id: "cal.new", label: "New action for this day (day-specific)", group: "Calendar", keys: ["t", "n"], run: () => newOn(cursor) },
     { id: "cal.soft", label: soft ? "Hide soft dates (starts and ticklers)" : "Show soft dates (starts and ticklers)", group: "View", run: () => setSoft(!soft) },
     { id: "cal.wait", label: "New waiting for, follow up on this day", group: "Calendar", keys: ["w"], run: () => waitOn(cursor) },
-    { id: "cal.later", label: "Move a day later", group: "Calendar", keys: ["alt+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "move") },
-    { id: "cal.earlier", label: "Move a day earlier", group: "Calendar", keys: ["alt+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "move") },
-    { id: "cal.longer", label: "End a day later", group: "Calendar", keys: ["alt+shift+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "end") },
-    { id: "cal.shorter", label: "End a day earlier", group: "Calendar", keys: ["alt+shift+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "end") },
+    { id: "cal.later", row: true, label: "Move a day later", group: "Calendar", keys: ["alt+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "move") },
+    { id: "cal.earlier", row: true, label: "Move a day earlier", group: "Calendar", keys: ["alt+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "move") },
+    { id: "cal.longer", row: true, label: "End a day later", group: "Calendar", keys: ["alt+shift+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "end") },
+    { id: "cal.shorter", row: true, label: "End a day earlier", group: "Calendar", keys: ["alt+shift+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "end") },
     {
       id: "cal.done",
+      row: true,
       label: "Mark done",
       group: "Calendar",
       keys: ["e"],
@@ -517,6 +518,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     {
       // Your own things only (owner's request): an appointment belongs to its calendar and is deleted there.
       id: "cal.trash",
+      row: true,
       label: focusItem?.kind === "project" ? "Trash the project (and its open actions)" : "Trash",
       group: "Calendar",
       keys: ["backspace", "delete"],
@@ -526,6 +528,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     {
       // D is the follow-up on a waiting item, the due date on anything else, as on the lists.
       id: "cal.due",
+      row: true,
       label: focusWaiting ? "Follow-up date" : "Due date",
       group: "Fields",
       keys: ["d"],
@@ -534,6 +537,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "cal.start",
+      row: true,
       label: "Start date",
       group: "Fields",
       keys: ["s"],
@@ -542,6 +546,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "cal.jump",
+      row: true,
       label: "Jump to its project",
       group: "Calendar",
       keys: ["j"],
@@ -550,6 +555,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "cal.project",
+      row: true,
       label: focusItem?.kind === "event" ? "Link the appointment to a project" : "Set project",
       group: "Fields",
       keys: ["p"],
