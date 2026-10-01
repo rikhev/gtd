@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { BookOpen, Circle, FileText, Layers, ListChecks, Mail, StickyNote } from "lucide-react";
+import { BookOpen, Circle, FileText, Layers, ListChecks, Mail, StickyNote, Target } from "lucide-react";
 import { mutate, plural, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
@@ -9,7 +9,7 @@ import { stuffTitle } from "./InboxView.tsx";
 import { daysBetween, formatDate, today } from "../../shared/dates.ts";
 import type { ID, Op, State, TableName } from "../../shared/types.ts";
 
-type Kind = "action" | "project" | "stuff" | "ref" | "checklist";
+type Kind = "action" | "project" | "stuff" | "ref" | "checklist" | "horizon";
 interface Row {
   key: string;
   kind: Kind;
@@ -23,12 +23,12 @@ interface Row {
   icon?: "email" | "file" | "note";
 }
 
-const TABLE: Record<Kind, TableName> = { action: "actions", project: "projects", stuff: "stuff", ref: "refs", checklist: "checklists" };
-const LIST_NAMES: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", done: "Done" };
+const TABLE: Record<Kind, TableName> = { action: "actions", project: "projects", stuff: "stuff", ref: "refs", checklist: "checklists", horizon: "horizons" };
+const LIST_NAMES: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned (its project)", done: "Done" };
 /** What a restored item goes back to when it doesn't know what it was (deleted before this was tracked). */
-const HOME: Record<Kind, string> = { action: "next", project: "active", stuff: "inbox", ref: "active", checklist: "active" };
+const HOME: Record<Kind, string> = { action: "next", project: "active", stuff: "inbox", ref: "active", checklist: "active", horizon: "active" };
 /** Checklists have no details pane: in the Trash they are restored or deleted, not opened. */
-const opens = (k: Kind): k is Exclude<Kind, "checklist"> => k !== "checklist";
+const opens = (k: Kind): k is Exclude<Kind, "checklist" | "horizon"> => k !== "checklist" && k !== "horizon";
 
 function rowsOf(s: State, keepDays: number): Row[] {
   const now = Date.now();
@@ -56,6 +56,10 @@ function rowsOf(s: State, keepDays: number): Row[] {
   for (const c of s.checklists) {
     if (c.status !== "trashed" || !alive(c.trashed_at)) continue;
     out.push({ key: `c:${c.id}`, kind: "checklist", id: c.id, title: c.title || "Untitled checklist", from: "Checklists", at: c.trashed_at, left: leftOf(c.trashed_at) });
+  }
+  for (const h of s.horizons) {
+    if (h.status !== "trashed" || !alive(h.trashed_at)) continue;
+    out.push({ key: `h:${h.id}`, kind: "horizon", id: h.id, title: h.title || "Untitled", from: "Horizons", at: h.trashed_at, left: leftOf(h.trashed_at) });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
@@ -152,6 +156,8 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
       <BookOpen size={14} strokeWidth={1.75} aria-label="Reference" />
     ) : r.kind === "checklist" ? (
       <ListChecks size={14} strokeWidth={1.75} aria-label="Checklist" />
+    ) : r.kind === "horizon" ? (
+      <Target size={14} strokeWidth={1.75} aria-label="Horizon" />
     ) : r.icon === "email" ? (
       <Mail size={14} strokeWidth={1.75} aria-label="Email" />
     ) : r.icon === "file" ? (

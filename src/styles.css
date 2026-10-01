@@ -1329,26 +1329,6 @@ body.is-col-resizing * {
   opacity: 0;
   transition: stroke-dashoffset 380ms var(--ease), opacity 60ms;
 }
-/* Important: an alert-red exclamation mark, as classic Outlook marks high importance. */
-.marker .imp-bar,
-.marker .imp-dot {
-  fill: var(--alert);
-}
-/* Marking drops the mark onto the row. */
-.marker.is-flagged .leaf {
-  animation: leaf-in 220ms var(--ease) both;
-}
-@keyframes leaf-in {
-  from {
-    transform: translateY(-4px);
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .marker.is-flagged .leaf {
-    animation: none;
-  }
-}
 .marker.is-done .tick {
   stroke-dashoffset: 0;
   opacity: 1;
@@ -1382,40 +1362,6 @@ body.is-col-resizing * {
 }
 .is-focus .marker .tick {
   stroke: var(--select-ink);
-}
-
-/* The importance column: the marker is a button. Unmarked, hovering it shows a faint outline of the mark. */
-.flag-btn {
-  position: relative;
-  display: inline-flex;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  border-radius: 3px;
-  vertical-align: middle;
-  flex: none;
-}
-.flag-ghost {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 120ms var(--ease);
-}
-.flag-ghost .imp-bar,
-.flag-ghost .imp-dot {
-  fill: none;
-  stroke: var(--ink-3);
-  stroke-width: 1.1;
-  stroke-linejoin: round;
-}
-.flag-btn:hover .flag-ghost {
-  opacity: 1;
-}
-.flag-btn:hover .marker.is-chase {
-  opacity: 0;
 }
 
 /* The Complete box (classic Outlook's task checkbox): a 12px square in the row's quiet ink; checked, a tick.
@@ -2908,6 +2854,21 @@ textarea.field-text {
   padding: 0 0 10px;
   border-bottom: 1px solid var(--rule);
 }
+/* Allen's three phases name themselves where each begins: plain ink-3 text, quieter than the steps, with a hairline
+   before every phase but the first. */
+.review-phase {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.review-phase:not(:first-child) {
+  margin-left: 8px;
+  border-left: 1px solid var(--rule);
+}
 .review-steps button {
   display: flex;
   align-items: center;
@@ -3409,11 +3370,6 @@ textarea.field-text {
   outline: none;
 }
 
-/* Important reads twice: the red mark and a bolder subject. */
-.row.is-flagged .subject-text {
-  font-weight: 600;
-}
-
 /* The detail pane takes focus as a whole when opened; its header bar says so (see .detail.is-active), not a frame. */
 .detail:focus {
   outline: none;
@@ -3699,6 +3655,42 @@ textarea.field-text {
 .cal-agenda-week {
   display: flex;
   flex-direction: column;
+}
+/* The Day tab (the daily review): the day's hard landscape, then overdue, next actions and follow-ups, each a section
+   under a Label Caps head, in one readable column. */
+.cal-day-view {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 760px;
+  padding: 4px 0 24px;
+}
+.cal-day-h {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule-strong);
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.cal-day-note {
+  font-family: var(--font-ui);
+  font-stretch: 100%;
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+}
+.cal-day-more {
+  margin-top: 6px;
 }
 .cal-agenda-day {
   padding: 10px 0 6px;
@@ -4058,10 +4050,6 @@ textarea.field-text {
 .cal-bar.role-due .cal-sub {
   color: color-mix(in srgb, var(--sheet) 72%, transparent);
 }
-.cal-bar.role-due .cal-flag {
-  color: var(--sheet);
-  fill: var(--sheet);
-}
 .cal-bar.role-due:hover {
   border-color: var(--ink);
 }
@@ -4099,11 +4087,6 @@ textarea.field-text {
 .cal-bar.is-dragging {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent), 0 4px 10px -4px rgb(18 24 32 / 0.25);
   z-index: 2;
-}
-.cal-flag {
-  flex: none;
-  color: var(--alert);
-  fill: var(--alert);
 }
 .cal-bar svg {
   flex: none;
@@ -4447,8 +4430,7 @@ body.is-cal-dragging {
   .group-head {
     min-height: 44px;
   }
-  .done-box,
-  .flag-btn {
+  .done-box {
     width: 40px;
     height: 44px;
     align-items: center;
@@ -4798,6 +4780,14 @@ body.is-cal-dragging {
   height: 8px;
   border-radius: 50%;
   flex: none;
+}
+/* Soft dates have no calendar colour: a dashed ring in ink, solid when the layer is on. */
+.cal-soft-dot {
+  box-shadow: inset 0 0 0 1.5px var(--ink-2);
+}
+.cal-legend-item.is-off .cal-soft-dot {
+  box-shadow: none;
+  border: 1px dashed var(--ink-3);
 }
 .cal-legend-item.is-off {
   color: var(--ink-3);

@@ -16,6 +16,7 @@ const empty: State = {
   checklists: [],
   checklist_items: [],
   checklist_ticks: [],
+  horizons: [],
 };
 
 let state: State = empty;
@@ -232,7 +233,7 @@ function touchActions(ops: Op[]): Op[] {
   );
 }
 
-const TRASHABLE = new Set<TableName>(["actions", "projects", "stuff", "refs", "checklists"]);
+const TRASHABLE = new Set<TableName>(["actions", "projects", "stuff", "refs", "checklists", "horizons"]);
 /**
  * Deleting is a status: a row turning "trashed" records when (one time for the whole edit, so a project and the
  * actions deleted with it share it) and the status it had, for the Trash; any other status clears both.
@@ -317,6 +318,9 @@ export function newProject(data: Partial<Project>): Project {
     title: "",
     outcome: "",
     notes: "",
+    purpose: "",
+    ideas: "",
+    goal_id: null,
     area_id: null,
     status: "active",
     due: null,
@@ -387,7 +391,18 @@ export function completeActions(ids: ID[]) {
     }
   }
   if (!ops.length) return;
-  mutate(`${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}`, ops);
+  // Finishing a project's last current step: say what its plan has next, if anything (GTD: decide the next action).
+  const done = new Set(ids);
+  const projectIds = [...new Set(ids.map((id) => find("actions", id)?.project_id).filter((p): p is ID => Boolean(p)))];
+  const t = today();
+  const plannedNext = projectIds
+    .map((pid) => {
+      const mine = state.actions.filter((a) => a.project_id === pid && !done.has(a.id));
+      if (mine.some((a) => isCurrentStep(a, t))) return null;
+      return mine.filter((a) => a.status === "later").sort((a, b) => a.sort - b.sort)[0] ?? null;
+    })
+    .find(Boolean);
+  mutate(`${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}${plannedNext ? ` · next planned: “${plannedNext.title}” (make it current in its project)` : ""}`, ops);
 }
 
 /**
@@ -494,7 +509,8 @@ export function stallReason(s: State, p: Project): "no-next" | "idle" | null {
   const t = today();
   if (p.start && p.start >= t) return null; // not begun, or begins today: nothing to be stalled yet
   const mine = s.actions.filter((a) => a.project_id === p.id);
-  if (!mine.some((a) => a.status === "next" || a.status === "waiting")) return nextAppointment(s, p, t) ? null : "no-next";
+  // A next action deferred past today isn't current yet (it is hidden from Next Actions): it doesn't move the project.
+  if (!mine.some((a) => isCurrentStep(a, t))) return nextAppointment(s, p, t) ? null : "no-next";
   const limit = Date.now() - meta.stallWeeks * 7 * 86_400_000;
   // The idle clock runs from when the project began: its creation, or its start date if that came later.
   const began = Math.max(Date.parse(p.created_at) || 0, p.start ? Date.parse(`${p.start}T23:59:59`) || 0 : 0);
@@ -503,8 +519,18 @@ export function stallReason(s: State, p: Project): "no-next" | "idle" | null {
   return lastTouch < limit ? "idle" : null;
 }
 
+/**
+ * Stalled, in GTD's sense: an active project with no current next action (or waiting for, or upcoming appointment).
+ * Untouched for the threshold ("idle") is not stalled (owner's decision after the second GTD critique, reversing the
+ * earlier rule): it is a quiet note and a Weekly Review question, never the red lamp.
+ */
 export function isStalled(s: State, p: Project): boolean {
-  return stallReason(s, p) !== null;
+  return stallReason(s, p) === "no-next";
+}
+
+/** A project's step that is current: a next action you can do now (not deferred past today), or a waiting for. */
+export function isCurrentStep(a: Action, t = today()): boolean {
+  return (a.status === "next" && !(a.defer && a.defer > t)) || a.status === "waiting";
 }
 
 /** An open action nobody has touched for the stall threshold (shown as stale in the review). */
@@ -527,7 +553,7 @@ export function projectHealth(s: State, p: Project): ProjectHealth {
   if (notStarted(p)) return "scheduled";
   if (isStalled(s, p)) return "stalled";
   const open = s.actions.filter((a) => a.project_id === p.id);
-  if (open.some((a) => a.status === "next")) return "ok";
+  if (open.some((a) => a.status === "next" && isCurrentStep(a))) return "ok";
   if (open.some((a) => a.status === "waiting")) return "waiting";
   return startsToday(p) || nextAppointment(s, p) ? "scheduled" : "stalled";
 }

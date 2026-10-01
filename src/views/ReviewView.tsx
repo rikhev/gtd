@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, ListChecks, Mail, Paperclip, StickyNote } from "lucide-react";
-import { capture, uid, mutate, newProject, completeActions, isChase, isStale, isStalled, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { FileText, ListChecks, Mail, Paperclip, StickyNote, Target } from "lucide-react";
+import { capture, uid, mutate, newProject, completeActions, isChase, isStale, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
@@ -17,28 +17,36 @@ import { doneNow, fileStuff, trashNow } from "../fileStuff.ts";
 import { addDays, formatLong, today, daysBetween } from "../../shared/dates.ts";
 import type { Action, ID, Stuff } from "../../shared/types.ts";
 
+/**
+ * The Weekly Review in David Allen's order (2015), in his three phases (owner's decision after the GTD critique):
+ * Get Clear (collect loose papers, the Inbox to zero, empty your head), Get Current (action lists, the previous
+ * calendar, the upcoming calendar, Waiting For, projects, checklists), Get Creative (Someday/Maybe, then be creative).
+ */
 const STEPS = [
-  { id: "sweep", title: "Mind sweep", note: "Empty your head: read down the list and capture whatever it brings to mind. It all lands in the Inbox." },
-  { id: "clear", title: "Get clear", note: "Empty the Inbox so nothing is floating around." },
-  { id: "projects", title: "Projects", note: "Every active project needs a next action. Complete, defer or drop the rest." },
-  { id: "next", title: "Next actions", note: "Mark what's done. Rewrite anything vague." },
-  { id: "waiting", title: "Waiting for", note: "Chase what's overdue. Close what arrived." },
-  { id: "someday", title: "Someday / Maybe", note: "Activate anything whose time has come. Drop what no longer matters." },
-  { id: "lookback", title: "Look back", note: "What the last two weeks finished. Anything it left behind? Add the follow-up now." },
-  { id: "upcoming", title: "Upcoming", note: "Due, starting, follow-ups and tickler dates in the next two weeks." },
+  { id: "papers", phase: "Get clear", title: "Loose papers", note: "Gather the scraps: notes, receipts, business cards, papers on the desk and in the bag, wallet and pockets. Type in anything that needs a decision; it goes to the Inbox." },
+  { id: "clear", phase: "Get clear", title: "Inbox to zero", note: "Clarify everything in the Inbox, so nothing is left undecided." },
+  { id: "sweep", phase: "Get clear", title: "Mind sweep", note: "Empty your head: read down the list and capture whatever it brings to mind. It lands in the Inbox; clarify it before you finish." },
+  { id: "next", phase: "Get current", title: "Next actions", note: "Mark what's done. Rewrite anything vague." },
+  { id: "lookback", phase: "Get current", title: "Look back", note: "What the last two weeks finished. Anything it left behind? Add the follow-up now." },
+  { id: "upcoming", phase: "Get current", title: "Upcoming", note: "Due, starting, follow-ups and tickler dates in the next two weeks." },
+  { id: "waiting", phase: "Get current", title: "Waiting for", note: "Chase what's overdue. Close what arrived." },
+  { id: "projects", phase: "Get current", title: "Projects", note: "Every active project needs a next action. Complete, defer or drop the rest." },
   // GTD's last "get current" check: review any relevant checklists, as a trigger for new actions.
-  { id: "checklists", title: "Checklists", note: "Look over the checklists that bear on the weeks ahead. Anything one brings to mind becomes a next action." },
-  // GTD's Get Creative: the areas you're responsible for, and anything new they bring to mind.
-  { id: "creative", title: "Get creative", note: "Walk your areas: does each have the projects it needs? Then capture anything new: projects, ideas, someday wishes." },
-  { id: "finish", title: "Finish", note: "Record the review." },
+  { id: "checklists", phase: "Get current", title: "Checklists", note: "Look over the checklists that bear on the weeks ahead. Anything one brings to mind becomes a next action." },
+  { id: "someday", phase: "Get creative", title: "Someday / Maybe", note: "Activate anything whose time has come. Drop what no longer matters." },
+  // GTD's "be creative and courageous": the areas you're responsible for, and anything new they bring to mind.
+  { id: "creative", phase: "Get creative", title: "Get creative", note: "Walk your goals and areas: does each have the projects it needs? Then capture anything new: projects, ideas, someday wishes." },
+  { id: "finish", phase: "", title: "Finish", note: "Record the review." },
 ] as const;
+/** The order before Allen's (and before Checklists was added after Upcoming), to find a review saved without step names. */
+const OLD_ORDER = ["sweep", "clear", "projects", "next", "waiting", "someday", "lookback", "upcoming", "checklists", "creative", "finish"];
 type StepId = (typeof STEPS)[number]["id"];
-/** On Finish, a digit jumps back to an open step: 1–9, then 0 for the tenth. */
+/** On Finish, a digit jumps back to a step not clear yet, counted down that list: 1–9, then 0 for the tenth. */
 const stepKey = (i: number) => (i === 9 ? "0" : String(i + 1));
 
 interface Row {
   key: string;
-  kind: "project" | "action" | "stuff" | "area" | "event" | "checklist";
+  kind: "project" | "action" | "stuff" | "area" | "event" | "checklist" | "goal";
   id: ID;
   title: string;
   info: string;
@@ -58,7 +66,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     const s = loadSession();
     // Back on the step it was on, by name; a review saved before steps had names, and before Checklists was added
     // after Upcoming (index 8), is moved one on from there.
-    const found = s.stepId ? STEPS.findIndex((st) => st.id === s.stepId) : s.stepIdx >= 8 ? s.stepIdx + 1 : s.stepIdx;
+    // A review saved before steps had names is found by its place in the old order (before Checklists, one less).
+    const legacy = OLD_ORDER[s.stepIdx >= 8 ? s.stepIdx + 1 : s.stepIdx];
+    const found = STEPS.findIndex((st) => st.id === (s.stepId ?? legacy));
     const at = Math.max(0, Math.min(STEPS.length - 1, found));
     // Named from now on, so the move above happens once.
     const fixed = { ...s, stepIdx: at, stepId: STEPS[at].id };
@@ -173,6 +183,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     return undefined;
   };
   const projectTitle = (id: ID | null) => s.projects.find((p) => p.id === id)?.title ?? "";
+  /** Back from the tickler and not yet decided again: its "Due back" entry waits in the Inbox (or its date has come). */
+  const dueBack = (id: ID, back: string | null) => Boolean((back && back <= t) || s.stuff.some((x) => x.status === "inbox" && x.back_id === id));
   /**
    * How a routine's week went, to ask whether each habit still serves you: a daily one counts the days of the last
    * seven on which everything was done, a weekly one whether it was all done this week.
@@ -218,7 +230,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       case "projects":
         return s.projects
           .filter((p) => p.status === "active")
-          .sort((a, b) => Number(isStalled(s, b)) - Number(isStalled(s, a)) || a.sort - b.sort)
+          .sort((a, b) => Number(Boolean(stallReason(s, b))) - Number(Boolean(stallReason(s, a))) || a.sort - b.sort)
           .map((p) => ({
             key: p.id,
             kind: "project",
@@ -250,8 +262,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           }));
       case "someday":
         return [
-          ...s.projects.filter((p) => p.status === "someday").map((p) => ({ key: p.id, kind: "project" as const, id: p.id, title: p.title, info: "Project", date: p.bring_back, note: p.bring_back && p.bring_back <= t ? "Due back" : undefined })),
-          ...s.actions.filter((a) => a.status === "someday").map((a) => ({ key: a.id, kind: "action" as const, id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.bring_back, note: a.bring_back && a.bring_back <= t ? "Due back" : undefined })),
+          ...s.projects.filter((p) => p.status === "someday").map((p) => ({ key: p.id, kind: "project" as const, id: p.id, title: p.title, info: "Project", date: p.bring_back, note: dueBack(p.id, p.bring_back) ? "Due back" : undefined })),
+          ...s.actions.filter((a) => a.status === "someday").map((a) => ({ key: a.id, kind: "action" as const, id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.bring_back, note: dueBack(a.id, a.bring_back) ? "Due back" : undefined })),
         ];
       case "lookback": {
         // GTD's "review the previous calendar": everything finished in the last two weeks, newest first, since a
@@ -267,9 +279,17 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       case "creative": {
         // Each area with the active projects looking after it; an area with none is noted (it may be deliberate).
         const active = (id: ID) => s.projects.filter((p) => p.status === "active" && p.area_id === id).length;
-        return [...s.areas]
-          .sort((a, b) => a.sort - b.sort)
-          .map((a) => ({ key: a.id, kind: "area" as const, id: a.id, title: `#${a.name}`, info: plural(active(a.id), "active project"), date: null, note: active(a.id) ? undefined : "No active project" }));
+        // GTD's higher horizons too: each goal with the projects serving it; a goal with none is noted.
+        const serving = (id: ID) => s.projects.filter((p) => p.status === "active" && p.goal_id === id).length;
+        return [
+          ...s.horizons
+            .filter((h) => h.kind === "goal" && h.status === "active")
+            .sort((a, b) => a.sort - b.sort)
+            .map((g) => ({ key: g.id, kind: "goal" as const, id: g.id, title: g.title || "Untitled goal", info: plural(serving(g.id), "active project"), date: g.target, note: serving(g.id) ? undefined : "No project serves it" })),
+          ...[...s.areas]
+            .sort((a, b) => a.sort - b.sort)
+            .map((a) => ({ key: a.id, kind: "area" as const, id: a.id, title: `#${a.name}`, info: plural(active(a.id), "active project"), date: null, note: active(a.id) ? undefined : "No active project" })),
+        ];
       }
       case "checklists": {
         // Every checklist, with its area and how far a run under way has got.
@@ -316,7 +336,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const nav = useListNav(`review:${step.id}`, useMemo(() => [{ key: step.id, rowKeys: rows.map((r) => r.key), showHeader: false }], [rows, step.id]));
   const focusRow = rows.find((r) => r.key === nav.focus);
   useEffect(() => {
-    ui.followDetail(focusRow && focusRow.kind !== "area" && focusRow.kind !== "checklist" ? { kind: focusRow.kind, id: focusRow.id } : null);
+    ui.followDetail(focusRow && focusRow.kind !== "area" && focusRow.kind !== "checklist" && focusRow.kind !== "goal" ? { kind: focusRow.kind, id: focusRow.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRow?.key]);
   /** ⌘↵ on any step: you've been through it; it counts as clear once nothing in it is open. Then the next step. */
@@ -352,13 +372,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       case "clear":
         return inboxCount;
       case "projects":
-        return s.projects.filter((p) => isStalled(s, p)).length;
+        // Stalled (no next action) and idle (untouched for weeks) are both open here: the review asks about each.
+        return s.projects.filter((p) => stallReason(s, p) !== null).length;
       case "next":
         return s.actions.filter((a) => a.status === "next" && actionNote(a)).length;
       case "waiting":
         return s.actions.filter((a) => a.status === "waiting" && actionNote(a)).length;
       case "someday":
-        return [...s.projects, ...s.actions].filter((x) => x.status === "someday" && x.bring_back && x.bring_back <= t).length;
+        return [...s.projects, ...s.actions].filter((x) => x.status === "someday" && dueBack(x.id, x.bring_back)).length;
       case "upcoming": {
         // Anything whose date has already passed is open: a missed due date, follow-up, start or tickler.
         const past = (d: string | null) => Boolean(d && d < t);
@@ -428,6 +449,23 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     }
     return false;
   }
+  /** Get creative: a goal no project serves gets one here, serving it, then its first next action. */
+  const newProjectFor = (goalId: ID) => {
+    const goal = s.horizons.find((h) => h.id === goalId);
+    ui.openPicker({
+      type: "text",
+      title: `New project for “${goal?.title ?? "the goal"}”`,
+      current: "",
+      placeholder: "The outcome, verb first",
+      onPick: (v) => {
+        const title = (v ?? "").trim();
+        if (!title) return;
+        const p = newProject({ title, goal_id: goalId, area_id: goal?.area_id ?? null });
+        mutate(`New project “${title}”`, [{ type: "create", table: "projects", row: { ...p } }]);
+        window.setTimeout(() => addNextAction(p.id), 0);
+      },
+    });
+  };
   /** Get creative: an area without the project it needs gets one here, filed in it, then its first next action. */
   const newProjectIn = (areaId: ID) => {
     const area = s.areas.find((a) => a.id === areaId);
@@ -494,19 +532,19 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     // Checklists: a checklist is a trigger for new actions (GTD); its items stay as they are.
     { id: "rv.checkaction", label: "New next action", group: "Review", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui) },
-    ...STEPS.slice(0, -1).map((st, i) => ({
-      id: `rv.jump${i + 1}`,
-      label: `Go to step: ${st.title}`,
+    ...notClear.slice(0, 10).map((x, n) => ({
+      id: `rv.jump${n + 1}`,
+      label: `Go to step: ${x.st.title}`,
       group: "Review",
-      keys: [stepKey(i)],
+      keys: [stepKey(n)],
       enabled: step.id === "finish",
       hidden: true,
-      run: () => setStepIdx(i),
+      run: () => setStepIdx(x.i),
     })),
     { id: "rv.file", label: "File", group: "Review", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review (forget this one's progress)", group: "Review", keys: [], run: startOver },
     { id: "rv.finish", label: "Record the review", group: "Review", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
-    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
+    { id: "rv.here", label: step.id === "sweep" ? "My head is empty: next step" : step.id === "papers" ? "All collected: next step" : "Reviewed: next step", group: "Review", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
     {
       id: "rv.project",
       label: "Link the appointment to a project",
@@ -530,7 +568,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         if (focusRow.kind === "checklist") {
           ui.go("checklists");
           openChecklist(focusRow.id);
-        } else ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true);
+        } else if (focusRow.kind === "goal") ui.go("horizons");
+        else ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true);
       },
     },
     {
@@ -572,11 +611,11 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     {
       id: "rv.newproject",
-      label: "New project in this area",
+      label: focusRow?.kind === "goal" ? "New project for this goal" : "New project in this area",
       group: "Review",
       keys: ["n"],
-      enabled: step.id === "creative" && focusRow?.kind === "area",
-      run: () => focusRow && newProjectIn(focusRow.id),
+      enabled: step.id === "creative" && (focusRow?.kind === "area" || focusRow?.kind === "goal"),
+      run: () => focusRow && (focusRow.kind === "goal" ? newProjectFor(focusRow.id) : newProjectIn(focusRow.id)),
     },
     { id: "rv.due", label: step.id === "waiting" ? "Follow-up date" : "Due date", group: "Fields", keys: ["d"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), step.id === "waiting" ? "followup" : "due") },
     { id: "rv.back", label: "Bring back on", group: "Fields", keys: ["b"], enabled: targetsOf("action").length > 0 && step.id !== "lookback", run: () => ed.date(targetsOf("action"), "bring_back") },
@@ -606,11 +645,11 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   };
 
   const columns: Column<Row>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "area" ? null : r.kind === "checklist" ? <span className="kind-icon"><ListChecks size={14} strokeWidth={1.75} aria-hidden /></span> : r.kind === "event" ? <EventMark color={r.color} /> : r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} appt={apptOf(r.id)} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "area" ? null : r.kind === "goal" ? <span className="kind-icon"><Target size={14} strokeWidth={1.75} aria-hidden /></span> : r.kind === "checklist" ? <span className="kind-icon"><ListChecks size={14} strokeWidth={1.75} aria-hidden /></span> : r.kind === "event" ? <EventMark color={r.color} /> : r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} appt={apptOf(r.id)} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker />) },
     {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.
-      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item", creative: "Area", checklists: "Checklist" } as Record<string, string>)[step.id] ?? "",
+      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item", creative: "Goal or area", checklists: "Checklist" } as Record<string, string>)[step.id] ?? "",
       width: "minmax(220px, 2fr)",
       render: (r) =>
         renaming === r.key ? (
@@ -657,9 +696,16 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   return (
     <div className="review">
       <ol className="review-steps" aria-label="Review steps">
-        {STEPS.map((st, i) => (
+        {STEPS.map((st, i) => [
+          // Allen's three phases name themselves where each begins; screen readers hear the phase in each step's name.
+          st.phase && st.phase !== STEPS[i - 1]?.phase && (
+            <li key={`phase-${st.phase}`} className="review-phase" aria-hidden="true">
+              {st.phase}
+            </li>
+          ),
           <li key={st.id} className={`${i === stepIdx ? "is-current" : ""} ${isDone(st.id) ? "is-done" : ""}`} aria-current={i === stepIdx ? "step" : undefined}>
             <button type="button" onClick={() => setStepIdx(i)}>
+              {st.phase && <span className="visually-hidden">{st.phase}: </span>}
               {st.title}
               {openCount(st.id) > 0 && (
                 <>
@@ -671,8 +717,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
               )}
               {isDone(st.id) && <span className="visually-hidden">(done)</span>}
             </button>
-          </li>
-        ))}
+          </li>,
+        ])}
       </ol>
       <div className="review-head">
         <h2 className="review-title" tabIndex={-1}>
@@ -683,13 +729,22 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         </h2>
         {/* On a phone the step strip scrolls out of sight: say where in the review you are. */}
         <span className="step-of" aria-hidden="true">
-          Step {stepIdx + 1} of {STEPS.length}
+          {step.phase ? `${step.phase} · ` : ""}Step {stepIdx + 1} of {STEPS.length}
         </span>
         <p className="muted-text">{step.note}</p>
 
       </div>
       {step.id === "clear" && clarifying ? (
         <ClarifyView key={clarifying.run} regionActive={regionActive} host={clarifyHost} />
+      ) : step.id === "papers" ? (
+        <div className="review-panel">
+          <IdeaCapture
+            onCapture={captureHere}
+            captured={capturedHere.filter((x) => x.status === "inbox").length}
+            label="A paper or note that needs a decision"
+            placeholder="Enter puts it in the Inbox; the paper itself can go once it's typed"
+          />
+        </div>
       ) : step.id === "sweep" ? (
         <MindSweep onDone={doneHere} captured={[...capturedHere].sort((a, b) => b.created_at.localeCompare(a.created_at))} onCapture={captureHere} active={regionActive} />
       ) : step.id === "finish" ? (
@@ -702,7 +757,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           {notClear.length ? (
             <>
               <p className="muted-text">Not clear yet, if you want to go back:</p>
-              <KeyChoices choices={notClear.map((x) => ({ k: stepKey(x.i), label: `${x.st.title}: ${whyOpen(x)}`, run: () => setStepIdx(x.i) }))} />
+              <KeyChoices choices={notClear.slice(0, 10).map((x, n) => ({ k: stepKey(n), label: `${x.st.title}: ${whyOpen(x)}`, run: () => setStepIdx(x.i) }))} />
             </>
           ) : (
             <p className="muted-text">Every list has been through the review and nothing is left open.</p>
@@ -738,13 +793,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id === "projects" && focusRow?.kind === "project" ? [{ k: "t", label: "Add next action" }, { k: "w", label: "Add waiting for" }] : []),
             ...(["next", "waiting", "projects"].includes(step.id) && rows.some(isStaleRow) ? [{ k: "r", label: "Still current" }] : []),
             ...(step.id === "next" && rows.length > 0 ? [{ k: "f2", label: "Rewrite" }] : []),
-            ...(step.id === "creative" && focusRow?.kind === "area" ? [{ k: "n", label: "New project here" }] : []),
+            ...(step.id === "creative" && (focusRow?.kind === "area" || focusRow?.kind === "goal") ? [{ k: "n", label: focusRow?.kind === "goal" ? "New project for it" : "New project here" }] : []),
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
             ...(step.id === "checklists" ? [...(rows.length > 0 ? [{ k: "enter", label: "Open" }] : []), { k: "t", label: "New next action" }] : []),
-            ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Reviewed", primary: true }] : []),
-            ...(!["finish", "lookback", "sweep", "creative", "checklists"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
+            ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : step.id === "papers" ? "All collected" : "Reviewed", primary: true }] : []),
+            ...(!["finish", "lookback", "sweep", "papers", "creative", "checklists"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
           ]}
         />
       )}
@@ -790,15 +845,25 @@ const TRIGGERS: { title: string; items: [string, string][] }[] = [
 ];
 
 /** Get creative's capture line: anything new goes to the Inbox, to be clarified like everything else. */
-function IdeaCapture({ captured, onCapture }: { captured: number; onCapture: (text: string) => void }) {
+function IdeaCapture({
+  captured,
+  onCapture,
+  label = "Anything new? A project, an idea, a someday wish",
+  placeholder = "Enter puts it in the Inbox",
+}: {
+  captured: number;
+  onCapture: (text: string) => void;
+  label?: string;
+  placeholder?: string;
+}) {
   const [text, setText] = useState("");
   return (
     <label className="field idea-capture">
-      <span className="field-label">Anything new? A project, an idea, a someday wish</span>
+      <span className="field-label">{label}</span>
       <input
         className="field-text"
         value={text}
-        placeholder="Enter puts it in the Inbox"
+        placeholder={placeholder}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.metaKey || e.ctrlKey || e.defaultPrevented) return;
@@ -809,7 +874,7 @@ function IdeaCapture({ captured, onCapture }: { captured: number; onCapture: (te
           } else if (e.key === "Escape") e.currentTarget.blur();
         }}
       />
-      {captured > 0 && <span className="sweep-help">{plural(captured, "item")} captured in this review wait in the Inbox for Get clear.</span>}
+      {captured > 0 && <span className="sweep-help">{plural(captured, "item")} captured in this review wait in the Inbox; clarify them before you finish.</span>}
     </label>
   );
 }

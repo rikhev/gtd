@@ -9,30 +9,19 @@ export function Tag({ children, size = "sm" }: { children: ReactNode; size?: "sm
 }
 
 /**
- * The row marker: an empty ring, a tick when done. Marked important, it becomes a red exclamation mark, the mark
- * classic Outlook uses for a task of high importance (owner's decision: importance, not "flagged for today").
+ * The row marker: an empty ring, a tick when done; a chase (a waiting item due a follow-up) has its own mark. The
+ * Important marker was retired after the second GTD critique (owner's decision: priority is judged in the moment,
+ * against the horizons, not coded on actions).
  */
-export function Marker({ flagged, done, chase, quiet }: { flagged: boolean; done?: boolean; chase?: boolean; quiet?: boolean }) {
-  const today = flagged && !done;
-  // Beside a Done box the plain ring and the done tick would say what the box says: only the marks worth marking stay.
-  if (quiet && !today && !chase) return <span className="marker" aria-hidden="true" />;
+export function Marker({ done, chase, quiet }: { done?: boolean; chase?: boolean; quiet?: boolean }) {
+  // Beside a Done box the plain ring and the done tick would say what the box says: only the chase mark stays.
+  if (quiet && !chase) return <span className="marker" aria-hidden="true" />;
   return (
-    <span
-      className={`marker ${today ? "is-flagged" : ""} ${done ? "is-done" : ""} ${chase ? "is-chase" : ""}`}
-      role={today ? "img" : undefined}
-      aria-label={today ? "Important" : undefined}
-      title={today ? "Important" : undefined}
-    >
-      {today ? (
-        <svg className="leaf" viewBox="0 0 22 22" width="22" height="22" aria-hidden>
-          <ImportantGlyph />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden>
-          <circle className="ring" cx="11" cy="11" r="4.2" />
-          <path className="tick" pathLength={1} d="M7.4 11.3l2.4 2.4 4.9-5.2" />
-        </svg>
-      )}
+    <span className={`marker ${done ? "is-done" : ""} ${chase ? "is-chase" : ""}`}>
+      <svg viewBox="0 0 22 22" width="22" height="22" aria-hidden>
+        <circle className="ring" cx="11" cy="11" r="4.2" />
+        <path className="tick" pathLength={1} d="M7.4 11.3l2.4 2.4 4.9-5.2" />
+      </svg>
     </span>
   );
 }
@@ -68,55 +57,11 @@ export function DoneBox({ done, title, onToggle, label }: { done: boolean; title
   );
 }
 
-/**
- * The importance column, as in classic Outlook: the row's marker is a button. One click marks the action important
- * (the red exclamation mark drops in); clicking it takes it off. Otherwise hovering shows a faint outline of the mark
- * so the target is findable. Mouse-only like the Complete box; the keyboard has Ins.
- */
-export function FlagButton({ flagged, chase, title, onToggle }: { flagged: boolean; chase?: boolean; title: string; onToggle: () => void }) {
-  const stop = (e: SyntheticEvent) => e.stopPropagation();
-  return (
-    <button
-      type="button"
-      aria-pressed={flagged}
-      aria-label={flagged ? `Mark “${title}” as not important` : `Mark “${title}” as important`}
-      title={flagged ? "Important: click to unmark" : "Mark as important"}
-      tabIndex={-1}
-      className={`flag-btn ${flagged ? "is-on" : ""}`}
-      onMouseDown={stop}
-      onDoubleClick={stop}
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-    >
-      <Marker quiet flagged={flagged} chase={chase} />
-      {!flagged && (
-        <svg className="flag-ghost" viewBox="0 0 22 22" width="22" height="22" aria-hidden>
-          <ImportantGlyph />
-        </svg>
-      )}
-    </button>
-  );
-}
-
-/**
- * High importance, drawn (not a typed "!"): a tapering bar over a round dot, in a 22px box. The same shape fills the
- * marker in alert red and, outlined, is the hover hint on an unmarked row.
- */
-export function ImportantGlyph() {
-  return (
-    <>
-      <path className="imp-bar" d="M9.6 4.4h2.8l-0.55 9.2h-1.7z" />
-      <circle className="imp-dot" cx="11" cy="16.9" r="1.55" />
-    </>
-  );
-}
 
 const HEALTH_LABEL = {
   ok: "On track: has a next action",
   waiting: "Waiting: only waiting on others",
-  stalled: "Stalled: no next action, or nothing touched for weeks",
+  stalled: "Stalled: no current next action",
   someday: "Someday / Maybe",
   done: "Completed",
   scheduled: "Not started yet",

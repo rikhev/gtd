@@ -5,14 +5,14 @@ import { archiveDone, mutate, notify, plural, useStore, isChase, isDeferred } fr
 import { useUI, VIEW_TITLES } from "../ui.tsx";
 import { isTouchDevice, useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
-import { AreaName, ContextCode, DateCell, DoneBox, Energy, FlagButton, Marker, TimeCell, titleOr } from "../components/bits.tsx";
+import { AreaName, ContextCode, DateCell, DoneBox, Energy, Marker, TimeCell, titleOr } from "../components/bits.tsx";
 import { useActionCommands } from "../actionCommands.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { addDays, today, daysBetween, formatDate, formatLong, parseRecurrence, recurrenceLabel } from "../../shared/dates.ts";
 import type { Action, ActionStatus, State, ID, Op } from "../../shared/types.ts";
 
 type Mode = "next" | "waiting" | "someday" | "done";
-type GroupBy = "project" | "who" | "context" | "due" | "today" | "none";
+type GroupBy = "project" | "who" | "context" | "due" | "none";
 
 const SUBJECT_HINT: Record<Mode, string> = {
   next: "Describe the next action",
@@ -21,7 +21,7 @@ const SUBJECT_HINT: Record<Mode, string> = {
   done: "Describe the action",
 };
 
-const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", due: "Due date", today: "Importance", none: "No grouping" };
+const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", due: "Due date", none: "No grouping" };
 /** The View menu's sorts: the same state the column headings set (null is the list's own, manual order). */
 const SORTS: [string | null, string][] = [[null, "Manual order"], ["due", "Due date"], ["subject", "Subject"], ["ctx", "Context"], ["time", "Time estimate"], ["energy", "Energy"]];
 
@@ -65,8 +65,8 @@ export function InlineEdit({ value, onDone, placeholder }: { value: string; onDo
 
 /** Grouping choices per list: no project grouping where the Projects list already does that job. */
 function groupOptions(mode: Mode): GroupBy[] {
-  if (mode === "next") return ["context", "project", "due", "today", "none"];
-  if (mode === "waiting") return ["who", "project", "context", "due", "today", "none"];
+  if (mode === "next") return ["context", "project", "due", "none"];
+  if (mode === "waiting") return ["who", "project", "context", "due", "none"];
   if (mode === "someday") return ["project", "context", "due", "none"];
   return ["none"];
 }
@@ -176,12 +176,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       let key: string, label: string, order: string;
       let color: string | undefined;
       let meta: string | undefined;
-      if (groupBy === "today") {
-        // What you've marked important comes first; the rest follows.
-        key = a.flagged ? "today" : "none";
-        label = a.flagged ? "Important" : "Everything else";
-        order = a.flagged ? "0" : "9";
-      } else if (groupBy === "project") {
+      if (groupBy === "project") {
         const p = a.project_id ? projById.get(a.project_id) : undefined;
         key = p?.id ?? "none";
         label = p ? p.title || "Untitled project" : "No project";
@@ -224,7 +219,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         // Done rows sink to the bottom of their group, whatever the sort.
         mode === "done" ? g : { ...g, rows: [...g.rows.filter((a) => a.status !== "done"), ...g.rows.filter((a) => a.status === "done")] },
       ),
-      ...(elsewhereRows.length ? [{ key: "elsewhere", label: "Elsewhere", rows: elsewhereRows, meta: <span className="muted-text">other places</span> }] : []),
+      ...(elsewhereRows.length ? [{ key: "elsewhere", label: "Elsewhere", rows: elsewhereRows, meta: <span className="muted-text">{fit && (fit.minutes || fit.energy) ? "other places, or more than you have now" : "other places"}</span> }] : []),
     ],
     [baseGroups, sorters, sort, mode, elsewhereRows],
   );
@@ -250,7 +245,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       if (groupBy === "project" && projById.has(g)) return { project_id: g };
       if (groupBy === "context" && ctxById.has(g)) return { context_id: g };
       if (groupBy === "who" && g.startsWith("who:")) return { waiting_who: groups.find((x) => x.key === g)?.label };
-      if (groupBy === "today" && g === "today") return { flagged: 1 };
       return {};
     },
     step: (ids, dir) => {
@@ -350,8 +344,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         return groupKey === "none" ? { waiting_who: null } : { waiting_who: groups.find((g) => g.key === groupKey)?.label ?? null };
       case "project":
         return { project_id: groupKey === "none" ? null : groupKey };
-      case "today":
-        return { flagged: groupKey === "today" ? 1 : 0 };
       case "due":
         return (
           ({ Today: { due: t }, Tomorrow: { due: addDays(t, 1) }, "This week": { due: addDays(t, 2) }, "Within a month": { due: addDays(t, 7) }, Later: { due: addDays(t, 31) }, "No due date": { due: null } } as Record<string, Partial<Action>>)[groupKey] ?? null
@@ -426,9 +418,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     width: "30px",
     render: (a) =>
       a.status === "done" ? (
-        <Marker quiet flagged={false} />
+        <Marker quiet />
       ) : (
-        <FlagButton flagged={Boolean(a.flagged)} chase={isChase(a)} title={titleOr(a)} onToggle={() => act.flagOne(a.id)} />
+        <Marker quiet chase={isChase(a)} />
       ),
   };
   const doneCol: Column<Action> = {
@@ -601,7 +593,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
           act.striking.has(a.id) ? `is-striking ${showDone ? "" : "is-leaving"}` : "",
           a.status === "done" ? "is-done" : "",
           isDeferred(a) ? "is-deferred" : "",
-          a.flagged ? "is-flagged" : "",
         ].join(" ")
       }
       onOpen={(k) => ui.openDetail({ kind: "action", id: k }, true)}

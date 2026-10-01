@@ -23,10 +23,11 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | Keys | What they do |
 |---|---|
 | `⌃1`–`6` | Inbox · Calendar · Next Actions · Waiting For · Agendas · Projects (the rail's first group). Control on every system, also on the Mac (⌘1–8 are the browser's tabs) |
-| `⌃⇧1`–`5` | Someday · Reference · Checklists · Done · Trash (the second group and the Trash, counted from 1 again) |
+| `⌃⇧1`–`6` | Someday · Reference · Checklists · Horizons · Done · Trash (the second group and the Trash, counted from 1 again) |
 | `⌃⇧3` | Checklists: the lists you run again and again (packing, closing the month). `Enter` opens one, `E` ticks an item, `N` adds one (Enter after each starts the next), `L` makes a row a section heading, `T` makes a next action from an item, ⌥V › Start over clears the ticks, `R` makes it a routine that repeats every day or week (habits: ticks clear by themselves, a four-week strip shows the record), `Esc` goes back up |
-| `⌃⇧5` | Trash: everything deleted in the last week (Settings › Trash sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty the Trash clears it |
-| Calendar | `1` `2` `3` Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `T` today · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click an item for its details, double-click an empty day for a new action. Clicking a day or item from the next or previous month (the greyed days) picks it without turning the page |
+| `⌃⇧4` | Horizons: purpose and principles, vision (3–5 years) and goals (1–2 years). `N` adds in the group under the cursor, `E` marks a goal achieved, `A` and `D` set a goal's area and target date. On Projects, `G` sets the goal a project serves |
+| `⌃⇧6` | Trash: everything deleted in the last week (Settings › Trash sets how long). `R` restores it where it was (a project brings back the actions deleted with it), `Delete` removes it for good, ⌘K › Empty the Trash clears it |
+| Calendar | `1` `2` `3` `4` Day (the daily review) · Week · Month · Year · `←` `→` `↑` `↓` move the day · `⇧←`/`⇧→` or `PageUp`/`PageDown` the previous/next period · `Home` (or `⌥⇧Y`) today · `T`/`N` a next action due on the day · `W` a waiting for, follow up on the day · `Delete` trashes the action or project under the cursor (never an appointment) · `Enter` steps into the day's items (then `↑` `↓` between them, `Enter` details, `Esc` back) · `⌥←`/`⌥→` move the item a day · `⇧⌥←`/`⇧⌥→` its end a day · `E` done · `D`/`S` due/start · `N` a new action due that day. With the mouse: drag a bar to move it, drag either end to change that date, double-click an item for its details, double-click an empty day for a new action. Clicking a day or item from the next or previous month (the greyed days) picks it without turning the page |
 | `⇧R` | Start the Weekly Review. In it: `⌘↵` marks a step reviewed, `R` marks a flagged row "still current", `F2` rewrites a row, `N` on an area (Get creative) starts a project there |
 | `⌘⇧,` | Settings |
 | `⇧N` | Capture to the Inbox. Enter files the item and the line stays open. `⇧↵` adds a new line, Esc closes |
@@ -44,7 +45,6 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `V` `C` `P` `A` | Move to a project or list / context / project / area |
 | `D` `S` `B` `R` | Due date / start date / bring back (tickler) / repeat |
 | `M`+`1–6` `G`+`1–3` `H` | Time estimate (minutes) / energy / who it's with (their agenda) |
-| `Ins` or `⌘I` | Mark as important (again to unmark) |
 | `⇧F` | Delegate to Waiting For |
 | `Del` / `⇧Del` | Trash / delete permanently |
 | `⌥↑↓` `⌥V` | Move the selected rows up or down one place (within their group) / group and sort the view |
@@ -55,7 +55,6 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | Drag a row | Reorder it (Next Actions, Waiting For, Projects) while the list is in its own order, not sorted by a column. Dropped into another group it takes that group's value: context, waiting on, project, its importance, area or due date. The keyboard way to reorder is `⌥↑` `⌥↓` |
 | Click a column heading | Sort the list by it (again: reverse, a third time: back to the list's own order). Works the same in every list |
 | Browser Back / Forward | Move between the views you visited. Every view has its own address (`#inbox`, `#next`, `#waiting`, `#projects`, `#someday`, `#reference`, `#done`, `#review`, `#settings`), so a reload or bookmark opens the same list |
-| Click the marker area | Mark a row as important, or unmark it. The keyboard way is `Ins` |
 | Click the box | Mark an action done, as in classic Outlook: it stays on its list, greyed and struck through, at the bottom of its group. Click again (or `E`) to take it back |
 | `⇧E` | Archive every done item to Done, on every list at once: done actions (the Inbox's too) and completed projects. A list's View menu (`⌥V`) archives that list alone, and has Show/Hide done actions |
 | `I` | On Waiting For (list or details pane): when the waiting began. New items start today; set the real day when you file one later ("20 sep" means the last 20 September; a future date is refused) |
@@ -83,7 +82,6 @@ These keys work inside Clarify:
 | `⇧P` | Make the item a project (more than one step): it's named after the item, its actions go into it, and the cursor lands on the first to name the next step. Also in File as (`V`) › Whole item → New project |
 | `N` / `⌥⌫` | Add / remove an action (`⌥⌫` only on the row, not while typing, where it deletes a word) |
 | `E` | Done now (two-minute rule) |
-| `⌘.` / `⌘,` | Skip to the next / previous item |
 | `Del` | Trash the item |
 
 Uploads accept PDF, DOCX, TXT/MD, images, .eml and .msg files. The server extracts their text and shows it with the item while you clarify; nothing is sent anywhere else.

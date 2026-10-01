@@ -10,8 +10,8 @@ import { daysBetween, today } from "../../shared/dates.ts";
 /**
  * The go-to keys follow the rail from the top, counted per group so every key sits under one hand (owner's request:
  * ⌃7–9 needed a second hand). The first group is Control+1–6 (Inbox, Calendar, Next Actions, Waiting For, Agendas,
- * Projects); the second group and the Trash below it are Control+Shift+1–5 (Someday, Reference, Checklists, Done,
- * Trash): Shift
+ * Projects); the second group and the Trash below it are Control+Shift+1–6 (Someday, Reference, Checklists, Horizons,
+ * Done, Trash): Shift
  * means "the second group", counted from 1 again. Digits are read by their key, so it works on every layout. On the
  * Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs. Elsewhere the page takes
  * Ctrl+1–6 over the browser's tab switching (Chrome and Firefox allow it); Ctrl+Shift+digits are free. Control with a
@@ -35,8 +35,10 @@ export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "reference", key: go2(2) },
   // Checklists follow Reference: both non-actionable, but GTD keeps checklists as their own category (reviewed, not filed).
   { id: "checklists", key: go2(3) },
-  { id: "done", key: go2(4) },
-  { id: "trash", key: go2(5) },
+  // GTD's higher horizons (purpose, vision, goals): above the lists, looked at in the review and when weighing priority.
+  { id: "horizons", key: go2(4) },
+  { id: "done", key: go2(5) },
+  { id: "trash", key: go2(6) },
   { id: "review" },
 ];
 
@@ -47,7 +49,7 @@ export const RAIL: { id: ViewId; key?: string }[] = [
 // The calendar follows the Inbox: in GTD it is the hard landscape, checked before the lists are worked.
 const LISTS: ViewId[][] = [
   ["inbox", "calendar", "next", "waiting", "agendas", "projects"],
-  ["someday", "reference", "checklists", "done"],
+  ["someday", "reference", "checklists", "horizons", "done"],
 ];
 
 type Entry = { key: string; view: ViewId; label: string; name: string; start?: boolean };
@@ -65,7 +67,6 @@ export function Rail({ active }: { active: boolean }) {
     const inboxItems = s.stuff.filter((x) => x.status === "inbox");
     const nextActs = s.actions.filter((a) => a.status === "next");
     const overdue = nextActs.filter((a) => a.due && a.due < t).length;
-    const flagged = nextActs.filter((a) => a.flagged).length;
     const chase = s.actions.filter((a) => isChase(a, t)).length;
     const stalled = s.projects.filter((p) => isStalled(s, p)).length;
     const doneToday = s.actions.filter((a) => a.status === "done" && a.completed_at && a.completed_at.slice(0, 10) === t).length;
@@ -77,7 +78,7 @@ export function Rail({ active }: { active: boolean }) {
     const scheduled =
       s.actions.filter((a) => ["next", "waiting"].includes(a.status) && (a.due === t || a.defer === t)).length +
       s.projects.filter((p) => p.status === "active" && (p.due === t || p.start === t)).length;
-    return { inbox: inboxItems.length, overdue, flagged, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
+    return { inbox: inboxItems.length, overdue, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);
   const reviewAge = daysSinceReview(s);
@@ -85,7 +86,7 @@ export function Rail({ active }: { active: boolean }) {
 
   const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
     if (id === "inbox") return sig.inbox ? { text: String(sig.inbox) } : null;
-    if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : sig.flagged ? { text: `${sig.flagged} important` } : null;
+    if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : null;
     if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
     if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
@@ -349,7 +350,7 @@ export function TabBar() {
   const [more, setMore] = useState(false);
   const inboxItems = s.stuff.filter((x) => x.status === "inbox");
   const inbox = inboxItems.length;
-  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "checklists", "done", "trash", "settings"];
+  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "checklists", "horizons", "done", "trash", "settings"];
   // The phone's system check, as in the rail: is the review due, and how old is the oldest thing in the Inbox?
   const t = today();
   const reviewAge = daysSinceReview(s);

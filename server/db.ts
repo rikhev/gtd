@@ -17,8 +17,8 @@ export const COLUMNS: Record<TableName, string[]> = {
     "status", "waiting_who", "waiting_since", "followup", "recurrence", "bring_back", "sort", "created_at", "completed_at", "updated_at",
     "done_from", "archived_at", "trashed_at", "trashed_from", "person",
   ],
-  projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at", "trashed_at", "trashed_from", "start"],
-  stuff: ["id", "text", "kind", "status", "created_at", "processed_at", "trashed_at", "trashed_from"],
+  projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at", "trashed_at", "trashed_from", "start", "purpose", "ideas", "goal_id"],
+  stuff: ["id", "text", "kind", "status", "created_at", "processed_at", "trashed_at", "trashed_from", "back_kind", "back_id"],
   refs: ["id", "title", "notes", "project_id", "status", "created_at", "trashed_at", "trashed_from", "updated_at"],
   contexts: ["id", "name", "color", "sort"],
   areas: ["id", "name", "sort", "color"],
@@ -28,6 +28,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id"],
   checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at"],
   checklist_ticks: ["id", "item_id", "checklist_id", "day", "created_at"],
+  horizons: ["id", "kind", "title", "notes", "area_id", "target", "status", "sort", "created_at", "completed_at", "trashed_at", "trashed_from"],
 };
 
 db.exec(`
@@ -73,6 +74,11 @@ CREATE TABLE IF NOT EXISTS checklist_items (
 );
 CREATE TABLE IF NOT EXISTS checklist_ticks (
   id TEXT PRIMARY KEY, item_id TEXT NOT NULL, checklist_id TEXT NOT NULL, day TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS horizons (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', area_id TEXT,
+  target TEXT, status TEXT NOT NULL DEFAULT 'active', sort REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+  completed_at TEXT, trashed_at TEXT, trashed_from TEXT
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
@@ -134,6 +140,16 @@ for (const [was, now] of [["#0f8a8a", "#0e8181"], ["#b7791f", "#9f691b"]]) {
   for (const t of ["contexts", "areas"]) db.prepare(`UPDATE ${t} SET color = ? WHERE lower(color) = ?`).run(now, was);
 }
 
+// The tickler brings an item back by pointing at it from the Inbox, never by copying it (GTD critique, P0).
+if (!(db.prepare("PRAGMA table_info(stuff)").all() as { name: string }[]).some((c) => c.name === "back_id")) {
+  db.exec("ALTER TABLE stuff ADD COLUMN back_kind TEXT");
+  db.exec("ALTER TABLE stuff ADD COLUMN back_id TEXT");
+}
+// Natural planning on projects (purpose, ideas) and the goal a project serves (GTD critique, horizons).
+for (const col of ["purpose TEXT NOT NULL DEFAULT ''", "ideas TEXT NOT NULL DEFAULT ''", "goal_id TEXT"]) {
+  const name = col.split(" ")[0];
+  if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).some((c) => c.name === name)) db.exec(`ALTER TABLE projects ADD COLUMN ${col}`);
+}
 // Checklists can repeat (habits): every day or every week.
 if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).some((c) => c.name === "repeats")) {
   db.exec("ALTER TABLE checklists ADD COLUMN repeats TEXT");
@@ -172,11 +188,15 @@ function seed() {
 }
 seed();
 
-// The project title is the outcome; any text left in the old separate outcome field moves into the notes once.
-db.exec(`UPDATE projects
+// The project title is the outcome; any text left in the old separate outcome field moved into the notes, once. Since
+// the GTD critique the field is "Done looks like" again, so this must never run twice: it is marked done in settings.
+if (getSetting("outcomeMoved", "0") !== "1") {
+  db.exec(`UPDATE projects
   SET notes = CASE WHEN trim(notes) = '' THEN 'Outcome: ' || outcome ELSE 'Outcome: ' || outcome || char(10) || char(10) || notes END,
       outcome = ''
   WHERE trim(outcome) <> ''`);
+  setSetting("outcomeMoved", "1");
+}
 
 // Actions back on Next or Someday no longer wait on anyone; clear what earlier versions left behind.
 db.exec(`UPDATE actions SET waiting_who = NULL, waiting_since = NULL, followup = NULL
@@ -202,6 +222,7 @@ export function loadState(): State {
     checklists: all("checklists"),
     checklist_items: all("checklist_items"),
     checklist_ticks: all("checklist_ticks"),
+    horizons: all("horizons"),
   };
 }
 
@@ -250,7 +271,7 @@ export function deleteRow(table: TableName, id: string) {
   db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
 }
 
-const TRASHABLE = new Set(["actions", "projects", "stuff", "refs", "checklists"]);
+const TRASHABLE = new Set(["actions", "projects", "stuff", "refs", "checklists", "horizons"]);
 
 /**
  * Deleting is a status: when a row turns "trashed" it records when (one time for the whole batch, so a project

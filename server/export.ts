@@ -52,13 +52,32 @@ export function exportZip(): Uint8Array {
       .map((p) => {
         const area = s.areas.find((a) => a.id === p.area_id)?.name;
         const acts = s.actions.filter((a) => a.project_id === p.id && a.status !== "trashed").map((a) => actionLine(s, a));
-        return `## ${p.title}\n\n${area ? `Area: ${area}\n` : ""}${
+        const goal = s.horizons.find((h) => h.id === p.goal_id)?.title;
+        // Natural planning first (why, done looks like, ideas), then the notes and the actions.
+        const plan = [p.purpose && `Why: ${p.purpose}`, p.outcome && `Done looks like: ${p.outcome}`, goal && `Goal: ${goal}`, p.ideas && `Ideas:\n${p.ideas}`].filter(Boolean).join("\n");
+        return `## ${p.title}\n\n${area ? `Area: ${area}\n` : ""}${plan ? `${plan}\n` : ""}${
           p.notes ? `\n${p.notes}\n` : ""
         }\n${acts.join("\n")}`;
       })
       .join("\n\n"),
   );
   md("reference.md", "Reference", s.refs.filter((r) => r.status === "active").map((r) => `## ${r.title}\n\n${r.notes}`).join("\n\n"));
+  md(
+    "horizons.md",
+    "Horizons",
+    (["purpose", "vision", "goal"] as const)
+      .map((kind) => {
+        const rows = s.horizons.filter((h) => h.kind === kind && h.status !== "trashed").sort((a, b) => a.sort - b.sort);
+        const heading = { purpose: "Purpose and principles", vision: "Vision (3–5 years)", goal: "Goals (1–2 years)" }[kind];
+        const line = (h: (typeof rows)[number]) => {
+          const projects = s.projects.filter((p) => p.goal_id === h.id && p.status === "active").map((p) => p.title);
+          return `- ${h.status === "done" ? "~~" : ""}${h.title}${h.status === "done" ? "~~ (achieved)" : ""}${h.target ? `  _(by ${h.target})_` : ""}${projects.length ? `\n  Projects: ${projects.join("; ")}` : ""}`;
+        };
+        return rows.length ? `## ${heading}\n\n${rows.map(line).join("\n")}` : "";
+      })
+      .filter(Boolean)
+      .join("\n\n"),
+  );
   md(
     "checklists.md",
     "Checklists",

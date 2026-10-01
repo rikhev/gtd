@@ -8,6 +8,7 @@ import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, areaName, askContext, askWaitingOn, createAreaOp } from "../actionCommands.tsx";
 import { formatLong, today } from "../../shared/dates.ts";
+import { pickGoal } from "../horizons.ts";
 import { areaFilterLabel, inAreas, openAreaFilter, setAreaFilter, useAreaFilter } from "../areaFilter.ts";
 import type { Appointment, ID, Op, Project } from "../../shared/types.ts";
 
@@ -17,8 +18,9 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
   const n = (ids: ID[]) => named("projects", ids, "project");
   const api = {
     /**
-     * A new project from anywhere (⌥N): its outcome, verb first; its area (or none); then its first next action, as
-     * GTD asks of every project. Esc at the last step keeps the project without one (it then shows as stalled).
+     * A new project from anywhere (⌥N): its name (the outcome, verb first); what done looks like (Enter skips); its area
+     * (or none); then its first next action, as GTD asks of every project. Esc at the last step keeps the project without
+     * one (it then shows as stalled).
      */
     create() {
       ui.openPicker({
@@ -29,28 +31,42 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         onPick: (v) => {
           const title = (v ?? "").trim();
           if (!title) return;
-          const make = (area_id: ID | null, extra: Op[] = []) => {
-            const p = newProject({ title, area_id });
-            mutate(`New project “${title}”`, [...extra, { type: "create", table: "projects", row: { ...p } }]);
-            // Next tick, so the area picker has closed before the next-action prompt opens.
-            window.setTimeout(() => api.addNextAction(p.id), 0);
-          };
-          if (!getState().areas.length) return make(null);
-          ui.openPicker({
-            type: "list",
-            title: `Area for “${title}”`,
-            items: areaItems(),
-            current: null,
-            noneLabel: "No area",
-            createLabel: (q) => `Create area “${q}”`,
-            onCreate: (q) => {
-              const { id, op } = createAreaOp(q);
-              make(id, [op]);
-            },
-            onPick: (id) => make(id),
-          });
+          // Natural planning (GTD): after its name, what done looks like (Enter with nothing skips it), then its area.
+          window.setTimeout(
+            () =>
+              ui.openPicker({
+                type: "text",
+                title: `What does done look like for “${title}”?`,
+                current: "",
+                placeholder: "What will be true when it's done (Enter skips)",
+                onPick: (done) => window.setTimeout(() => askArea(title, (done ?? "").trim()), 0),
+              }),
+            0,
+          );
         },
       });
+      const askArea = (title: string, outcome: string) => {
+        const make = (area_id: ID | null, extra: Op[] = []) => {
+          const p = newProject({ title, area_id, outcome });
+          mutate(`New project “${title}”`, [...extra, { type: "create", table: "projects", row: { ...p } }]);
+          // Next tick, so the area picker has closed before the next-action prompt opens.
+          window.setTimeout(() => api.addNextAction(p.id), 0);
+        };
+        if (!getState().areas.length) return make(null);
+        ui.openPicker({
+          type: "list",
+          title: `Area for “${title}”`,
+          items: areaItems(),
+          current: null,
+          noneLabel: "No area",
+          createLabel: (q) => `Create area “${q}”`,
+          onCreate: (q) => {
+            const { id, op } = createAreaOp(q);
+            make(id, [op]);
+          },
+          onPick: (id) => make(id),
+        });
+      };
     },
     /** Give a project something it waits on: what, then who or what (required, as everywhere in Waiting For). */
     addWaiting(projectId: ID) {
@@ -127,7 +143,27 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         type: "date",
         title,
         current: ids.length === 1 ? (getState().projects.find((p) => p.id === ids[0])?.[field] ?? null) : null,
-        onPick: (d) => patchMany("projects", ids, { [field]: d }, d ? `${n(ids)}: ${what} ${formatLong(d)}` : `${n(ids)}: date cleared`),
+        onPick: (d) => {
+          patchMany("projects", ids, { [field]: d }, d ? `${n(ids)}: ${what} ${formatLong(d)}` : `${n(ids)}: date cleared`);
+          // A project that won't begin for a while belongs on Someday/Maybe or in the tickler (GTD): offer that, once.
+          const active = getState().projects.filter((p) => ids.includes(p.id) && p.status === "active").map((p) => p.id);
+          if (field === "start" && d && d > today() && active.length)
+            window.setTimeout(
+              () =>
+                ui.openPicker({
+                  type: "list",
+                  title: `Starts ${formatLong(d)}. Until then?`,
+                  items: [
+                    { id: "keep", label: "Keep it active, not started yet", hint: "Shown with a clock" },
+                    { id: "someday", label: "On Someday until then", hint: `Comes back ${formatLong(d)}` },
+                  ],
+                  onPick: (id) =>
+                    id === "someday" &&
+                    patchMany("projects", active, { status: "someday", bring_back: d }, `${n(active)} on Someday/Maybe until ${formatLong(d)}, then back to decide`),
+                }),
+              0,
+            );
+        },
       });
     },
     move(ids: ID[]) {
@@ -381,6 +417,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.archive", label: `Archive completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", enabled: doneHere.length > 0, run: () => ed.archive(doneHere) },
     { id: "proj.showdone", label: showDone ? "Hide completed projects" : "Show completed projects", group: "View", run: () => setShowDone(!showDone) },
     { id: "proj.area", label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
+    { id: "proj.goal", label: "Set the goal it serves", group: "Fields", keys: ["g"], enabled: has, run: () => pickGoal(ui, nav.targets()) },
     { id: "proj.due", label: "Due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },
     { id: "proj.start", label: "Start date", group: "Fields", keys: ["s"], enabled: has, run: () => ed.date(nav.targets(), "start") },
     { id: "proj.back", label: "Bring back on (tickler)", group: "Fields", keys: ["b"], enabled: has, run: () => ed.date(nav.targets(), "bring_back") },
@@ -461,6 +498,19 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             {p.status === "done" && p.archived_at && <span className="badge muted">Done</span>}
           </span>
         ),
+    },
+    {
+      key: "goal",
+      label: "Goal",
+      width: "minmax(110px, 0.8fr)",
+      drop: 3,
+      optional: false,
+      // Only projects serving a goal name one; the column steps aside until one does.
+      blank: (p: Project) => !s.horizons.some((h) => h.id === p.goal_id && h.status !== "trashed"),
+      render: (p: Project) => {
+        const g = s.horizons.find((h) => h.id === p.goal_id && h.status !== "trashed");
+        return g ? <span className="proj-cell">{g.title || "Untitled goal"}</span> : <span className="dash" aria-hidden="true">–</span>;
+      },
     },
     ...(groupByArea ? [] : [{ key: "area", label: "Area", width: "110px", drop: 2, render: (p: Project) => (p.area_id ? <AreaName name={areaById.get(p.area_id)?.name ?? ""} color={areaById.get(p.area_id)?.color} /> : <span className="dash" aria-hidden="true">–</span>) }]),
     {

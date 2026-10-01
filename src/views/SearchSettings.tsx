@@ -39,8 +39,8 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
       const hay = texts.filter(Boolean).join(" ").toLowerCase();
       return words.every((w) => hay.includes(w));
     };
-    const where = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", done: "Done", trashed: "" } as const;
-    const home = { next: "next", waiting: "waiting", someday: "someday", done: "done", trashed: "next" } as const;
+    const where = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned, in its project", done: "Done", trashed: "" } as const;
+    const home = { next: "next", waiting: "waiting", someday: "someday", later: "projects", done: "done", trashed: "next" } as const;
     const actions = s.actions
       .filter((a) => a.status !== "trashed" && match(a.title, a.notes, a.waiting_who))
       .map((a) => ({ key: `a:${a.id}`, kind: "action" as const, id: a.id, title: a.title, where: where[a.status], home: home[a.status] as ViewId }));

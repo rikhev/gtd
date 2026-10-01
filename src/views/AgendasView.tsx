@@ -155,7 +155,7 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
             <Hourglass size={13} strokeWidth={2} aria-label="Waiting on them" />
           </span>
         ) : (
-          <Marker flagged={Boolean(r.a.flagged)} />
+          <Marker />
         ),
     },
     { key: "subject", label: "Item", width: "minmax(220px, 2fr)", render: (r) => <span className="subject-text">{r.a.title || "Untitled action"}</span> },

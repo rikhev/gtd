@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
 import type { CalEvent } from "./calendarFeed.ts";
 import type { UI } from "./ui.tsx";
-import { completeActions, getState, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
+import { completeActions, getState, isChase, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { addMonths, daysBetween, formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
@@ -409,7 +409,19 @@ export function editors(ui: UI) {
       if (made.length !== 1) return;
       const proj = made[0];
       const ctx = acts[0].context_id;
+      // Natural planning (GTD): what done looks like (Enter skips), then the first next action.
       ui.openPicker({
+        type: "text",
+        title: `What does done look like for “${proj.title}”?`,
+        current: "",
+        placeholder: "What will be true when it's done (Enter skips)",
+        onPick: (done) => {
+          const outcome = (done ?? "").trim();
+          if (outcome) mutate("Done looks like: noted", [{ type: "patch", table: "projects", id: proj.id, data: { outcome } }], { silent: true });
+          window.setTimeout(firstNext, 0);
+        },
+      });
+      const firstNext = () => ui.openPicker({
         type: "text",
         title: `First next action for “${proj.title}”`,
         current: "",
@@ -438,6 +450,11 @@ export function editors(ui: UI) {
             const here = a && (it.id === `list:${a.status}` || it.id === a.project_id);
             return here ? { ...it, hint: `${it.hint} · current` } : it;
           }),
+          // A planned step: it stays in its project, off Next Actions, until its turn comes (GTD: the plan lives with the
+          // project; only next actions sit on the lists).
+          ...(actions(ids).every((a) => a.project_id)
+            ? [{ id: "list:later", label: "Later: a planned step", hint: actions(ids).every((a) => a.status === "later") ? "In its project · current" : "In its project", section: "lists" }]
+            : []),
           // It turned out to need more than one step: it becomes a project of its own.
           ...(actions(ids).every((a) => a.status === "next" || a.status === "someday")
             ? [{ id: "convert", label: ids.length === 1 ? "Turn into a project" : "Turn each into a project", hint: "Needs more than one step", section: "now" }]
@@ -473,7 +490,14 @@ export function editors(ui: UI) {
               );
               return;
             }
+            if (status === "later") return patchMany("actions", ids, { status: "later", flagged: 0 }, `${n(ids)} planned for later, in ${ids.length === 1 ? "its project" : "their projects"}`);
             const label = { next: "Next Actions", someday: "Someday / Maybe" }[status as "next"];
+            // A next action always has a context: one coming from Someday or a plan without one asks for it.
+            const missing = status === "next" ? actions(ids).filter((a) => !a.context_id) : [];
+            if (missing.length)
+              return askContext(ui, "Context", (context_id, extra) =>
+                mutate(`${n(ids)} → ${label}`, [...extra, ...ids.map((id): Op => ({ type: "patch", table: "actions", id, data: { status, ...(missing.some((m) => m.id === id) ? { context_id } : {}) } }))]),
+              );
             patchMany("actions", ids, { status }, `${n(ids)} → ${label}`);
           } else {
             const name = getState().projects.find((p) => p.id === target)?.title ?? "project";
@@ -539,14 +563,6 @@ export function useActionCommands(opts: {
     reopenActions(ids);
   };
 
-  const flag = () => {
-    const ids = pick();
-    if (!ids.length) return;
-    const acts = getState().actions.filter((a) => ids.includes(a.id));
-    const on = acts.some((a) => !a.flagged) ? 1 : 0;
-    patchMany("actions", ids, { flagged: on }, on ? `${n(ids)} marked important` : `${n(ids)} no longer important`);
-  };
-
   const trash = (permanent: boolean) => {
     const ids = targets();
     if (!ids.length) return;
@@ -579,7 +595,10 @@ export function useActionCommands(opts: {
   };
 
   const addBeside = (kind: "next" | "waiting") => {
-    const pid = opts.focusId ? getState().actions.find((a) => a.id === opts.focusId)?.project_id : null;
+    const row = opts.focusId ? getState().actions.find((a) => a.id === opts.focusId) : undefined;
+    // T on a chase (a waiting item due a follow-up): the chase becomes a real next action, with its context (GTD).
+    if (kind === "next" && row && isChase(row)) return chaseAction(ui, row);
+    const pid = row?.project_id;
     if (pid) return kind === "next" ? projectEditors(ui).addNextAction(pid) : projectEditors(ui).addWaiting(pid);
     return kind === "next" ? quickAddNextAction(ui) : quickAddWaiting(ui);
   };
@@ -589,7 +608,16 @@ export function useActionCommands(opts: {
   const commands: Command[] = [
     { id: "act.new", label: "New action", group: "Actions", keys: ["n"], run: create },
     // T and W add, as on Projects and Agendas: a next action or a waiting for in the focused row's project (or on its own).
-    { id: "act.addnext", label: "Add a next action (to this row's project)", group: "Actions", keys: ["t"], run: () => addBeside("next") },
+    {
+      id: "act.addnext",
+      label: (() => {
+        const row = opts.focusId ? getState().actions.find((a) => a.id === opts.focusId) : undefined;
+        return row && isChase(row) ? "Chase it: make the follow-up a next action" : "Add a next action (to this row's project)";
+      })(),
+      group: "Actions",
+      keys: ["t"],
+      run: () => addBeside("next"),
+    },
     { id: "act.addwait", label: "Add a waiting for (to this row's project)", group: "Actions", keys: ["w"], run: () => addBeside("waiting") },
     { id: "act.open", label: "Open details", group: "Actions", keys: ["enter"], run: () => opts.focusId && ui.openDetail({ kind: "action", id: opts.focusId }, true) },
     { id: "act.jump", label: "Jump to its project", group: "Actions", keys: ["j"], run: () => opts.focusId && ui.jumpToProject(opts.focusId) },
@@ -597,7 +625,6 @@ export function useActionCommands(opts: {
     opts.doneView
       ? { id: "act.reopen", label: "Not done (put back)", group: "Actions", keys: ["e"], run: reopen }
       : { id: "act.done", label: "Mark done", group: "Actions", keys: ["e"], run: complete, enabled: true },
-    { id: "act.flag", label: "Mark as important", group: "Actions", keys: ["insert", "mod+i"], run: flag },
     { id: "act.move", label: "Move to project or list", group: "Actions", keys: ["v"], run: () => ed.move(pick()) },
     { id: "act.convert", label: "Turn into a project", group: "Actions", keys: ["shift+p"], run: () => ed.convert(pick()) },
     { id: "act.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(pick()) },
@@ -646,12 +673,30 @@ export function useActionCommands(opts: {
   };
   const reopenOne = (id: ID) => reopenActions([id]);
 
-  const flagOne = (id: ID) => {
-    const a = getState().actions.find((x) => x.id === id);
-    if (!a) return;
-    const on = a.flagged ? 0 : 1;
-    patchMany("actions", [id], { flagged: on }, on ? `${n([id])} marked important` : `${n([id])} no longer important`);
-  };
+  return { commands, editing, setEditing, commitTitle, striking, completeOne, reopenOne };
+}
 
-  return { commands, editing, setEditing, commitTitle, striking, completeOne, reopenOne, flagOne };
+/**
+ * A follow-up that is due is itself a next action in GTD ("@calls Chase Anna about the NDA"). T on a chase words it,
+ * asks its context, and files it in the waiting item's project; the waiting item stays in Waiting For, its follow-up
+ * date handed over to the new action (so the chase isn't listed twice). One ⌘Z undoes both.
+ */
+export function chaseAction(ui: UI, w: Action) {
+  ui.openPicker({
+    type: "text",
+    title: "Chase it: the next action",
+    current: `Chase ${w.waiting_who ?? "them"} about ${w.title}`,
+    placeholder: "Verb first: Call Anna about the NDA",
+    onPick: (v) => {
+      const title = (v ?? "").trim();
+      if (!title) return;
+      window.setTimeout(() =>
+        askContext(ui, `Context for “${title}”`, (context_id, extra) => {
+          // No due date: the follow-up was a reminder, not a deadline (GTD keeps hard dates for what must happen).
+          const a = newAction({ title, context_id, project_id: w.project_id, status: "next" });
+          mutate(`“${title}” added · follow-up handed over`, [...extra, { type: "create", table: "actions", row: { ...a } }, { type: "patch", table: "actions", id: w.id, data: { followup: null } }]);
+        }),
+      );
+    },
+  });
 }

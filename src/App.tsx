@@ -20,6 +20,7 @@ import { InboxView } from "./views/InboxView.tsx";
 import { ProjectsView, projectEditors } from "./views/ProjectsView.tsx";
 import { SomedayView, ReferenceView } from "./views/SimpleViews.tsx";
 import { ChecklistsView } from "./views/ChecklistsView.tsx";
+import { HorizonsView } from "./views/HorizonsView.tsx";
 import { openChecklist, progress, progressLabel, startOver, useOpenChecklist } from "./checklists.ts";
 import { ClarifyView } from "./views/ClarifyView.tsx";
 // Views opened now and then load when first opened, so the lists come up faster on a cold phone.
@@ -37,7 +38,7 @@ import { today } from "../shared/dates.ts";
  */
 /** Lists with a View menu (⌥V), which touch reaches by a button in the heading. */
 const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "done", "agendas", "checklists"];
-const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "checklists", "done", "trash", "review", "settings", "clarify"];
+const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "checklists", "horizons", "done", "trash", "review", "settings", "clarify"];
 /** The view an address belongs to: "#checklists/…" (one checklist, open) is still Checklists. */
 const hashView = (hash: string) => hash.slice(1).split("/")[0];
 /** The address of the checklist open in Checklists, if one is. */
@@ -63,7 +64,8 @@ function homeOf(t: Target): ViewId {
   if (!a) return "next";
   // Done but not archived yet: it is still on the list it was done on.
   if (a.status === "done" && !a.archived_at) return a.done_from ?? "next";
-  return ({ next: "next", waiting: "waiting", someday: "someday", done: "done", trashed: "next" } as const)[a.status];
+  // A planned (later) step lives in its project, not on a list.
+  return ({ next: "next", waiting: "waiting", someday: "someday", later: "projects", done: "done", trashed: "next" } as const)[a.status];
 }
 
 // On a touch screen the cursor row means nothing until you use the list: the fill waits for the first key or tap.
@@ -312,6 +314,13 @@ export default function App() {
       reveal: (t) => {
         const home = homeOf(t);
         go(home);
+        // A planned step is shown in its project: the project under the cursor, the step open in the pane.
+        const a = t.kind === "action" ? getState().actions.find((x) => x.id === t.id) : undefined;
+        if (a?.status === "later" && a.project_id) {
+          setRevealTarget({ kind: "project", id: a.project_id });
+          setDetail({ kind: "action", id: a.id });
+          return;
+        }
         setRevealTarget(t);
       },
       jumpToProject: (actionId) => {
@@ -538,6 +547,7 @@ export default function App() {
           return !p.ticked ? plural(p.total, "item") : p.ticked === p.total ? progressLabel(p) : `${p.ticked} of ${p.total} ticked`;
         })()
       : plural(s.checklists.filter((c) => c.status === "active").length, "checklist"),
+    horizons: plural(s.horizons.filter((h) => h.kind === "goal" && h.status === "active").length, "goal"),
     done: plural(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done" && p.archived_at).length, "item"),
     trash: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
   };
@@ -570,6 +580,9 @@ export default function App() {
       break;
     case "checklists":
       body = <ChecklistsView regionActive={listActive} />;
+      break;
+    case "horizons":
+      body = <HorizonsView regionActive={listActive} />;
       break;
     case "clarify":
       body = <ClarifyView key={clarifyRun} regionActive={listActive} />;

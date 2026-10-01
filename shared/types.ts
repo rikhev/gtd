@@ -1,6 +1,10 @@
 export type ID = string;
 
-export type ActionStatus = "next" | "waiting" | "someday" | "done" | "trashed";
+/**
+ * "later" is a planned step of a project (GTD: a project's plan lives in its support material; only its next actions
+ * sit on the lists): it shows only in its project and becomes a next action when its turn comes.
+ */
+export type ActionStatus = "next" | "waiting" | "someday" | "later" | "done" | "trashed";
 export type ProjectStatus = "active" | "someday" | "done" | "trashed";
 
 export interface Action {
@@ -50,6 +54,11 @@ export interface Project {
   completed_at: string | null;
   /** The day work on it starts; with a due date the calendar draws it as a bar between them. */
   start?: string | null;
+  /** Natural planning (GTD): why it matters (its purpose) and the ideas for it (the brainstorm). "Done looks like" is `outcome`. */
+  purpose?: string;
+  ideas?: string;
+  /** The goal it serves (a Horizons goal), if any. */
+  goal_id?: ID | null;
   /** Set when a completed project is archived off the Projects list. */
   archived_at: string | null;
   /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
@@ -64,6 +73,12 @@ export interface Stuff {
   status: "inbox" | "done" | "processed" | "trashed";
   created_at: string;
   processed_at: string | null;
+  /**
+   * A tickler entry ("Due back: Call Anna"): the item whose bring-back date has come, which stays as it was until this
+   * entry is clarified (kept, made current, done, brought back later, gone to, or dropped).
+   */
+  back_kind?: "action" | "project" | null;
+  back_id?: ID | null;
   /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
   trashed_at?: string | null;
   trashed_from?: string | null;
@@ -167,6 +182,27 @@ export interface ChecklistItem {
   created_at: string;
 }
 
+/**
+ * GTD's higher horizons of focus, above areas: purpose and principles, vision (3–5 years) and goals (1–2 years).
+ * Projects serve goals; the Weekly Review's Get creative and the owner's own judgement of priority read them.
+ */
+export interface Horizon {
+  id: ID;
+  kind: "purpose" | "vision" | "goal";
+  title: string;
+  notes: string;
+  /** A goal's area of focus, if any. */
+  area_id: ID | null;
+  /** A goal's target date, if any. */
+  target: string | null;
+  status: "active" | "done" | "trashed";
+  sort: number;
+  created_at: string;
+  completed_at: string | null;
+  trashed_at?: string | null;
+  trashed_from?: string | null;
+}
+
 /** One day a habit (an item on a repeating checklist) was done. */
 export interface ChecklistTick {
   id: ID;
@@ -195,6 +231,7 @@ export interface Tables {
   checklists: Checklist;
   checklist_items: ChecklistItem;
   checklist_ticks: ChecklistTick;
+  horizons: Horizon;
 }
 export type TableName = keyof Tables;
 
@@ -221,6 +258,8 @@ export interface ProposedAction {
   energy: 1 | 2 | 3 | null;
   waiting_who: string | null;
   two_minute: boolean;
+  /** The tickler: on this day it comes back to the Inbox to be decided again (GTD's "incubate"). */
+  bring_back?: string | null;
 }
 
 export interface Proposal {

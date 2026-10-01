@@ -19,32 +19,31 @@ app.post("/api/auth/login", login);
 app.post("/api/auth/logout", (c) => logout(c));
 app.post("/api/auth/logout-all", (c) => logout(c, true));
 
-/** Tickler: anything whose bring-back date has arrived returns to the inbox as fresh stuff. */
+/**
+ * Tickler: on its bring-back date an item comes back for a fresh decision, as GTD's tickler does. It stays exactly what
+ * it was (its list, project, context, who it waits on, its dates and files); the Inbox gets an entry pointing at it,
+ * "Due back: …", and clarifying that entry decides again (GTD critique: the old tickler copied the text and trashed the
+ * original, losing everything else).
+ */
 function runTickler() {
   const t = today();
   const s = loadState();
   const ops: Op[] = [];
-  const back = (title: string, notes: string, fromKind: string, id: string) => {
-    const sid = randomUUID();
+  const back = (title: string, kind: "action" | "project", id: string) =>
     ops.push({
       type: "create",
       table: "stuff",
-      row: { id: sid, text: notes ? `${title}\n\n${notes}` : title, kind: "text", status: "inbox", created_at: now() },
+      row: { id: randomUUID(), text: `Due back: ${title || "Untitled"}`, kind: "text", status: "inbox", created_at: now(), back_kind: kind, back_id: id },
     });
-    for (const f of s.files.filter((f) => f.owner_kind === fromKind && f.owner_id === id)) {
-      ops.push({ type: "patch", table: "files", id: f.id, data: { owner_kind: "stuff", owner_id: sid } });
-    }
-  };
   for (const a of s.actions) {
     if (a.bring_back && a.bring_back <= t && ["next", "waiting", "someday"].includes(a.status)) {
-      back(a.title, a.notes, "action", a.id);
-      ops.push({ type: "patch", table: "actions", id: a.id, data: { status: "trashed", bring_back: null } });
+      back(a.title, "action", a.id);
+      ops.push({ type: "patch", table: "actions", id: a.id, data: { bring_back: null } });
     }
   }
   for (const p of s.projects) {
     if (p.bring_back && p.bring_back <= t && ["active", "someday"].includes(p.status)) {
-      // Projects come back as a reminder; their actions stay put.
-      back(`Revisit project: ${p.title}`, p.notes, "none", p.id);
+      back(p.title, "project", p.id);
       ops.push({ type: "patch", table: "projects", id: p.id, data: { bring_back: null } });
     }
   }
@@ -232,8 +231,8 @@ app.put("/api/settings/trash", async (c) => {
 /** Deleted items past the keep period go for good, with their files. Runs at start, hourly and when the period changes. */
 function purgeTrash() {
   const cutoff = new Date(Date.now() - trashDays() * 86_400_000).toISOString();
-  const owner = { actions: "action", projects: "project", stuff: "stuff", refs: "ref" } as const;
-  for (const t of ["actions", "projects", "stuff", "refs"] as const) {
+  const owner = { actions: "action", projects: "project", stuff: "stuff", refs: "ref", horizons: "horizon" } as const;
+  for (const t of ["actions", "projects", "stuff", "refs", "horizons"] as const) {
     const gone = db.prepare(`SELECT id FROM ${t} WHERE status = 'trashed' AND trashed_at IS NOT NULL AND trashed_at < ?`).all(cutoff) as { id: string }[];
     for (const { id } of gone) {
       const files = db.prepare("SELECT id FROM files WHERE owner_kind = ? AND owner_id = ?").all(owner[t], id) as { id: string }[];

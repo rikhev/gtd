@@ -8,6 +8,7 @@ import { RAIL } from "../components/Chrome.tsx";
 import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
 import { splitStuff, stuffTitle } from "./InboxView.tsx";
 import { itemsFromText, newChecklist } from "../checklists.ts";
+import { reminderChoices, reminderOf, reminderWhere } from "../reminders.ts";
 import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
 import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
@@ -118,19 +119,8 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   };
   const updateRow = (i: number, data: Partial<ProposedAction & { done?: boolean }>) => update((d) => Object.assign(d.actions[i], data));
 
-  const goNext = () => {
-    const after = queue.findIndex((id, i) => i > index && !handled.has(id));
-    if (after >= 0) setIndex(after);
-    else {
-      const any = queue.findIndex((id) => !handled.has(id));
-      if (any >= 0) setIndex(any);
-    }
-  };
-  const goPrev = () => {
-    for (let i = index - 1; i >= 0; i--) {
-      if (!handled.has(queue[i])) return setIndex(i);
-    }
-  };
+  // No Skip (owner's decision after the GTD critique): GTD never puts anything back in the in-tray. Every item gets a
+  // decision in turn, even if that is Someday or the tickler.
 
   const finishItem = (id: string, label: string, ops: Op[]) => {
     mutate(label, ops);
@@ -239,6 +229,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           context_id: ctxId(a.context),
           due: a.due,
           defer: a.defer,
+          bring_back: a.bring_back ?? null,
           time_min: a.time_min,
           energy: a.energy,
           waiting_who: a.kind === "waiting" ? a.waiting_who : null,
@@ -276,7 +267,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     finishItem(current.id, "Trashed", [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]);
   };
 
-  const pickFor = (i: number, field: "context" | "project" | "due" | "defer" | "time" | "energy" | "kind" | "who") => {
+  const pickFor = (i: number, field: "context" | "project" | "due" | "defer" | "back" | "time" | "energy" | "kind" | "who") => {
     if (!draft || !draft.actions[i]) return;
     const a = draft.actions[i];
     if (field === "context")
@@ -309,6 +300,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       });
     if (field === "due" || field === "defer")
       ui.openPicker({ type: "date", title: field === "due" ? "Due date" : "Start date", current: a[field], onPick: (d) => updateRow(i, { [field]: d }) });
+    if (field === "back") ui.openPicker({ type: "date", title: "Bring back on (the tickler)", current: a.bring_back ?? null, onPick: (d) => updateRow(i, { bring_back: d }) });
     if (field === "time") ui.openPicker({ type: "time", current: a.time_min, onPick: (m) => updateRow(i, { time_min: m }) });
     if (field === "energy") ui.openPicker({ type: "energy", current: a.energy, onPick: (e) => updateRow(i, { energy: e }) });
     if (field === "who") askWaitingOn(ui, a.waiting_who, (who) => updateRow(i, { kind: "waiting", waiting_who: who }));
@@ -379,8 +371,16 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     return el ? Number(el.dataset.row) : row;
   };
 
-  const gating = Boolean(current && draft) && !answered.has(current!.id);
-  const ready = Boolean(current && draft) && !gating;
+  // A tickler entry ("Due back: …") isn't new stuff: it brings back an item already filed, to be decided again.
+  const reminder = reminderOf(s, current);
+  const reminderPicks = current && reminder ? reminderChoices(ui, current, reminder, (label, ops) => finishItem(current.id, label, ops)) : [];
+  useCommands(
+    "clarify-reminder",
+    reminderPicks.map((c) => ({ id: `cl.r.${c.k}`, label: c.label, group: "Clarify", keys: c.k === "backspace" ? ["backspace", "delete"] : [c.k], run: c.run })),
+    { priority: 16, active: regionActive && Boolean(reminder) },
+  );
+  const gating = Boolean(current && draft) && !answered.has(current!.id) && !reminder;
+  const ready = Boolean(current && draft) && !gating && !reminder;
   /** The answer to "is it actionable?": Yes starts an empty next action to put into words; the rest file the item. */
   const answer = (a: "yes" | "someday" | "reference" | "trash") => {
     if (!current || !draft) return;
@@ -407,13 +407,37 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     { id: "cl.yes", label: "Actionable: decide the next action", group: "Clarify", keys: ["y"], enabled: gating, run: () => answer("yes") },
     { id: "cl.someday", label: "Not now: Someday / Maybe", group: "Clarify", keys: ["s"], enabled: gating, run: () => answer("someday") },
     { id: "cl.reference", label: "Not actionable: keep as Reference", group: "Clarify", keys: ["r"], enabled: gating, run: () => answer("reference") },
+    // GTD's incubate has two homes: Someday/Maybe, and the tickler. B is the tickler: on Someday until the day it comes back.
+    {
+      id: "cl.tickler",
+      label: "Not now: bring it back on a day (the tickler)",
+      group: "Clarify",
+      keys: ["b"],
+      enabled: gating,
+      run: () => {
+        if (!current) return;
+        // The day first, then one update: Someday/Maybe until then, decided again when it comes back.
+        ui.openPicker({
+          type: "date",
+          title: "Bring it back on",
+          current: null,
+          onPick: (day) => {
+            if (!day || !current) return;
+            const title = stuffTitle(current);
+            update((d) => {
+              d.disposition = "someday";
+              d.actions = [{ ...d.actions[0], title, kind: "someday", bring_back: day }];
+            });
+            setAnswered((prev) => new Set(prev).add(current.id));
+          },
+        });
+      },
+    },
     { id: "cl.accept", label: "Accept and continue", group: "Clarify", keys: ["mod+enter"], inInput: true, enabled: ready, run: () => {
       (document.activeElement as HTMLElement | null)?.blur?.();
       window.setTimeout(accept, 0);
     } },
-    { id: "cl.next", label: "Skip to next item", group: "Clarify", keys: ["mod+."], inInput: true, run: goNext },
-    { id: "cl.prev", label: "Previous item", group: "Clarify", keys: ["mod+,"], inInput: true, run: goPrev },
-    { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current), run: trashItem },
+    { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current) && !reminder, run: trashItem },
     { id: "cl.done", label: "Done it now (two-minute rule)", group: "Clarify", keys: ["e"], enabled: ready, run: () => {
       const i = rowOfFocus();
       if (draft?.actions[i]) updateRow(i, { done: !draft.actions[i].done });
@@ -428,6 +452,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     { id: "cl.makeproject", label: "Make this a project (more than one step)", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
     { id: "cl.due", label: "Due date", group: "Fields", keys: ["d"], enabled: ready, run: () => pickFor(rowOfFocus(), "due") },
     { id: "cl.defer", label: "Start date", group: "Fields", keys: ["s"], enabled: ready, run: () => pickFor(rowOfFocus(), "defer") },
+    { id: "cl.back", label: "Bring back on (the tickler)", group: "Fields", keys: ["b"], enabled: ready, run: () => pickFor(rowOfFocus(), "back") },
     { id: "cl.time", label: "Time estimate (then 1–6)", group: "Fields", keys: ["m"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
     { id: "cl.energy", label: "Energy (then 1–3)", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
     { id: "cl.kind", label: "File as (list or whole item)", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
@@ -531,9 +556,19 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         <section className="clarify-proposal" aria-label="Your decision">
           <h2 className="pane-h">
             Your decision
-            {draft && !gating && <Tag>{draft.disposition === "reference" && draft.reference?.checklist ? "Checklist" : DISPOSITIONS[draft.disposition]}</Tag>}
+            {draft && !gating && !reminder && <Tag>{draft.disposition === "reference" && draft.reference?.checklist ? "Checklist" : DISPOSITIONS[draft.disposition]}</Tag>}
           </h2>
-          {gating ? (
+          {reminder ? (
+            <>
+              <div className="clarify-ask">
+                <p className="clarify-q">It's back. Is it still right?</p>
+                <p className="muted-text">
+                  {reminder.item.title || "Untitled"}, on {reminderWhere(s, reminder)}. It stays as it is unless you change it here.
+                </p>
+              </div>
+              <KeyChoices choices={reminderPicks} />
+            </>
+          ) : gating ? (
             <div className="clarify-ask">
               <p className="clarify-q">Is it actionable?</p>
               <p className="muted-text">Is there anything you, or someone, should do about it? Decide that before writing any action.</p>
@@ -654,6 +689,12 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                             <span className="p-lbl">Start</span>
                             {a.defer ? formatLong(a.defer) : <span className="dash" aria-hidden="true">–</span>}
                           </button>
+                          {(a.kind === "someday" || a.bring_back) && (
+                            <button type="button" className="p-field" onClick={() => pickFor(i, "back")}>
+                              <span className="p-lbl">Bring back</span>
+                              {a.bring_back ? formatLong(a.bring_back) : <span className="dash" aria-hidden="true">–</span>}
+                            </button>
+                          )}
                           <button type="button" className="p-field" onClick={() => pickFor(i, "time")}>
                             <span className="p-lbl">Time</span>
                             {a.time_min ? formatTime(a.time_min) : <span className="dash" aria-hidden="true">–</span>}
@@ -682,12 +723,12 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         </section>
       </div>
       <KeyHints
-        hints={gating ? [
+        hints={reminder ? [] : gating ? [
           { k: "y", label: "Yes, actionable", primary: true },
           { k: "s", label: "Someday" },
           { k: "r", label: "Reference" },
+          { k: "b", label: "Bring back on…", touch: "more" as const },
           { k: "backspace", label: "Trash" },
-          { k: "mod+.", label: "Skip", touch: "more" as const },
         ] : [
           { k: "mod+enter", label: "Accept", primary: true },
           { k: "n", label: "Add action", touch: "more" as const },
@@ -695,7 +736,6 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           { k: "shift+p", label: "Project", touch: "more" as const },
           { k: "e", label: "Done now" },
           { k: "backspace", label: "Trash", touch: "more" as const },
-          { k: "mod+.", label: "Skip" },
         ]}
       />
       {upNext.length > 0 && (

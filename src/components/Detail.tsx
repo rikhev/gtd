@@ -8,11 +8,12 @@ import { askContext, editors, linkAppointment, projectItems, quickAddNextAction,
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { openChecklist, progress, progressLabel, repeatsLabel } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
+import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
 import { AreaName, ContextCode, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
-import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
+import type { Action, FileRow, Op, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
 /** Text field that commits on blur (one undo step per edit, not per keystroke). */
 function TextField({
@@ -402,7 +403,7 @@ function ActionDetail({ a }: { a: Action }) {
   return (
     <>
       {/* Important or done is the one thing the fields don't say, so its mark leads the subject, as on the list row. */}
-      <TextField label="Subject" lead={a.flagged || done ? <Marker flagged={Boolean(a.flagged)} done={done} /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
+      <TextField label="Subject" lead={done ? <Marker done /> : undefined} value={a.title} onCommit={(v) => patch("actions", a.id, { title: v }, "Renamed")} autoFocus className="field-title" />
       {/* The shared grid (see rows above): every kind's fields in the same places. */}
       <div className="field-grid">
         {layout}
@@ -566,6 +567,7 @@ function ProjectDetail({ p }: { p: Project }) {
   const meta = useMeta();
   const [draft, setDraft] = useState("");
   const area = s.areas.find((a) => a.id === p.area_id);
+  const goal = s.horizons.find((h) => h.id === p.goal_id && h.status !== "trashed");
   // T and W, as on the Projects list: T goes straight into "Add a next action" while the pane has focus, W adds a
   // waiting for (what, then who or what it waits on).
   const active = useContext(DetailActive);
@@ -576,6 +578,7 @@ function ProjectDetail({ p }: { p: Project }) {
       { id: "detail.addnext", label: "Add a next action to this project", group: "Details", keys: ["t"], run: () => addInput.current?.focus() },
       { id: "detail.addwaiting", label: "Add a waiting for to this project", group: "Details", keys: ["w"], run: () => ed.addWaiting(p.id) },
       { id: "detail.support", label: "Link a reference or checklist to this project", group: "Details", run: () => linkSupport(ui, p.id) },
+      { id: "detail.plan", label: "Plan a later step for this project", group: "Details", run: () => planLater() },
     ],
     { priority: 21, active },
   );
@@ -593,7 +596,28 @@ function ProjectDetail({ p }: { p: Project }) {
   // The project's timeline (owner's request): every action it has had, open or done (archived to Done included), in
   // the order they were created, oldest first, so the newest sits just above "Add a next action". Deleted ones don't show.
   const timeline = s.actions.filter((a) => a.project_id === p.id && a.status !== "trashed").sort((a, b) => a.created_at.localeCompare(b.created_at));
-  const open = timeline.filter((a) => ["next", "waiting", "someday"].includes(a.status));
+  const open = timeline.filter((a) => ["next", "waiting", "someday", "later"].includes(a.status));
+  // Its plan: the planned (later) steps in their order; the first is offered when no next action is current.
+  const planned = timeline.filter((a) => a.status === "later").sort((a, b) => a.sort - b.sort);
+  /** The next planned step becomes a next action, with a context (asked when it has none). */
+  const makeCurrent = (a: Action) => {
+    const set = (context_id: string | null, extra: Op[] = []) =>
+      mutate(`“${a.title || "Untitled action"}” is a next action`, [...extra, { type: "patch", table: "actions", id: a.id, data: { status: "next", context_id } }]);
+    if (a.context_id) return set(a.context_id);
+    askContext(ui, `Context for “${a.title || "Untitled action"}”`, (context_id, extra) => set(context_id, extra));
+  };
+  /** A later step for the plan: in words, no context yet (it is asked when the step becomes current). */
+  const planLater = () =>
+    ui.openPicker({
+      type: "text",
+      title: `Plan a later step for “${p.title || "Untitled project"}”`,
+      current: "",
+      placeholder: "A step that comes after the next one",
+      onPick: (v) => {
+        const title = (v ?? "").trim();
+        if (title) mutate(`Planned for later: “${title}”`, [{ type: "create", table: "actions", row: { ...newAction({ title, project_id: p.id, status: "later" }) } }]);
+      },
+    });
   const doneCount = timeline.length - open.length;
   // Its linked appointments, in the order they fall; those that have passed stay, faded, as a record.
   const appts = s.appointments.filter((x) => x.project_id === p.id).sort((a, b) => a.date.localeCompare(b.date) || (a.time ?? "").localeCompare(b.time ?? ""));
@@ -606,6 +630,9 @@ function ProjectDetail({ p }: { p: Project }) {
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
           {area ? <AreaName name={area.name} color={area.color} /> : none}
+        </PickField>
+        <PickField label="Goal" k="G" onOpen={() => pickGoal(ui, [p.id])}>
+          {goal ? goal.title || "Untitled goal" : none}
         </PickField>
         <PickField label="Status" k="V" onOpen={() => ed.move([p.id])}>
           {{ active: "Active", someday: "Someday", done: "Done", trashed: "Trash" }[p.status]}
@@ -642,6 +669,10 @@ function ProjectDetail({ p }: { p: Project }) {
           );
         })()}
       </div>
+      {/* Natural planning (GTD), in Allen's order: why it matters, what done looks like, then the ideas. */}
+      <TextField label="Why" value={p.purpose ?? ""} multiline rows={2} onCommit={(v) => patch("projects", p.id, { purpose: v })} placeholder="Its purpose: why does this matter?" />
+      <TextField label="Done looks like" value={p.outcome ?? ""} multiline rows={2} onCommit={(v) => patch("projects", p.id, { outcome: v })} placeholder="What will be true when it's done?" />
+      <TextField label="Ideas" value={p.ideas ?? ""} multiline rows={3} onCommit={(v) => patch("projects", p.id, { ideas: v })} placeholder="Brainstorm: everything that comes to mind, in no order" />
       {appts.length > 0 && (
         <section className="detail-actions">
           <h3 className="detail-h">
@@ -679,9 +710,17 @@ function ProjectDetail({ p }: { p: Project }) {
             {nextAppt.time ? ` ${nextAppt.time}` : ""}. Add a next action when it has happened.
           </p>
         )}
-        {stallReason(s, p) && (
+        {stallReason(s, p) === "no-next" && planned.length > 0 && (
           <p className="badge-line">
-            {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Move it forward, or put it on hold.`}
+            No next action. Its next planned step: “{planned[0].title || "Untitled"}”.
+            <button type="button" className="text-btn" onClick={() => makeCurrent(planned[0])}>
+              Make it current
+            </button>
+          </p>
+        )}
+        {stallReason(s, p) && !(stallReason(s, p) === "no-next" && planned.length > 0) && (
+          <p className={`badge-line ${stallReason(s, p) === "idle" ? "is-quiet" : ""}`}>
+            {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Is it still current? The Weekly Review asks.`}
           </p>
         )}
         <ul className="timeline">
@@ -696,9 +735,9 @@ function ProjectDetail({ p }: { p: Project }) {
                   title={done ? `Done ${when ? formatLong(when.slice(0, 10)) : ""}` : `Added ${formatLong(a.created_at.slice(0, 10))}`}
                   onClick={() => ui.drillDetail({ kind: "action", id: a.id })}
                 >
-                  <Marker flagged={!done && Boolean(a.flagged)} done={done} />
+                  <Marker done={done} />
                   <span className="mini-title">{a.title || "Untitled action"}</span>
-                  <span className="mini-meta">{a.status === "waiting" ? `Waiting · ${a.waiting_who ?? ""}` : done && a.done_from === "waiting" && a.waiting_who ? `Waited · ${a.waiting_who}` : a.status === "someday" ? "Someday" : ""}</span>
+                  <span className="mini-meta">{a.status === "waiting" ? `Waiting · ${a.waiting_who ?? ""}` : done && a.done_from === "waiting" && a.waiting_who ? `Waited · ${a.waiting_who}` : a.status === "someday" ? "Someday" : a.status === "later" ? "Later" : ""}</span>
                   <span className="mini-date">{when ? formatDate(when.slice(0, 10)) : ""}</span>
                 </button>
               </li>

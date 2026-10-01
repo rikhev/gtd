@@ -131,7 +131,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
   useCommands("list:someday", commands, { priority: 10, active: regionActive });
 
   const columns: Column<SomedayRow>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health="someday" /> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "project" ? <Lamp health="someday" /> : <Marker />) },
     {
       key: "subject",
       label: "Someday / Maybe",

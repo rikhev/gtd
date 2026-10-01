@@ -3,11 +3,45 @@ import type { UI } from "./ui.tsx";
 import { askContext, askWaitingOn, destinationItems } from "./actionCommands.tsx";
 import { splitStuff, stuffTitle } from "./views/InboxView.tsx";
 import { itemsFromText, newChecklist } from "./checklists.ts";
-import type { ID, Op } from "../shared/types.ts";
+import { reminderChoices, reminderOf } from "./reminders.ts";
+import type { ID, Op, Stuff } from "../shared/types.ts";
 
 /* Filing Inbox items, shared by the Inbox and the Weekly Review's Get clear step. */
 
 const n = (ids: ID[]) => named("stuff", ids, "item");
+
+/**
+ * Tickler entries among some Inbox items are decided by their own choice (done, drop…), each as its own undo; the
+ * rest go on as ordinary stuff.
+ */
+function splitReminders(ids: ID[], k: string): ID[] {
+  const s = getState();
+  return ids.filter((id) => {
+    const st = s.stuff.find((x) => x.id === id);
+    const r = reminderOf(s, st);
+    if (!st || !r) return true;
+    reminderChoices(null, st, r, (label, ops) => mutate(label, ops))
+      .find((c) => c.k === k)
+      ?.run();
+    return false;
+  });
+}
+
+/** V on a tickler entry: decide again (keep, make current, done, bring back later, go to it, drop). */
+export function reconsider(ui: UI, id: ID) {
+  const s = getState();
+  const st = s.stuff.find((x) => x.id === id);
+  const r = reminderOf(s, st);
+  if (!st || !r) return false;
+  const choices = reminderChoices(ui, st, r, (label, ops) => mutate(label, ops));
+  ui.openPicker({
+    type: "list",
+    title: st.text,
+    items: choices.map((c) => ({ id: c.k, label: c.label, section: c.k === "backspace" ? "drop" : "keep" })),
+    onPick: (k) => k && window.setTimeout(() => choices.find((c) => c.k === k)?.run(), 0),
+  });
+  return true;
+}
 
 /**
  * Done already (the two-minute rule): the item stays in the Inbox struck through, like a done action on its list,
@@ -15,6 +49,9 @@ const n = (ids: ID[]) => named("stuff", ids, "item");
  * Archiving (⇧E) moves both on to Done.
  */
 export function doneNow(ids: ID[]) {
+  // A tickler entry: the item it brings back is done.
+  ids = splitReminders(ids, "e");
+  if (!ids.length) return;
   const ops: Op[] = [];
   const at = stamp();
   for (const st of getState().stuff.filter((x) => ids.includes(x.id) && x.status === "inbox")) {
@@ -29,6 +66,9 @@ export function doneNow(ids: ID[]) {
 
 /** Trash (or, with permanently, delete) Inbox items; a ticked-off item takes its logged action with it. */
 export function trashNow(ids: ID[], permanently = false) {
+  // A tickler entry: Delete drops the item it brings back (to the Trash, ⌘Z restores both).
+  ids = splitReminders(ids, "backspace");
+  if (!ids.length) return;
   const logged = new Set(getState().actions.filter((a) => ids.includes(a.id) && a.done_from === "inbox" && !a.archived_at).map((a) => a.id));
   const ops: Op[] = ids.flatMap((id): Op[] => [
     ...(logged.has(id) ? [{ type: "delete" as const, table: "actions" as const, id }] : []),
@@ -43,6 +83,12 @@ export function trashNow(ids: ID[], permanently = false) {
  */
 export function fileStuff(ui: UI, ids: ID[]) {
   if (!ids.length) return;
+  // A tickler entry isn't filed: it brings back an item that is already filed, to be decided again.
+  if (ids.length === 1 && reconsider(ui, ids[0])) return;
+  if (ids.some((id) => reminderOf(getState(), getState().stuff.find((x) => x.id === id)))) {
+    notify("“Due back” entries are decided one at a time: V on one of them, or K to clarify.");
+    return;
+  }
   ui.openPicker({
     type: "list",
     title: "File as",
@@ -64,20 +110,78 @@ export function fileStuff(ui: UI, ids: ID[]) {
     createLabel: (q) => `New project “${q}”, with this as its first action`,
     onCreate: (q) => {
       const p = newProject({ title: q });
-      // A project's first action is a next action, so it needs a context too.
-      askContext(ui, `Context for the first action of “${q}”`, (ctx, extra) => file(p.id, undefined, [{ type: "create", table: "projects", row: { ...p } }, ...extra], `project “${q}”`, ctx));
+      // The project is made with its first action, which is worded like any next action.
+      oneByOne(p.id, [{ type: "create", table: "projects", row: { ...p } }], q);
     },
     onPick: (target) => {
       if (!target) return;
       if (target === "__done") doneNow(ids);
       else if (target === "__trash") trashNow(ids);
-      else if (target === "waiting") askWaitingOn(ui, null, (who) => file(target, who));
       else if (target === "someday" || target === "reference") file(target);
       else if (target === "checklist") asChecklists();
-      // A next action (on its own or in a project) always gets a context.
-      else askContext(ui, "Context", (ctx, extra) => file(target, undefined, extra, undefined, ctx));
+      // Next Actions, Waiting For or a project: each item is put into words first, one at a time.
+      else oneByOne(target);
     },
   });
+
+  /**
+   * Filing something you will do (or wait for) asks GTD's question first, for one item at a time (owner's decision
+   * after the GTD critique: V used to file the captured words as they were, many at once): the very next physical step
+   * (or what you are waiting for), the item's own words offered to rewrite; then its context (or who it waits on).
+   * Each item files as its own ⌘Z. Esc at any prompt stops there; the items not reached stay in the Inbox.
+   */
+  function oneByOne(target: string, first: Op[] = [], newProject?: string) {
+    const queue = getState().stuff.filter((x) => ids.includes(x.id) && x.status === "inbox");
+    const waiting = target === "waiting";
+    const step = (i: number, lead: Op[]) => {
+      const st = queue[i];
+      if (!st) return;
+      const count = queue.length > 1 ? `${i + 1} of ${queue.length} · ` : "";
+      ui.openPicker({
+        type: "text",
+        title: `${count}${waiting ? "What are you waiting for?" : newProject ? `First next action of “${newProject}”` : "What's the very next physical step?"}`,
+        current: stuffTitle(st),
+        placeholder: waiting ? "What you're waiting for" : "Verb first: Call Anna about the Q3 figures",
+        onPick: (v) => {
+          const words = (v ?? "").trim();
+          if (!words) return;
+          const done = (extra: Op[], data: { context_id?: ID; waiting_who?: string }, label: string) => {
+            mutate(label, [...lead, ...extra, ...fileOne(st, target, words, data)]);
+            window.setTimeout(() => step(i + 1, []), 0);
+          };
+          window.setTimeout(() => {
+            if (waiting) askWaitingOn(ui, null, (who) => done([], { waiting_who: who }, `“${words}” → Waiting For (${who})`), `Waiting on, for “${words}”`);
+            else
+              askContext(ui, `Context for “${words}”`, (context_id, extra) =>
+                done(extra, { context_id }, newProject && i === 0 ? `“${words}” → new project “${newProject}”` : `“${words}” filed`),
+              );
+          }, 0);
+        },
+      });
+    };
+    step(0, first);
+  }
+
+  /** One Inbox item as the action it was worded into: its notes and files come along, and it leaves the Inbox. */
+  function fileOne(st: Stuff, target: string, words: string, data: { context_id?: ID; waiting_who?: string }): Op[] {
+    const isList = target === "next" || target === "waiting";
+    const a = newAction({
+      title: words,
+      notes: splitStuff(st).rest,
+      status: target === "waiting" ? "waiting" : "next",
+      project_id: isList ? null : target,
+      context_id: data.context_id ?? null,
+      waiting_who: data.waiting_who ?? null,
+      waiting_since: target === "waiting" ? new Date().toISOString().slice(0, 10) : null,
+    });
+    return [
+      { type: "create", table: "actions", row: { ...a } },
+      ...getState()
+        .files.filter((f) => f.owner_kind === "stuff" && f.owner_id === st.id)
+        .map((f): Op => ({ type: "patch", table: "files", id: f.id, data: { owner_kind: "action", owner_id: a.id } })),
+      { type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } },
+    ];
+  }
   /** Each item becomes a checklist named by its first line, its other lines the items. A checklist keeps no files. */
   function asChecklists() {
     const items = getState().stuff.filter((x) => ids.includes(x.id) && x.status === "inbox");
@@ -92,8 +196,9 @@ export function fileStuff(ui: UI, ids: ID[]) {
     }
     mutate(`${n(ids)} → ${items.length === 1 ? "a checklist" : "checklists"}`, ops);
   }
-  function file(target: string, who?: string, first: Op[] = [], into?: string, contextId?: ID) {
-    const ops: Op[] = [...first];
+  /** Someday/Maybe and Reference keep the captured words as they are: there is no next action to decide yet. */
+  function file(target: "someday" | "reference") {
+    const ops: Op[] = [];
     for (const st of getState().stuff.filter((x) => ids.includes(x.id) && x.status === "inbox")) {
       const title = stuffTitle(st);
       const rest = st.text.slice(st.text.indexOf(title) + title.length).trim();
@@ -115,16 +220,7 @@ export function fileStuff(ui: UI, ids: ID[]) {
         });
         owner = { kind: "ref", id: rid };
       } else {
-        const isList = ["next", "someday", "waiting"].includes(target);
-        const a = newAction({
-          title,
-          notes: rest,
-          status: isList ? (target as "next") : "next",
-          project_id: isList ? null : target,
-          waiting_since: target === "waiting" ? new Date().toISOString().slice(0, 10) : null,
-          waiting_who: target === "waiting" ? (who ?? null) : null,
-          context_id: contextId ?? null,
-        });
+        const a = newAction({ title, notes: rest, status: "someday" });
         ops.push({ type: "create", table: "actions", row: { ...a } });
         owner = { kind: "action", id: a.id };
       }
@@ -143,6 +239,6 @@ export function fileStuff(ui: UI, ids: ID[]) {
         data: { status: "processed", processed_at: stamp() },
       });
     }
-    mutate(target === "waiting" ? `${n(ids)} → Waiting For (${who})` : into ? `${n(ids)} → new ${into}` : `${n(ids)} filed`, ops);
+    mutate(`${n(ids)} → ${target === "someday" ? "Someday / Maybe" : "Reference"}`, ops);
   }
 }

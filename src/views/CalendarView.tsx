@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { CalendarClock, ChevronLeft, ChevronRight, Hourglass, RefreshCw } from "lucide-react";
-import { completeActions, isStalled, mutate, named, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
+import { completeActions, isChase, isDeferred, isStalled, mutate, named, newAction, nextAppointment, plural, projectHealth, useMeta, useStore } from "../store.ts";
+import { fitLabel, fits, useFit } from "../fit.ts";
 import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
 import { syncCalendars, toggleFeed, useEvents, useHiddenFeeds, useSyncing } from "../calendarFeed.ts";
-import { EventMark, ImportantGlyph, Lamp, Marker } from "../components/bits.tsx";
-import { askContext, editors, linkAppointment } from "../actionCommands.tsx";
+import { EventMark, Lamp, Marker } from "../components/bits.tsx";
+import { askContext, askWaitingOn, editors, linkAppointment } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { addDays, addMonths, daysBetween, formatLong, fromIso, today } from "../../shared/dates.ts";
 import type { Appointment, ID, State } from "../../shared/types.ts";
@@ -17,7 +18,8 @@ import type { Appointment, ID, State } from "../../shared/types.ts";
  * them be moved by dragging, as in any calendar: the bar to move it, either end to change that date.
  */
 
-type Mode = "week" | "month" | "year";
+/** Day is the daily review (GTD: the calendar first, then the action lists); week, month and year the landscape. */
+type Mode = "day" | "week" | "month" | "year";
 type Role = "span" | "due" | "start" | "followup" | "tickler" | "event";
 interface Item {
   key: string;
@@ -38,7 +40,6 @@ interface Item {
   startField: string | null;
   endField: string | null;
   waiting?: string | null;
-  flagged?: boolean;
   overdue?: boolean;
   sub?: string;
   health?: ReturnType<typeof projectHealth>;
@@ -77,8 +78,13 @@ const range = (a: string, n: number) => Array.from({ length: n }, (_, i) => addD
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
 
-/** Every dated thing the landscape holds. Done and deleted work stays off it. */
-function itemsOf(s: State, t: string): Item[] {
+/**
+ * Every dated thing the landscape holds. Done and deleted work stays off it. GTD's calendar is the hard landscape
+ * (owner's decision after the second GTD critique): by default it shows appointments, day-specific actions (start and
+ * due the same day) and due dates, each on its day. `soft` adds the soft dates: start-to-due bars, starts on their own,
+ * follow-ups and ticklers.
+ */
+function itemsOf(s: State, t: string, soft: boolean): Item[] {
   const out: Item[] = [];
   const proj = new Map(s.projects.map((p) => [p.id, p]));
   const ctx = new Map(s.contexts.map((c) => [c.id, c.name]));
@@ -86,23 +92,24 @@ function itemsOf(s: State, t: string): Item[] {
     const open = a.status === "next" || a.status === "waiting";
     if (open) {
       const sub = [a.project_id ? proj.get(a.project_id)?.title : null, a.context_id ? ctx.get(a.context_id) : null].filter(Boolean).join(" · ");
-      const base = { kind: "action" as const, id: a.id, title: a.title || "Untitled action", waiting: a.status === "waiting" ? a.waiting_who || "someone" : null, flagged: Boolean(a.flagged), sub };
-      if (a.defer && a.due && a.defer <= a.due) out.push({ ...base, key: `a:${a.id}`, start: a.defer, end: a.due, role: "span", startField: "defer", endField: "due", overdue: a.due < t });
-      else if (a.due) out.push({ ...base, key: `a:${a.id}`, start: a.due, end: a.due, role: "due", startField: null, endField: "due", overdue: a.due < t });
-      else if (a.defer) out.push({ ...base, key: `a:${a.id}`, start: a.defer, end: a.defer, role: "start", startField: "defer", endField: null });
-      if (a.status === "waiting" && a.followup) out.push({ ...base, key: `f:${a.id}`, start: a.followup, end: a.followup, role: "followup", startField: "followup", endField: "followup", overdue: a.followup < t });
+      const base = { kind: "action" as const, id: a.id, title: a.title || "Untitled action", waiting: a.status === "waiting" ? a.waiting_who || "someone" : null, sub };
+      if (soft && a.defer && a.due && a.defer < a.due) out.push({ ...base, key: `a:${a.id}`, start: a.defer, end: a.due, role: "span", startField: "defer", endField: "due", overdue: a.due < t });
+      // A day-specific action (start and due the same day) moves both ends together; a deadline alone moves its due.
+      else if (a.due) out.push({ ...base, key: `a:${a.id}`, start: a.due, end: a.due, role: "due", startField: a.defer === a.due ? "defer" : null, endField: "due", overdue: a.due < t });
+      else if (soft && a.defer) out.push({ ...base, key: `a:${a.id}`, start: a.defer, end: a.defer, role: "start", startField: "defer", endField: null });
+      if (soft && a.status === "waiting" && a.followup) out.push({ ...base, key: `f:${a.id}`, start: a.followup, end: a.followup, role: "followup", startField: "followup", endField: "followup", overdue: a.followup < t });
     }
-    if ((open || a.status === "someday") && a.bring_back)
+    if (soft && (open || a.status === "someday") && a.bring_back)
       out.push({ key: `b:${a.id}`, kind: "action", id: a.id, title: a.title || "Untitled action", start: a.bring_back, end: a.bring_back, role: "tickler", startField: "bring_back", endField: "bring_back" });
   }
   for (const p of s.projects) {
     if (p.status === "active") {
       const base = { kind: "project" as const, id: p.id, title: p.title || "Untitled project", health: projectHealth(s, p), projectStart: p.start, projectAppt: nextAppointment(s, p), stalled: isStalled(s, p) };
-      if (p.start && p.due && p.start <= p.due) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.due, role: "span", startField: "start", endField: "due", overdue: p.due < t });
+      if (soft && p.start && p.due && p.start <= p.due) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.due, role: "span", startField: "start", endField: "due", overdue: p.due < t });
       else if (p.due) out.push({ ...base, key: `p:${p.id}`, start: p.due, end: p.due, role: "due", startField: null, endField: "due", overdue: p.due < t });
-      else if (p.start) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.start, role: "start", startField: "start", endField: null });
+      else if (soft && p.start) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.start, role: "start", startField: "start", endField: null });
     }
-    if ((p.status === "active" || p.status === "someday") && p.bring_back)
+    if (soft && (p.status === "active" || p.status === "someday") && p.bring_back)
       out.push({ key: `pb:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", start: p.bring_back, end: p.bring_back, role: "tickler", startField: "bring_back", endField: "bring_back" });
   }
   // Longer and earlier first, projects before their actions: the lanes read like a plan.
@@ -232,17 +239,22 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   // The oldest read among the calendars: "last synced" can't claim more than that.
   const oldest = feeds.map((f) => f.syncedAt).filter((x): x is string => Boolean(x)).sort()[0];
   const lastSync = oldest ? new Date(oldest).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null;
+  // Soft dates (start bars, follow-ups, ticklers) are a layer, off by default: the calendar is the hard landscape.
+  const [soft, setSoft] = usePersisted<boolean>("cal:soft", false);
   const all = useMemo(
     () => [
       ...events.map((e): Item => ({ key: `e:${e.key}`, kind: "event", id: e.key, title: e.title, start: e.date, end: e.endDate, role: "event", startField: null, endField: null, time: e.time, endTime: e.endTime, location: e.location, feed: e.feed, color: feedById.get(e.feed)?.color, feedName: feedById.get(e.feed)?.name })),
-      ...itemsOf(s, t),
+      ...itemsOf(s, t, soft),
     ],
-    [s, t, events, feedById],
+    [s, t, events, feedById, soft],
   );
   // While a bar is dragged it is drawn where it would land.
   const items = useMemo(() => (drag ? all.map((i) => (i.key === drag.key ? { ...i, start: drag.start, end: drag.end } : i)) : all), [all, drag]);
   const onDay = (d: string) => items.filter((i) => i.start <= d && i.end >= d);
-  const cursorItems = onDay(cursor);
+  // The Day tab's day reads its overdue work too (on today only): what should already have happened.
+  const overdueBefore = (d: string) => (d === t ? items.filter((i) => i.kind !== "event" && i.overdue && i.end < d) : []);
+  const cursorItems = mode === "day" ? [...onDay(cursor), ...overdueBefore(cursor)] : onDay(cursor);
+  const fitNow = useFit();
   const focusItem = itemKey ? items.find((i) => i.key === itemKey) : undefined;
 
   useEffect(() => {
@@ -275,14 +287,16 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const monthWeeks = Math.ceil((daysBetween(gridStart, addDays(addMonths(monthStart, 1), -1)) + 1) / 7);
   const year = Number(shown.slice(0, 4));
   const title =
-    mode === "week"
+    mode === "day"
+      ? `${cursor === t ? "Today · " : ""}${formatLong(cursor)}`
+      : mode === "week"
       ? `Week ${isoWeek(weekDays[3])} · ${formatShort(weekDays[0])} – ${formatShort(weekDays[6])} ${weekDays[6].slice(0, 4)}`
       : mode === "month"
         ? `${MONTH[Number(shown.slice(5, 7)) - 1]} ${year}`
         : String(year);
   const step = (dir: -1 | 1) => {
     setItemKey(null);
-    setCursor((c) => (mode === "week" ? addDays(c, 7 * dir) : mode === "month" ? addMonths(c, dir) : addMonths(c, 12 * dir)));
+    setCursor((c) => (mode === "day" ? addDays(c, dir) : mode === "week" ? addDays(c, 7 * dir) : mode === "month" ? addMonths(c, dir) : addMonths(c, 12 * dir)));
   };
   const moveCursor = (n: number) => {
     setItemKey(null);
@@ -388,16 +402,35 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const newOn = (day: string) =>
     ui.openPicker({
       type: "text",
-      title: `New action due ${formatLong(day)}`,
+      title: `New action for ${formatLong(day)}`,
       current: "",
       placeholder: "What's the next action?",
       onPick: (title) => {
         if (!title.trim()) return;
         askContext(ui, "Context", (ctx, extra) => {
-          const a = newAction({ title: title.trim(), status: "next", due: day, context_id: ctx });
-          mutate(`“${a.title}” due ${formatShort(day)}`, [...extra, { type: "create", table: "actions", row: { ...a } }]);
+          // A day-specific action (GTD's calendar): start and due on that day, so it stays off Next Actions until then.
+          const a = newAction({ title: title.trim(), status: "next", due: day, defer: day, context_id: ctx });
+          mutate(`“${a.title}” on ${formatShort(day)}`, [...extra, { type: "create", table: "actions", row: { ...a } }]);
           setItemKey(`a:${a.id}`);
         });
+      },
+    });
+  /** W, as everywhere: something you're waiting for, its follow-up on the day under the cursor. */
+  const waitOn = (day: string) =>
+    ui.openPicker({
+      type: "text",
+      title: `New waiting for, follow up ${formatLong(day)}`,
+      current: "",
+      placeholder: "What are you waiting for?",
+      onPick: (title) => {
+        if (!title.trim()) return;
+        window.setTimeout(() =>
+          askWaitingOn(ui, null, (who) => {
+            const a = newAction({ title: title.trim(), status: "waiting", waiting_who: who, waiting_since: t, followup: day });
+            mutate(`Waiting on ${who}: follow up ${formatShort(day)}`, [{ type: "create", table: "actions", row: { ...a } }]);
+            setItemKey(`f:${a.id}`);
+          }),
+        );
       },
     });
   const ed = editors(ui);
@@ -425,16 +458,19 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   };
   const commands: Command[] = [
     { id: "cal.sync", label: "Sync calendars (all of them, now)", group: "Calendar", keys: ["alt+s"], enabled: feeds.length > 0, run: () => void syncCalendars() },
-    { id: "cal.week", label: "Week", group: "Calendar", keys: ["1"], run: () => setMode("week") },
-    { id: "cal.month", label: "Month", group: "Calendar", keys: ["2"], run: () => setMode("month") },
-    { id: "cal.year", label: "Year", group: "Calendar", keys: ["3"], run: () => setMode("year") },
-    { id: "cal.today", label: "Go to today", group: "Calendar", keys: ["t"], run: () => (setItemKey(null), setCursor(t)) },
+    { id: "cal.day", label: "Day (the daily review)", group: "Calendar", keys: ["1"], run: () => setMode("day") },
+    { id: "cal.week", label: "Week", group: "Calendar", keys: ["2"], run: () => setMode("week") },
+    { id: "cal.month", label: "Month", group: "Calendar", keys: ["3"], run: () => setMode("month") },
+    { id: "cal.year", label: "Year", group: "Calendar", keys: ["4"], run: () => setMode("year") },
+    // T and W add, as they do everywhere (DESIGN.md: letters mean one thing); today is Home, or Outlook's ⌥⇧Y.
+    { id: "cal.today", label: "Go to today", group: "Calendar", keys: ["home", "alt+shift+y"], run: () => (setItemKey(null), setCursor(t)) },
     { id: "cal.prev", label: `Previous ${mode}`, group: "Calendar", keys: ["pageup", "shift+arrowleft"], run: () => step(-1) },
     { id: "cal.next", label: `Next ${mode}`, group: "Calendar", keys: ["pagedown", "shift+arrowright"], run: () => step(1) },
     { id: "cal.left", label: "Previous day", group: "Move", keys: ["arrowleft"], run: () => moveCursor(-1) },
     { id: "cal.right", label: "Next day", group: "Move", keys: ["arrowright"], run: () => moveCursor(1) },
-    { id: "cal.up", label: inItem ? "Previous item on this day" : "Same day last week", group: "Move", keys: ["arrowup"], run: () => (inItem ? cycle(-1) : moveCursor(-7)) },
-    { id: "cal.down", label: inItem ? "Next item on this day" : "Same day next week", group: "Move", keys: ["arrowdown"], run: () => (inItem ? cycle(1) : moveCursor(7)) },
+    // On the Day tab ↑↓ walk the day's items (there is no week to move through); elsewhere they move a week.
+    { id: "cal.up", label: inItem ? "Previous item on this day" : mode === "day" ? "Last item of the day" : "Same day last week", group: "Move", keys: ["arrowup"], run: () => (inItem ? cycle(-1) : mode === "day" ? cursorItems.length && setItemKey(cursorItems[cursorItems.length - 1].key) : moveCursor(-7)) },
+    { id: "cal.down", label: inItem ? "Next item on this day" : mode === "day" ? "First item of the day" : "Same day next week", group: "Move", keys: ["arrowdown"], run: () => (inItem ? cycle(1) : mode === "day" ? cursorItems.length && setItemKey(cursorItems[0].key) : moveCursor(7)) },
     {
       id: "cal.enter",
       label: inItem ? "Open details" : mode === "year" ? "Open this month" : "Step into the day's items",
@@ -447,7 +483,9 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       },
     },
     { id: "cal.out", label: "Back to the day", group: "Calendar", keys: ["escape"], enabled: inItem, run: () => setItemKey(null) },
-    { id: "cal.new", label: "New action due on this day", group: "Calendar", keys: ["n"], run: () => newOn(cursor) },
+    { id: "cal.new", label: "New action for this day (day-specific)", group: "Calendar", keys: ["t", "n"], run: () => newOn(cursor) },
+    { id: "cal.soft", label: soft ? "Hide soft dates (starts, follow-ups, ticklers)" : "Show soft dates (starts, follow-ups, ticklers)", group: "View", run: () => setSoft(!soft) },
+    { id: "cal.wait", label: "New waiting for, follow up on this day", group: "Calendar", keys: ["w"], run: () => waitOn(cursor) },
     { id: "cal.later", label: "Move a day later", group: "Calendar", keys: ["alt+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "move") },
     { id: "cal.earlier", label: "Move a day earlier", group: "Calendar", keys: ["alt+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "move") },
     { id: "cal.longer", label: "End a day later", group: "Calendar", keys: ["alt+shift+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "end") },
@@ -590,11 +628,6 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           {i.kind === "project" && i.health && <Lamp health={i.health} start={i.projectStart} appt={i.projectAppt} />}
           {i.role === "followup" && <Hourglass size={11} strokeWidth={2} aria-hidden />}
           {i.role === "tickler" && <CalendarClock size={11} strokeWidth={2} aria-hidden />}
-          {i.flagged && (
-            <svg className="cal-flag" viewBox="0 0 22 22" width="12" height="12" role="img" aria-label="Important">
-              <ImportantGlyph />
-            </svg>
-          )}
           {i.role === "event" && i.time && <span className="cal-time">{i.time}</span>}
           <span className="cal-title">{i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.title}</span>
         </span>
@@ -606,9 +639,10 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   };
 
   /** One item as an agenda line (phones): its mark, the full title, and what the date is to it. */
-  const agendaRow = (i: Item, d: string) => {
+  const agendaRow = (i: Item, d: string, label?: string) => {
     const what =
-      i.role === "event" ? (i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""}` : "All day") : i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : i.role === "start" || (i.role === "span" && d === i.start && d !== i.end) ? "Starts" : i.end === d ? "Due" : `Until ${formatShort(i.end)}`;
+      label ??
+      (i.role === "event" ? (i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""}` : "All day") : i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : i.role === "start" || (i.role === "span" && d === i.start && d !== i.end) ? "Starts" : i.end === d ? (i.startField === "defer" && i.start === i.end ? "On the day" : "Due") : `Until ${formatShort(i.end)}`);
     return (
       <li key={i.key}>
         <button
@@ -622,14 +656,10 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           }}
         >
           <span className="cal-agenda-mark" aria-hidden="true">
-            {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} appt={i.projectAppt} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.flagged ? (
-              <svg className="cal-flag" viewBox="0 0 22 22" width="16" height="16" aria-hidden="true">
-                <ImportantGlyph />
-              </svg>
-            ) : i.kind === "event" ? (
+            {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} appt={i.projectAppt} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.kind === "event" ? (
               <EventMark color={i.color} />
             ) : (
-              <Marker flagged={false} />
+              <Marker />
             )}
           </span>
           <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>
@@ -751,6 +781,70 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         )}
       </>
     );
+  } else if (mode === "day") {
+    // The daily review (GTD): the hard landscape first (appointments, day-specific actions, deadlines), what is
+    // overdue, then the next actions that fit now and the follow-ups due, so the day starts from one page.
+    const d = cursor;
+    const here = onDay(d);
+    const late = overdueBefore(d);
+    const ctxName = new Map(s.contexts.map((c) => [c.id, c.name]));
+    const nextNow =
+      d === t
+        ? s.actions
+            .filter((a) => a.status === "next" && !isDeferred(a, t) && !(a.due && a.due <= t) && (!fitNow || fits(a, fitNow) === "fits"))
+            .sort((a, b) => a.sort - b.sort)
+        : [];
+    const chases = d === t ? s.actions.filter((a) => isChase(a, t)) : [];
+    const plain = (key: string, title: string, meta: string, onOpen: () => void, mark: React.ReactNode) => (
+      <li key={key}>
+        <button type="button" className="cal-agenda-row" onClick={onOpen}>
+          <span className="cal-agenda-mark" aria-hidden="true">
+            {mark}
+          </span>
+          <span className="cal-agenda-title">{title}</span>
+          <span className="cal-agenda-when">{meta}</span>
+        </button>
+      </li>
+    );
+    body = (
+      <div className="cal-day-view">
+        <section aria-label={d === t ? "Today" : formatLong(d)}>
+          <h3 className="cal-day-h">{d === t ? "Today" : "On the day"}</h3>
+          {here.length ? <ul className="cal-agenda">{here.map((i) => agendaRow(i, d))}</ul> : <p className="cal-agenda-none">Nothing on the calendar.</p>}
+        </section>
+        {late.length > 0 && (
+          <section aria-label="Overdue">
+            <h3 className="cal-day-h">Overdue</h3>
+            <ul className="cal-agenda">{late.map((i) => agendaRow(i, d, `Due ${formatShort(i.end)}`))}</ul>
+          </section>
+        )}
+        {d === t && (
+          <section aria-label="Next actions">
+            <h3 className="cal-day-h">
+              Next actions {fitNow ? <span className="cal-day-note">that fit {fitLabel(fitNow)}</span> : <span className="cal-day-note">anywhere</span>}
+            </h3>
+            {nextNow.length ? (
+              <ul className="cal-agenda">
+                {nextNow.slice(0, 12).map((a) => plain(a.id, a.title || "Untitled action", a.context_id ? (ctxName.get(a.context_id) ?? "") : "", () => ui.reveal({ kind: "action", id: a.id }), <Marker />))}
+              </ul>
+            ) : (
+              <p className="cal-agenda-none">{fitNow ? "Nothing fits right now." : "No next actions."}</p>
+            )}
+            {nextNow.length > 12 && (
+              <button type="button" className="text-btn cal-day-more" onClick={() => ui.go("next")}>
+                {plural(nextNow.length - 12, "more")} on Next Actions
+              </button>
+            )}
+          </section>
+        )}
+        {chases.length > 0 && (
+          <section aria-label="Follow-ups due">
+            <h3 className="cal-day-h">Follow-ups due</h3>
+            <ul className="cal-agenda">{chases.map((a) => plain(`c:${a.id}`, a.title || "Untitled", `${a.waiting_who ?? ""} · since ${a.waiting_since ? formatShort(a.waiting_since) : "?"}`, () => ui.reveal({ kind: "action", id: a.id }), <Hourglass size={13} strokeWidth={2} />))}</ul>
+          </section>
+        )}
+      </div>
+    );
   } else if (phone) {
     // The week as an agenda: one section per day, every item with its full title.
     body = (
@@ -851,7 +945,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           <button type="button" className="icon-btn" onClick={() => step(-1)} aria-label={`Previous ${mode}`} title={`Previous ${mode} (${keyLabel("pageup")})`}>
             <ChevronLeft size={16} strokeWidth={2} />
           </button>
-          <button type="button" className="cal-today" onClick={() => (setItemKey(null), setCursor(t))} title={`Go to today (${keyLabel("t")})`}>
+          <button type="button" className="cal-today" onClick={() => (setItemKey(null), setCursor(t))} title={`Go to today (${keyLabel("home")})`}>
             Today
           </button>
           <button type="button" className="icon-btn" onClick={() => step(1)} aria-label={`Next ${mode}`} title={`Next ${mode} (${keyLabel("pagedown")})`}>
@@ -871,6 +965,19 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
             <RefreshCw size={14} strokeWidth={2} aria-hidden />
           </button>
         )}
+        {/* The soft dates as a layer you switch on; the hard landscape (appointments, day-specific actions, deadlines) always shows. */}
+        <div className="cal-legend" aria-label="Layers">
+          <button
+            type="button"
+            className={`cal-legend-item ${soft ? "" : "is-off"}`}
+            aria-pressed={soft}
+            title={soft ? "Hide soft dates: starts, follow-ups, ticklers" : "Show soft dates: starts, follow-ups, ticklers"}
+            onClick={() => setSoft(!soft)}
+          >
+            <span className="cal-legend-dot cal-soft-dot" aria-hidden="true" />
+            Soft dates
+          </button>
+        </div>
         {/* The subscribed calendars, each in its colour: pressing one hides it here for a while (kept in this browser). */}
         {feeds.length > 0 && (
           <div className="cal-legend" aria-label="Calendars">
@@ -890,7 +997,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           </div>
         )}
         <div className="cal-modes" role="tablist" aria-label="Calendar view">
-          {(["week", "month", "year"] as Mode[]).map((m, i) => (
+          {(["day", "week", "month", "year"] as Mode[]).map((m, i) => (
             <button key={m} type="button" role="tab" aria-selected={mode === m} className={mode === m ? "is-current" : ""} onClick={() => setMode(m)} title={`${m[0].toUpperCase()}${m.slice(1)} (${i + 1})`} aria-keyshortcuts={String(i + 1)}>
               {m}
             </button>
