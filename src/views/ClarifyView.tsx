@@ -179,8 +179,10 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       label = `Filed as checklist: ${c.title}`;
     } else if (d.disposition === "reference") {
       const rid = uid();
-      const ref = d.reference ?? { title: current.text.split("\n")[0], notes: "" };
-      ops.push({ type: "create", table: "refs", row: { id: rid, title: ref.title, notes: [ref.notes, current.text].filter(Boolean).join("\n\n---\n"), project_id: null, status: "active", created_at: stamp() } });
+      const ref = d.reference ?? { title: stuffTitle(current), notes: "" };
+      // The captured words follow your notes, as V › Reference keeps them: the title line stays out unless you retitled it.
+      const kept = ref.title.trim() === stuffTitle(current) ? splitStuff(current).rest : current.text;
+      ops.push({ type: "create", table: "refs", row: { id: rid, title: ref.title, notes: [ref.notes, kept].filter(Boolean).join("\n\n---\n"), project_id: null, status: "active", created_at: stamp() } });
       moveFiles("ref", rid);
       label = `Filed as reference: ${ref.title}`;
     } else {

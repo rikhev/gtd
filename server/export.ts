@@ -61,7 +61,20 @@ export function exportZip(): Uint8Array {
       })
       .join("\n\n"),
   );
-  md("reference.md", "Reference", s.refs.filter((r) => r.status === "active").map((r) => `## ${r.title}\n\n${r.notes}`).join("\n\n"));
+  // Each reference with the project it supports and the names of its files (the files themselves stay in the app).
+  md(
+    "reference.md",
+    "Reference",
+    s.refs
+      .filter((r) => r.status === "active")
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map((r) => {
+        const project = s.projects.find((p) => p.id === r.project_id)?.title;
+        const files = s.files.filter((f) => f.owner_kind === "ref" && f.owner_id === r.id).map((f) => f.name);
+        return `## ${r.title}\n\n${project ? `Project: ${project}\n` : ""}${files.length ? `Files: ${files.join("; ")}\n` : ""}${r.notes ? `\n${r.notes}` : ""}`;
+      })
+      .join("\n\n"),
+  );
   md(
     "horizons.md",
     "Horizons",

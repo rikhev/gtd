@@ -4,7 +4,7 @@ import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video,
 import { mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
-import { askContext, editors, linkAppointment, projectItems, quickAddNextAction, quickAddWaiting } from "../actionCommands.tsx";
+import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { openChecklist, progress, progressLabel, repeatsLabel } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
@@ -111,8 +111,8 @@ const STUFF_TOUCH: { k: string; label: string }[] = [
   { k: "k", label: "Clarify" },
 ];
 
-/** What the pane's cursor stops on, top to bottom: fields, the timeline's rows, the add line, the meeting link. */
-const PANE_STOPS = ".detail-body .field .field-text, .detail-body .event-title, .detail-body .field-pick, .detail-body .mini-row, .detail-body .add-action, .detail-body .event-join";
+/** What the pane's cursor stops on, top to bottom: fields, the timeline's rows, the add line, the meeting link, files. */
+const PANE_STOPS = ".detail-body .field .field-text, .detail-body .event-title, .detail-body .field-pick, .detail-body .mini-row, .detail-body .add-action, .detail-body .event-join, .detail-body .file-name";
 
 /** Whether the detail pane is the active region: its fields' letter keys only work then. */
 const DetailActive = createContext(false);
@@ -173,12 +173,38 @@ const none = (
   </>
 );
 
+/** Removing a file is a row change like any other, so ⌘Z puts it back; the server lets the stored file go a day later. */
+function removeFile(f: FileRow) {
+  mutate(`“${f.name}” removed`, [{ type: "delete", table: "files", id: f.id }]);
+}
+
 function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }) {
   const files = useStore((s) => s.files).filter((f) => f.owner_kind === owner.kind && f.owner_id === owner.id);
   const input = useRef<HTMLInputElement>(null);
-  useCommands(`detail-files:${owner.id}`, [{ id: "detail.attach", label: "Attach file", group: "Details", keys: ["mod+o"], inInput: true, run: () => input.current?.click() }], {
-    priority: 30,
-  });
+  // Delete on a file under the pane's cursor removes it, as the × does; both are a row change ⌘Z takes back.
+  const active = useContext(DetailActive);
+  const cursorFile = () => {
+    const id = document.querySelector<HTMLElement>(".detail-body .file-name[data-cursor]")?.dataset.file;
+    return files.find((f) => f.id === id);
+  };
+  useCommands(
+    `detail-files:${owner.id}`,
+    [
+      { id: "detail.attach", label: "Attach file", group: "Details", keys: ["mod+o"], inInput: true, run: () => input.current?.click() },
+      {
+        id: "detail.unattach",
+        label: "Remove the file under the cursor",
+        group: "Details",
+        keys: ["backspace", "delete"],
+        enabled: active && files.length > 0,
+        run: () => {
+          const f = cursorFile();
+          if (f) removeFile(f);
+        },
+      },
+    ],
+    { priority: 30 },
+  );
   return (
     <section className="detail-files">
       <h3 className="detail-h">
@@ -189,7 +215,7 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
         {files.map((f) => (
           <li key={f.id} className="file-row">
             <Paperclip size={13} strokeWidth={1.75} aria-hidden />
-            <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="file-name">
+            <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="file-name" data-file={f.id}>
               {f.name}
             </a>
             <span className="file-size">{fileSize(f.size)}</span>
@@ -197,15 +223,12 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
               type="button"
               className="icon-btn"
               aria-label={`Remove ${f.name}`}
-              onClick={async () => {
-                await fetch(`/api/files/${f.id}`, { method: "DELETE" });
-                mutate("File removed", [{ type: "delete", table: "files", id: f.id }], {});
-              }}
+              onClick={() => removeFile(f)}
             >
               <X size={13} strokeWidth={2} />
             </button>
             {f.mime.startsWith("image/") && <img className="file-thumb" src={`/api/files/${f.id}`} alt={f.name} />}
-            {f.preview && !f.mime.startsWith("image/") && owner.kind === "stuff" && <pre className="file-preview">{f.preview.slice(0, 1600)}</pre>}
+            {f.preview && !f.mime.startsWith("image/") && (owner.kind === "stuff" || owner.kind === "ref") && <pre className="file-preview">{f.preview.slice(0, 1600)}</pre>}
           </li>
         ))}
       </ul>
@@ -845,17 +868,8 @@ function RefDetail({ r }: { r: Ref }) {
       <PickField
         label="Project"
         k="P"
-        onOpen={() =>
-          ui.openPicker({
-            type: "list",
-            // The same projects, in the same order, as everywhere a project is picked; the one it supports is marked.
-            title: "Project it supports",
-            items: projectItems(),
-            current: r.project_id,
-            noneLabel: "No project",
-            onPick: (id) => patch("refs", r.id, { project_id: id }),
-          })
-        }
+        // The one project picker every list's P opens.
+        onOpen={() => setProject(ui, "refs", [r.id])}
       >
         {proj ? proj.title : none}
       </PickField>

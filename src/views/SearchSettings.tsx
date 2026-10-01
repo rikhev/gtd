@@ -39,20 +39,29 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
       const hay = texts.filter(Boolean).join(" ").toLowerCase();
       return words.every((w) => hay.includes(w));
     };
+    // An item's files count as its words: their names, and the text read out of them when they were stored.
+    const fileWords = new Map<string, string[]>();
+    for (const f of s.files) {
+      const k = `${f.owner_kind}:${f.owner_id}`;
+      fileWords.set(k, [...(fileWords.get(k) ?? []), f.name, f.preview]);
+    }
+    const filesOf = (kind: string, id: ID) => fileWords.get(`${kind}:${id}`) ?? [];
+    const projectOf = (id: ID | null) => (id ? s.projects.find((p) => p.id === id)?.title : undefined);
     const where = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", later: "Planned, in its project", done: "Done", trashed: "" } as const;
     const home = { next: "next", waiting: "waiting", someday: "someday", later: "projects", done: "done", trashed: "next" } as const;
     const actions = s.actions
-      .filter((a) => a.status !== "trashed" && match(a.title, a.notes, a.waiting_who))
+      .filter((a) => a.status !== "trashed" && match(a.title, a.notes, a.waiting_who, ...filesOf("action", a.id)))
       .map((a) => ({ key: `a:${a.id}`, kind: "action" as const, id: a.id, title: a.title, where: where[a.status], home: home[a.status] as ViewId }));
     const projects = s.projects
-      .filter((p) => p.status !== "trashed" && match(p.title, p.notes))
+      .filter((p) => p.status !== "trashed" && match(p.title, p.notes, ...filesOf("project", p.id)))
       .map((p) => ({ key: `p:${p.id}`, kind: "project" as const, id: p.id, title: p.title, where: p.status === "someday" ? "Someday / Maybe" : "Projects", home: (p.status === "someday" ? "someday" : "projects") as ViewId }));
     const stuff = s.stuff
-      .filter((x) => x.status === "inbox" && match(x.text))
+      .filter((x) => x.status === "inbox" && match(x.text, ...filesOf("stuff", x.id)))
       .map((x) => ({ key: `s:${x.id}`, kind: "stuff" as const, id: x.id, title: x.text.split("\n")[0], where: "Inbox", home: "inbox" as ViewId }));
+    // A reference matches by its words, its files or the project it supports, and says which project that is.
     const refs = s.refs
-      .filter((r) => r.status === "active" && match(r.title, r.notes))
-      .map((r) => ({ key: `r:${r.id}`, kind: "ref" as const, id: r.id, title: r.title, where: "Reference", home: "reference" as ViewId }));
+      .filter((r) => r.status === "active" && match(r.title, r.notes, projectOf(r.project_id), ...filesOf("ref", r.id)))
+      .map((r) => ({ key: `r:${r.id}`, kind: "ref" as const, id: r.id, title: r.title, where: projectOf(r.project_id) ? `Reference · ${projectOf(r.project_id)}` : "Reference", home: "reference" as ViewId }));
     // A checklist matches by its name or any of its items; the hit names the item that matched.
     const lists = s.checklists
       .filter((c) => c.status === "active")

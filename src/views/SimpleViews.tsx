@@ -191,7 +191,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
   // A–Z by title is the list's own order; a heading click sorts by that column instead.
   const [sort, setSort] = useSort("reference");
   const sorters: Sorters<Ref> = useMemo(
-    () => ({ subject: (r) => r.title, proj: (r) => s.projects.find((p) => p.id === r.project_id)?.title, files: (r) => filesBy.get(r.id) ?? null, when: (r) => r.created_at, updated: (r) => refUpdated(s, r) }),
+    () => ({ subject: (r) => r.title, proj: (r) => s.projects.find((p) => p.id === r.project_id)?.title, files: (r) => filesBy.get(r.id) ?? null, created: (r) => r.created_at, updated: (r) => refUpdated(s, r) }),
     [s, filesBy],
   );
   const rows = useMemo(
@@ -213,6 +213,12 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.revealTarget]);
 
+  const create = () => {
+    const id = uid();
+    mutate("New reference", [{ type: "create", table: "refs", row: { id, title: "", notes: "", project_id: null, status: "active", created_at: stamp() } }], { silent: true });
+    nav.setFocus(id);
+    setEditing(id);
+  };
   const commands: Command[] = [
     ...nav.commands,
     {
@@ -220,12 +226,24 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
       label: "New reference",
       group: "Reference",
       keys: ["n"],
-      run: () => {
-        const id = uid();
-        mutate("New reference", [{ type: "create", table: "refs", row: { id, title: "", notes: "", project_id: null, status: "active", created_at: stamp() } }], { silent: true });
-        nav.setFocus(id);
-        setEditing(id);
-      },
+      run: () => create(),
+    },
+    {
+      // Typing a title finds it (the list's letters are its commands, so the typing happens in a picker): what starts
+      // with the words comes first. ⌥Q searches inside notes and files as well.
+      id: "ref.find",
+      label: "Find a reference by its title",
+      group: "Reference",
+      keys: ["/"],
+      enabled: rows.length > 0,
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "Find a reference",
+          items: [...rows].sort((a, b) => a.title.localeCompare(b.title)).map((r) => ({ id: r.id, label: r.title || "Untitled", hint: s.projects.find((p) => p.id === r.project_id)?.title })),
+          current: focusId,
+          onPick: (id) => id && nav.setFocus(id),
+        }),
     },
     { id: "ref.open", label: "Open details", group: "Reference", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
@@ -283,17 +301,18 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
         filesBy.get(r.id) ? (
           <span className="files-count">
             <Paperclip size={12} strokeWidth={2} aria-hidden /> {filesBy.get(r.id)}
+            <span className="visually-hidden"> {filesBy.get(r.id) === 1 ? "file" : "files"}</span>
           </span>
         ) : (
           <span className="dash" aria-hidden="true">–</span>
         ),
     },
-    { key: "when", label: "Created", width: "96px", render: (r) => <span className="date">{formatDate(r.created_at.slice(0, 10))}</span> },
+    // On a narrow screen, and on a phone, Created steps aside for Updated: when it last changed is what helps you find a thing.
+    { key: "created", label: "Created", width: "96px", drop: 1, render: (r) => <span className="date">{formatDate(r.created_at.slice(0, 10))}</span> },
     {
       key: "updated",
       label: "Updated",
       width: "96px",
-      drop: 1,
       // Empty until it has changed since it was filed; the column steps aside while nothing has.
       blank: (r) => !(refUpdated(s, r) > r.created_at),
       render: (r) => {
@@ -315,7 +334,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
         active={regionActive}
         showHeaders={false}
         onOpen={(k) => ui.openDetail({ kind: "ref", id: k }, true)}
-        empty={<EmptyState title="No reference material" lines={["Add a note here, or file non-actionable stuff here when you clarify the Inbox."]} />}
+        empty={<EmptyState title="No reference material" lines={["Add a note here, or file non-actionable stuff here when you clarify the Inbox."]} action={{ label: "New reference", run: create }} />}
       />
       <input
         ref={fileInput}

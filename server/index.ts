@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync } from "node:fs";
 import { applyOps, db, FILES_DIR, getSetting, insertRow, loadState, now, patchRow, setSetting } from "./db.ts";
 import { extract, guessMime, looksLikeEmail } from "./extract.ts";
 import { exportJson, exportZip } from "./export.ts";
@@ -59,6 +59,7 @@ app.post("/api/ops", async (c) => {
   const { ops } = (await c.req.json()) as { ops: Op[] };
   try {
     applyOps(ops);
+    for (const op of ops) if (op.type === "delete") deletedAt.set(op.id, Date.now());
     return c.json({ ok: true });
   } catch (e) {
     return c.json({ ok: false, error: (e as Error).message }, 400);
@@ -141,14 +142,24 @@ app.get("/api/files/:id", (c) => {
   });
 });
 
-app.delete("/api/files/:id", (c) => {
-  const id = fileId(c.req.param("id"));
-  if (!id) return c.json({ error: "No such file" }, 404);
-  db.prepare("DELETE FROM files WHERE id = ?").run(id);
-  const path = `${FILES_DIR}/${id}`;
-  if (existsSync(path)) unlinkSync(path);
-  return c.json({ ok: true });
-});
+/**
+ * Removing a file, or deleting its item for good, is an ordinary row change that ⌘Z can take back, so the stored file
+ * stays a while: rows deleted lately (in this run of the server) are remembered, and the sweep leaves their files be
+ * for a day. After that, a file whose row is gone, or whose item is gone, goes for good.
+ */
+const deletedAt = new Map<string, number>();
+const recentlyDeleted = (id: string) => Date.now() - (deletedAt.get(id) ?? 0) < 86_400_000;
+const OWNER_TABLE = { stuff: "stuff", project: "projects", ref: "refs", action: "actions" } as const;
+function sweepFiles() {
+  const rows = db.prepare("SELECT id, owner_kind, owner_id FROM files").all() as Pick<FileRow, "id" | "owner_kind" | "owner_id">[];
+  const kept = new Set<string>();
+  for (const f of rows) {
+    const t = OWNER_TABLE[f.owner_kind];
+    if (t && !recentlyDeleted(f.owner_id) && !db.prepare(`SELECT 1 FROM ${t} WHERE id = ?`).get(f.owner_id)) db.prepare("DELETE FROM files WHERE id = ?").run(f.id);
+    else kept.add(f.id);
+  }
+  for (const name of readdirSync(FILES_DIR)) if (!kept.has(name) && !recentlyDeleted(name)) unlinkSync(`${FILES_DIR}/${name}`);
+}
 
 /**
  * Subscribed calendars (Outlook, iCloud… read-only ICS/webcal): their links stay here; the browser gets names, colours,
@@ -254,7 +265,11 @@ function purgeTrash() {
   }
 }
 purgeTrash();
-setInterval(purgeTrash, 3_600_000).unref();
+sweepFiles();
+setInterval(() => {
+  purgeTrash();
+  sweepFiles();
+}, 3_600_000).unref();
 
 app.post("/api/review/complete", (c) => {
   const row = { id: randomUUID(), completed_at: now() };

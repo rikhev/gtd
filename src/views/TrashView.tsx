@@ -128,13 +128,16 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
   };
   const purge = (rows: Row[], label?: string) => {
     if (!rows.length) return;
-    // A checklist goes for good with its items.
+    // A checklist goes for good with its items, and anything else with its files (⌘Z brings them back together; the
+    // server keeps the stored files a day before it lets them go).
+    const files = s.files.filter((f) => rows.some((r) => r.kind === f.owner_kind && r.id === f.owner_id));
     const items = s.checklist_items.filter((i) => rows.some((r) => r.kind === "checklist" && r.id === i.checklist_id));
     const records = s.checklist_ticks.filter((k) => rows.some((r) => r.kind === "checklist" && r.id === k.checklist_id));
     mutate(label ?? `${rows.length === 1 ? `“${rows[0].title}”` : plural(rows.length, "item")} deleted for good`, [
       ...rows.map((r) => ({ type: "delete" as const, table: TABLE[r.kind], id: r.id })),
       ...items.map((i) => ({ type: "delete" as const, table: "checklist_items" as const, id: i.id })),
       ...records.map((k) => ({ type: "delete" as const, table: "checklist_ticks" as const, id: k.id })),
+      ...files.map((f) => ({ type: "delete" as const, table: "files" as const, id: f.id })),
     ]);
   };
 
