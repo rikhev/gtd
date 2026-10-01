@@ -151,8 +151,8 @@ export function Picker({ spec, close }: Props) {
   }, [spec, q]);
 
   useEffect(() => {
-    if (spec.type === "list" && spec.current) {
-      const i = options.findIndex((o) => o.id === spec.current);
+    if (spec.type === "list" && (spec.highlight || spec.current)) {
+      const i = options.findIndex((o) => o.id === (spec.highlight ?? spec.current));
       setHi(i >= 0 ? i : 0);
     } else if (spec.type === "list" && spec.mustChoose && !q.trim()) setHi(-1);
     else setHi(0);

@@ -7,6 +7,7 @@ import { useCommands, type Command } from "../keys.ts";
 import { RAIL } from "../components/Chrome.tsx";
 import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
 import { splitStuff, stuffTitle } from "./InboxView.tsx";
+import { itemsFromText, newChecklist } from "../checklists.ts";
 import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
 import { formatLong, formatTime } from "../../shared/dates.ts";
 import type { ID, Op, Proposal, ProposedAction } from "../../shared/types.ts";
@@ -176,6 +177,16 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     if (d.disposition === "trash") {
       ops.push({ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } });
       label = "Trashed";
+    } else if (d.disposition === "reference" && d.reference?.checklist) {
+      // A checklist (GTD keeps them with reference): the item's lines under its first become the items to tick.
+      if (filesHere.length) {
+        notify("This item has files attached, and a checklist can't keep files. File it as Reference to keep them.", { tone: "error" });
+        return;
+      }
+      const c = newChecklist({ title: d.reference.title.trim() || stuffTitle(current) || "Untitled checklist" });
+      ops.push({ type: "create", table: "checklists", row: { ...c } });
+      for (const item of itemsFromText(splitStuff(current).rest, c.id)) ops.push({ type: "create", table: "checklist_items", row: { ...item } });
+      label = `Filed as checklist: ${c.title}`;
     } else if (d.disposition === "reference") {
       const rid = uid();
       const ref = d.reference ?? { title: current.text.split("\n")[0], notes: "" };
@@ -311,12 +322,18 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           { id: "someday", label: "Someday / Maybe" },
           { id: "item:project", label: "Whole item → New project" },
           { id: "item:reference", label: "Whole item → Reference" },
+          { id: "item:checklist", label: "Whole item → New checklist" },
           { id: "item:trash", label: "Whole item → Trash" },
         ],
         current: a.kind,
         onPick: (k) => {
           if (!k) return;
           if (k === "item:project") makeProject();
+          else if (k === "item:checklist" || k === "item:reference")
+            update((d) => {
+              d.disposition = "reference";
+              d.reference = { title: d.reference?.title || stuffTitle(current!), notes: d.reference?.notes ?? "", checklist: k === "item:checklist" };
+            });
           else if (k.startsWith("item:")) update((d) => (d.disposition = k.slice(5) as Draft["disposition"]));
           else if (k === "waiting") askWaitingOn(ui, a.waiting_who, (who) => update((d) => {
             d.actions[i].kind = "waiting";
@@ -514,7 +531,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         <section className="clarify-proposal" aria-label="Your decision">
           <h2 className="pane-h">
             Your decision
-            {draft && !gating && <Tag>{DISPOSITIONS[draft.disposition]}</Tag>}
+            {draft && !gating && <Tag>{draft.disposition === "reference" && draft.reference?.checklist ? "Checklist" : DISPOSITIONS[draft.disposition]}</Tag>}
           </h2>
           {gating ? (
             <div className="clarify-ask">
@@ -526,13 +543,16 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
               {draft.disposition === "reference" && (
                 <div className="p-block">
                   <label className="field">
-                    <span className="field-label">Reference title</span>
+                    <span className="field-label">{draft.reference?.checklist ? "Checklist title" : "Reference title"}</span>
                     <input
                       className="field-text p-title"
                       value={draft.reference?.title ?? ""}
-                      onChange={(e) => update((d) => (d.reference = { title: e.target.value, notes: d.reference?.notes ?? "" }))}
+                      onChange={(e) => update((d) => (d.reference = { title: e.target.value, notes: d.reference?.notes ?? "", checklist: d.reference?.checklist }))}
                     />
                   </label>
+                  {draft.reference?.checklist ? (
+                    <ChecklistPreview text={current ? splitStuff(current).rest : ""} />
+                  ) : (
                   <label className="field">
                     <span className="field-label">Notes</span>
                     <NotesArea
@@ -543,6 +563,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                       onValue={(notes) => update((d) => (d.reference = { title: d.reference?.title ?? "", notes }))}
                     />
                   </label>
+                  )}
                 </div>
               )}
               {draft.disposition === "trash" && <p className="p-note">Accept to trash it, or file it as something else.</p>}
@@ -693,6 +714,26 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           </ol>
         </section>
       )}
+    </div>
+  );
+}
+
+/** Filing as a checklist: what its items will be, from the item's lines under its title. */
+function ChecklistPreview({ text }: { text: string }) {
+  const items = itemsFromText(text, "preview");
+  const toTick = items.filter((i) => !i.section).length;
+  if (!items.length) return <p className="p-note">The item has nothing under its title, so the checklist starts empty, ready to fill.</p>;
+  return (
+    <div className="field">
+      <span className="field-label">{plural(toTick, "item")} to tick, from the item's lines</span>
+      <ul className="cl-preview">
+        {items.slice(0, 8).map((i) => (
+          <li key={i.id} className={i.section ? "is-section" : ""}>
+            {i.title}
+          </li>
+        ))}
+        {items.length > 8 && <li className="cl-preview-more">and {items.length - 8} more</li>}
+      </ul>
     </div>
   );
 }

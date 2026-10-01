@@ -170,11 +170,11 @@ function askProjectThenCreate(ui: UI, title: string, extra: Op[], make: (project
  * A next action from anywhere (⌥T): what to do, where (a context, required as everywhere), then its project if it
  * has one. It lands on Next Actions; the view stays put.
  */
-export function quickAddNextAction(ui: UI) {
+export function quickAddNextAction(ui: UI, words = "") {
   ui.openPicker({
     type: "text",
     title: "New next action",
-    current: "",
+    current: words,
     placeholder: "What's the next physical step, verb first",
     onPick: (v) => {
       const title = (v ?? "").trim();

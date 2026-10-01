@@ -9,6 +9,7 @@ export type ViewId =
   | "agendas"
   | "someday"
   | "reference"
+  | "checklists"
   | "review"
   | "done"
   | "settings"
@@ -40,6 +41,8 @@ export type PickerSpec =
       title: string;
       items: ListItem[];
       current?: string | null;
+      /** Where the highlight starts, without marking it as the current value (a filter coming back on the row just ticked). */
+      highlight?: string | null;
       noneLabel?: string;
       createLabel?: (q: string) => string;
       onCreate?: (q: string) => void;
@@ -124,6 +127,7 @@ export const VIEW_TITLES: Record<ViewId, string> = {
   agendas: "Agendas",
   someday: "Someday / Maybe",
   reference: "Reference",
+  checklists: "Checklists",
   review: "Weekly Review",
   done: "Done",
   settings: "Settings",

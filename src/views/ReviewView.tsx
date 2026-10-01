@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Mail, Paperclip, StickyNote } from "lucide-react";
+import { FileText, ListChecks, Mail, Paperclip, StickyNote } from "lucide-react";
 import { capture, uid, mutate, newProject, completeActions, isChase, isStale, isStalled, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
@@ -12,6 +12,7 @@ import { projectEditors } from "./ProjectsView.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
 import { stuffTitle } from "./InboxView.tsx";
+import { isTicked, itemsOf, openChecklist, periodOf, progress, progressLabel, repeatsLabel } from "../checklists.ts";
 import { doneNow, fileStuff, trashNow } from "../fileStuff.ts";
 import { addDays, formatLong, today, daysBetween } from "../../shared/dates.ts";
 import type { Action, ID, Stuff } from "../../shared/types.ts";
@@ -25,15 +26,19 @@ const STEPS = [
   { id: "someday", title: "Someday / Maybe", note: "Activate anything whose time has come. Drop what no longer matters." },
   { id: "lookback", title: "Look back", note: "What the last two weeks finished. Anything it left behind? Add the follow-up now." },
   { id: "upcoming", title: "Upcoming", note: "Due, starting, follow-ups and tickler dates in the next two weeks." },
+  // GTD's last "get current" check: review any relevant checklists, as a trigger for new actions.
+  { id: "checklists", title: "Checklists", note: "Look over the checklists that bear on the weeks ahead. Anything one brings to mind becomes a next action." },
   // GTD's Get Creative: the areas you're responsible for, and anything new they bring to mind.
   { id: "creative", title: "Get creative", note: "Walk your areas: does each have the projects it needs? Then capture anything new: projects, ideas, someday wishes." },
   { id: "finish", title: "Finish", note: "Record the review." },
 ] as const;
 type StepId = (typeof STEPS)[number]["id"];
+/** On Finish, a digit jumps back to an open step: 1–9, then 0 for the tenth. */
+const stepKey = (i: number) => (i === 9 ? "0" : String(i + 1));
 
 interface Row {
   key: string;
-  kind: "project" | "action" | "stuff" | "area" | "event";
+  kind: "project" | "action" | "stuff" | "area" | "event" | "checklist";
   id: ID;
   title: string;
   info: string;
@@ -49,7 +54,17 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const meta = useMeta();
   const s = useStore((x) => x);
   // The review in progress survives leaving the view: stepping out to fix something resumes here.
-  const [sess, setSess] = useState<ReviewSession>(loadSession);
+  const [sess, setSess] = useState<ReviewSession>(() => {
+    const s = loadSession();
+    // Back on the step it was on, by name; a review saved before steps had names, and before Checklists was added
+    // after Upcoming (index 8), is moved one on from there.
+    const found = s.stepId ? STEPS.findIndex((st) => st.id === s.stepId) : s.stepIdx >= 8 ? s.stepIdx + 1 : s.stepIdx;
+    const at = Math.max(0, Math.min(STEPS.length - 1, found));
+    // Named from now on, so the move above happens once.
+    const fixed = { ...s, stepIdx: at, stepId: STEPS[at].id };
+    saveSession(fixed);
+    return fixed;
+  });
   const update = (patch: Partial<ReviewSession>) =>
     setSess((cur) => {
       const next = { ...cur, ...patch };
@@ -101,7 +116,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   // F2 renames the row under the cursor in place ("Rewrite anything vague").
   const [renaming, setRenaming] = useState<string | null>(null);
   const markActed = (id: string) => !(sess.acted ?? []).includes(id) && update({ acted: [...(sess.acted ?? []), id] });
-  const setStepIdx = (n: number) => update({ stepIdx: n });
+  const setStepIdx = (n: number) => update({ stepIdx: n, stepId: STEPS[n].id });
   const step = STEPS[stepIdx];
   const t = today();
   // A step is only struck through once it has been visited and nothing in it is left open.
@@ -158,6 +173,18 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     return undefined;
   };
   const projectTitle = (id: ID | null) => s.projects.find((p) => p.id === id)?.title ?? "";
+  /**
+   * How a routine's week went, to ask whether each habit still serves you: a daily one counts the days of the last
+   * seven on which everything was done, a weekly one whether it was all done this week.
+   */
+  const routineWeek = (id: ID, repeats: "day" | "week") => {
+    const habits = itemsOf(s, id).filter((i) => !i.section);
+    if (!habits.length) return repeatsLabel(repeats);
+    if (repeats === "week") return `${repeatsLabel(repeats)} · ${habits.every((i) => isTicked(s, i, t)) ? "all done this week" : `${habits.filter((i) => isTicked(s, i, t)).length} of ${habits.length} done this week`}`;
+    const days = Array.from({ length: 7 }, (_, k) => addDays(t, -k));
+    const full = days.filter((d) => habits.every((i) => s.checklist_ticks.some((k) => k.item_id === i.id && periodOf(k.day, "day") === d))).length;
+    return `${repeatsLabel(repeats)} · all done ${full} of the last 7 days`;
+  };
 
   // The subscribed Outlook calendar, two weeks either side: Look back reads what meetings left behind, Upcoming what's ahead.
   const { events, feeds } = useEvents(addDays(t, -14), addDays(t, 14));
@@ -244,6 +271,18 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           .sort((a, b) => a.sort - b.sort)
           .map((a) => ({ key: a.id, kind: "area" as const, id: a.id, title: `#${a.name}`, info: plural(active(a.id), "active project"), date: null, note: active(a.id) ? undefined : "No active project" }));
       }
+      case "checklists": {
+        // Every checklist, with its area and how far a run under way has got.
+        const areaOf = (id: ID | null) => s.areas.find((a) => a.id === id);
+        return s.checklists
+          .filter((c) => c.status === "active")
+          .sort((a, b) => a.sort - b.sort)
+          .map((c) => {
+            const p = progress(s, c.id);
+            const area = areaOf(c.area_id);
+            return { key: c.id, kind: "checklist" as const, id: c.id, title: c.title || "Untitled checklist", info: [area ? `#${area.name}` : "", c.repeats ? routineWeek(c.id, c.repeats) : progressLabel(p) || plural(p.total, "item")].filter(Boolean).join(" · "), date: c.finished_at?.slice(0, 10) ?? null };
+          });
+      }
       case "upcoming": {
         const end = addDays(t, 14);
         const within = (d: string | null) => Boolean(d && d <= end);
@@ -277,7 +316,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   const nav = useListNav(`review:${step.id}`, useMemo(() => [{ key: step.id, rowKeys: rows.map((r) => r.key), showHeader: false }], [rows, step.id]));
   const focusRow = rows.find((r) => r.key === nav.focus);
   useEffect(() => {
-    ui.followDetail(focusRow && focusRow.kind !== "area" ? { kind: focusRow.kind, id: focusRow.id } : null);
+    ui.followDetail(focusRow && focusRow.kind !== "area" && focusRow.kind !== "checklist" ? { kind: focusRow.kind, id: focusRow.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRow?.key]);
   /** ⌘↵ on any step: you've been through it; it counts as clear once nothing in it is open. Then the next step. */
@@ -453,11 +492,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         else quickAddWaiting(ui);
       },
     },
+    // Checklists: a checklist is a trigger for new actions (GTD); its items stay as they are.
+    { id: "rv.checkaction", label: "New next action", group: "Review", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui) },
     ...STEPS.slice(0, -1).map((st, i) => ({
       id: `rv.jump${i + 1}`,
       label: `Go to step: ${st.title}`,
       group: "Review",
-      keys: [String(i + 1)],
+      keys: [stepKey(i)],
       enabled: step.id === "finish",
       hidden: true,
       run: () => setStepIdx(i),
@@ -477,14 +518,28 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         if (e) linkAppointment(ui, e);
       },
     },
-    { id: "rv.open", label: "Open details", group: "Review", keys: ["enter"], enabled: Boolean(focusRow) && focusRow?.kind !== "area", run: () => focusRow && focusRow.kind !== "area" && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
+    {
+      id: "rv.open",
+      label: focusRow?.kind === "checklist" ? "Open the checklist" : "Open details",
+      group: "Review",
+      keys: ["enter"],
+      enabled: Boolean(focusRow) && focusRow?.kind !== "area",
+      run: () => {
+        if (!focusRow || focusRow.kind === "area") return;
+        // A checklist opens in Checklists; the review keeps its place for when you come back.
+        if (focusRow.kind === "checklist") {
+          ui.go("checklists");
+          openChecklist(focusRow.id);
+        } else ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true);
+      },
+    },
     {
       id: "rv.done",
       label: step.id === "someday" ? "Activate" : "Mark done",
       group: "Review",
       // E is Done everywhere; bringing a someday item back to life is A (Activate).
       keys: [step.id === "someday" ? "a" : "e"],
-      enabled: Boolean(focusRow) && step.id !== "lookback" && step.id !== "creative",
+      enabled: Boolean(focusRow) && !["lookback", "creative", "checklists"].includes(step.id),
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
@@ -530,7 +585,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       label: "Trash",
       group: "Review",
       keys: ["backspace", "delete"],
-      enabled: Boolean(focusRow) && step.id !== "lookback" && step.id !== "creative",
+      enabled: Boolean(focusRow) && !["lookback", "creative", "checklists"].includes(step.id),
       run: () => {
         const a = targetsOf("action");
         const p = targetsOf("project");
@@ -551,11 +606,11 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   };
 
   const columns: Column<Row>[] = [
-    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "area" ? null : r.kind === "event" ? <EventMark color={r.color} /> : r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} appt={apptOf(r.id)} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
+    { key: "mark", label: "", width: "30px", render: (r) => (r.kind === "area" ? null : r.kind === "checklist" ? <span className="kind-icon"><ListChecks size={14} strokeWidth={1.75} aria-hidden /></span> : r.kind === "event" ? <EventMark color={r.color} /> : r.kind === "project" ? <Lamp health={healthOf(r.id)} start={s.projects.find((x) => x.id === r.id)?.start} appt={apptOf(r.id)} /> : r.kind === "stuff" ? <span className="kind-icon">{stuffIcon(s.stuff.find((x) => x.id === r.id))}</span> : <Marker flagged={false} />) },
     {
       key: "subject",
       // Name what the rows are; the step title is already on the tab and the heading.
-      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item", creative: "Area" } as Record<string, string>)[step.id] ?? "",
+      label: ({ clear: "Stuff", projects: "Project", next: "Action", waiting: "Waiting for", someday: "Item", lookback: "Finished", upcoming: "Item", creative: "Area", checklists: "Checklist" } as Record<string, string>)[step.id] ?? "",
       width: "minmax(220px, 2fr)",
       render: (r) =>
         renaming === r.key ? (
@@ -575,9 +630,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           </span>
         ),
     },
-    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
+    { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects", checklists: "Items" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
-    { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={step.id === "someday" || step.id === "clear" || step.id === "lookback" ? "plain" : "due"} /> },
+    { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date", checklists: "Last finished" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={["someday", "clear", "lookback", "checklists"].includes(step.id) ? "plain" : "due"} /> },
   ];
   /** A project's next linked appointment, which its lamp names. */
   function apptOf(id: ID) {
@@ -647,7 +702,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           {notClear.length ? (
             <>
               <p className="muted-text">Not clear yet, if you want to go back:</p>
-              <KeyChoices choices={notClear.map((x) => ({ k: String(x.i + 1), label: `${x.st.title}: ${whyOpen(x)}`, run: () => setStepIdx(x.i) }))} />
+              <KeyChoices choices={notClear.map((x) => ({ k: stepKey(x.i), label: `${x.st.title}: ${whyOpen(x)}`, run: () => setStepIdx(x.i) }))} />
             </>
           ) : (
             <p className="muted-text">Every list has been through the review and nothing is left open.</p>
@@ -670,7 +725,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           active={regionActive}
           showHeaders={false}
           rowClass={(r) => (r.note ? "is-flagged-row" : "")}
-          empty={<p className="muted-text">{step.id === "clear" ? "The Inbox is empty. Move on to the next step." : step.id === "lookback" ? "Nothing was finished in the last two weeks. Move on to the next step." : step.id === "creative" ? "No areas yet. Add them in Settings › Areas; until then, capture anything new above." : "Nothing here. Move on to the next step."}</p>}
+          empty={<p className="muted-text">{step.id === "clear" ? "The Inbox is empty. Move on to the next step." : step.id === "lookback" ? "Nothing was finished in the last two weeks. Move on to the next step." : step.id === "creative" ? "No areas yet. Add them in Settings › Areas; until then, capture anything new above." : step.id === "checklists" ? "No checklists yet. Keep the lists you run again and again in Checklists. Move on to the next step." : "Nothing here. Move on to the next step."}</p>}
         />
         </>
       )}
@@ -687,8 +742,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
+            ...(step.id === "checklists" ? [...(rows.length > 0 ? [{ k: "enter", label: "Open" }] : []), { k: "t", label: "New next action" }] : []),
             ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Reviewed", primary: true }] : []),
-            ...(!["finish", "lookback", "sweep", "creative"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
+            ...(!["finish", "lookback", "sweep", "creative", "checklists"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
           ]}
         />
       )}

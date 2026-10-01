@@ -55,32 +55,34 @@ export const inAreas = (areaId: string | null, ids: string[]) => ids.includes(ar
 export const areaFilterLabel = (ids: string[]) =>
   ids.map((id) => (id === "none" ? "No area" : areaLabel(getState().areas.find((a) => a.id === id)?.name ?? ""))).join(", ");
 
-/** F on Projects: tick one or more areas (the picker comes back after each), then Show; Every area clears it. */
-export function openAreaFilter(ui: UI, chosen: string[] = read() ?? []) {
-  const on = read();
+/**
+ * F on Projects: tick one or more areas. Each tick applies at once (owner's bug report: ticks waited for "Show", so
+ * leaving with Esc or a click away kept nothing), and the picker comes back on the area just ticked, so several can be
+ * ticked in a row; Done closes it, Every area clears the filter.
+ */
+export function openAreaFilter(ui: UI, chosen: string[] = read() ?? [], at: string | null = null) {
   const { areas, projects } = getState();
   const count = (id: string) => projects.filter((p) => ["active", "someday"].includes(p.status) && (p.area_id ?? "none") === id).length;
   ui.openPicker({
     type: "list",
     title: "Which areas?",
     items: [
-      ...(on ? [{ id: "off", label: "Show every area", hint: "Clear" }] : []),
-      { id: "go", label: chosen.length ? `Show ${chosen.length === 1 ? "this area" : `these ${chosen.length}`}` : "Every area", hint: chosen.length ? "" : "No filter" },
+      chosen.length ? { id: "go", label: "Done", hint: `${chosen.length === 1 ? "1 area" : `${chosen.length} areas`} shown` } : { id: "off", label: "Every area", hint: "No filter" },
+      ...(chosen.length ? [{ id: "off", label: "Show every area", hint: "Clear" }] : []),
       ...areas
         .slice()
         .sort((a, b) => a.sort - b.sort)
         .map((a) => ({ id: `a:${a.id}`, label: areaLabel(a.name), color: a.color ?? undefined, hint: chosen.includes(a.id) ? "Shown" : String(count(a.id)) })),
       ...(count("none") || chosen.includes("none") ? [{ id: "a:none", label: "No area", hint: chosen.includes("none") ? "Shown" : String(count("none")) }] : []),
     ],
+    highlight: at,
     onPick: (id) => {
-      if (!id) return;
+      if (!id || id === "go") return;
       if (id === "off") return setAreaFilter([]);
-      if (id.startsWith("a:")) {
-        const aid = id.slice(2);
-        const next = chosen.includes(aid) ? chosen.filter((x) => x !== aid) : [...chosen, aid];
-        return void window.setTimeout(() => openAreaFilter(ui, next));
-      }
-      setAreaFilter(chosen);
+      const aid = id.slice(2);
+      const next = chosen.includes(aid) ? chosen.filter((x) => x !== aid) : [...chosen, aid];
+      setAreaFilter(next);
+      window.setTimeout(() => openAreaFilter(ui, next, id));
     },
   });
 }

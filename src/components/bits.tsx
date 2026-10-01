@@ -41,15 +41,16 @@ export function Marker({ flagged, done, chase, quiet }: { flagged: boolean; done
  * The Complete box, as in classic Outlook's task list: one click marks the action done (the pen strikes it
  * through), and in Done one click brings it back. It is mouse-only on purpose; the keyboard has E and ⇧E.
  */
-export function DoneBox({ done, title, onToggle }: { done: boolean; title: string; onToggle: () => void }) {
+export function DoneBox({ done, title, onToggle, label }: { done: boolean; title: string; onToggle: () => void; label?: [string, string] }) {
   const stop = (e: SyntheticEvent) => e.stopPropagation();
   return (
     <button
       type="button"
       role="checkbox"
       aria-checked={done}
-      aria-label={done ? `Mark “${title}” not done` : `Mark “${title}” done`}
-      title={done ? "Mark not done" : "Mark done"}
+      // A checklist ticks rather than marks done ("Tick “Passport”"): the words are then the caller's.
+      aria-label={label ? `${done ? label[1] : label[0]} “${title}”` : done ? `Mark “${title}” not done` : `Mark “${title}” done`}
+      title={label ? (done ? label[1] : label[0]) : done ? "Mark not done" : "Mark done"}
       tabIndex={-1}
       className={`done-box ${done ? "is-checked" : ""}`}
       onMouseDown={stop}

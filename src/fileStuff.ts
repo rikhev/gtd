@@ -1,7 +1,8 @@
-import { getState, mutate, named, newAction, newProject, stamp, uid } from "./store.ts";
+import { getState, mutate, named, newAction, newProject, notify, stamp, uid } from "./store.ts";
 import type { UI } from "./ui.tsx";
 import { askContext, askWaitingOn, destinationItems } from "./actionCommands.tsx";
-import { stuffTitle } from "./views/InboxView.tsx";
+import { splitStuff, stuffTitle } from "./views/InboxView.tsx";
+import { itemsFromText, newChecklist } from "./checklists.ts";
 import type { ID, Op } from "../shared/types.ts";
 
 /* Filing Inbox items, shared by the Inbox and the Weekly Review's Get clear step. */
@@ -47,7 +48,14 @@ export function fileStuff(ui: UI, ids: ID[]) {
     title: "File as",
     // GTD order: the lists, then "under two minutes? do it now" (or trash it), then the projects.
     items: [
-      ...destinationItems().filter((it) => it.section === "lists"),
+      ...destinationItems().flatMap((it) =>
+        it.section !== "lists"
+          ? []
+          : // Checklists sit with Reference (GTD's support material): an item's lines become the items to tick.
+            it.id === "reference"
+            ? [it, { id: "checklist", label: "Checklist", hint: "Its lines become items", section: "lists" }]
+            : [it],
+      ),
       { id: "__done", label: "Done already (two-minute rule)", section: "now" },
       { id: "__trash", label: "Trash", section: "now" },
       ...destinationItems().filter((it) => it.section === "projects"),
@@ -65,10 +73,25 @@ export function fileStuff(ui: UI, ids: ID[]) {
       else if (target === "__trash") trashNow(ids);
       else if (target === "waiting") askWaitingOn(ui, null, (who) => file(target, who));
       else if (target === "someday" || target === "reference") file(target);
+      else if (target === "checklist") asChecklists();
       // A next action (on its own or in a project) always gets a context.
       else askContext(ui, "Context", (ctx, extra) => file(target, undefined, extra, undefined, ctx));
     },
   });
+  /** Each item becomes a checklist named by its first line, its other lines the items. A checklist keeps no files. */
+  function asChecklists() {
+    const items = getState().stuff.filter((x) => ids.includes(x.id) && x.status === "inbox");
+    const withFiles = items.filter((st) => getState().files.some((f) => f.owner_kind === "stuff" && f.owner_id === st.id));
+    if (withFiles.length) return notify(`${named("stuff", withFiles.map((x) => x.id), "item")} ${withFiles.length === 1 ? "has" : "have"} files attached, and a checklist can't keep files. File as Reference to keep them.`, { tone: "error" });
+    const ops: Op[] = [];
+    for (const st of items) {
+      const c = newChecklist({ title: stuffTitle(st) || "Untitled checklist" });
+      ops.push({ type: "create", table: "checklists", row: { ...c } });
+      for (const it of itemsFromText(splitStuff(st).rest, c.id)) ops.push({ type: "create", table: "checklist_items", row: { ...it } });
+      ops.push({ type: "patch", table: "stuff", id: st.id, data: { status: "processed", processed_at: stamp() } });
+    }
+    mutate(`${n(ids)} → ${items.length === 1 ? "a checklist" : "checklists"}`, ops);
+  }
   function file(target: string, who?: string, first: Op[] = [], into?: string, contextId?: ID) {
     const ops: Op[] = [...first];
     for (const st of getState().stuff.filter((x) => ids.includes(x.id) && x.status === "inbox")) {

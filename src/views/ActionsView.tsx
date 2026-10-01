@@ -25,17 +25,17 @@ const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on",
 /** The View menu's sorts: the same state the column headings set (null is the list's own, manual order). */
 const SORTS: [string | null, string][] = [[null, "Manual order"], ["due", "Due date"], ["subject", "Subject"], ["ctx", "Context"], ["time", "Time estimate"], ["energy", "Energy"]];
 
-export function InlineEdit({ value, onDone, placeholder }: { value: string; onDone: (v: string) => void; placeholder: string }) {
+export function InlineEdit({ value, onDone, placeholder }: { value: string; onDone: (v: string, how: "enter" | "cancel" | "blur") => void; placeholder: string }) {
   const ref = useRef<HTMLInputElement>(null);
   const done = useRef(false);
   useEffect(() => {
     ref.current?.focus();
     ref.current?.select();
   }, []);
-  const finish = (v: string) => {
+  const finish = (v: string, how: "enter" | "cancel" | "blur") => {
     if (done.current) return;
     done.current = true;
-    onDone(v);
+    onDone(v, how);
     // Hand focus back to the list, so the keyboard (and a screen reader) is on the row again, not the page.
     requestAnimationFrame(() => {
       if (document.activeElement === document.body) document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true });
@@ -51,14 +51,14 @@ export function InlineEdit({ value, onDone, placeholder }: { value: string; onDo
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === "Tab") {
           e.preventDefault();
-          finish(e.currentTarget.value);
+          finish(e.currentTarget.value, e.key === "Enter" ? "enter" : "blur");
         } else if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
-          finish(value);
+          finish(value, "cancel");
         }
       }}
-      onBlur={(e) => finish(e.currentTarget.value)}
+      onBlur={(e) => finish(e.currentTarget.value, "blur")}
     />
   );
 }

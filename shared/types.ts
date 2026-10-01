@@ -127,6 +127,54 @@ export interface Appointment {
   created_at: string;
 }
 
+/**
+ * A checklist (GTD's checklists: reusable lists kept beside Reference, run when they are relevant, such as packing for
+ * a trip or closing the month). Its items can be ticked off as a run goes; starting over clears the ticks.
+ */
+export interface Checklist {
+  id: ID;
+  title: string;
+  notes: string;
+  area_id: ID | null;
+  status: "active" | "trashed";
+  sort: number;
+  created_at: string;
+  /** Last edited (renamed, its items changed); a tick is not an edit. */
+  updated_at: string | null;
+  /** When every item was last ticked: the last run that was finished. */
+  finished_at: string | null;
+  /**
+   * A routine (habits): it starts over by itself every day or every week, and each tick is kept as a record of the day
+   * it was done (ChecklistTick). Null for an ordinary checklist, whose ticks wait for Start over.
+   */
+  repeats?: "day" | "week" | null;
+  /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
+  trashed_at?: string | null;
+  trashed_from?: string | null;
+}
+
+export interface ChecklistItem {
+  id: ID;
+  checklist_id: ID;
+  title: string;
+  /** A section heading ("Clothes", "Papers") rather than something to tick. */
+  section: 0 | 1;
+  /** Ticked in the current run, and when; null while it is still to do. */
+  checked_at: string | null;
+  sort: number;
+  created_at: string;
+}
+
+/** One day a habit (an item on a repeating checklist) was done. */
+export interface ChecklistTick {
+  id: ID;
+  item_id: ID;
+  checklist_id: ID;
+  /** The day it was ticked (YYYY-MM-DD, the owner's own day). */
+  day: string;
+  created_at: string;
+}
+
 export interface Review {
   id: ID;
   completed_at: string;
@@ -142,6 +190,9 @@ export interface Tables {
   files: FileRow;
   reviews: Review;
   appointments: Appointment;
+  checklists: Checklist;
+  checklist_items: ChecklistItem;
+  checklist_ticks: ChecklistTick;
 }
 export type TableName = keyof Tables;
 
@@ -175,6 +226,7 @@ export interface Proposal {
   disposition: "actionable" | "someday" | "reference" | "trash";
   new_project: { title: string; area: string | null } | null;
   actions: ProposedAction[];
-  reference: { title: string; notes: string } | null;
+  /** Kept as reference, or (checklist) as a checklist whose items are the item's lines. */
+  reference: { title: string; notes: string; checklist?: boolean } | null;
 }
 

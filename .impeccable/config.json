@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "instrument sans",
+        "createdAt": "2026-10-01T10:32:58.741Z",
+        "reason": "DESIGN.md pins Instrument Sans Variable as the project's typeface for every typography role"
+      }
+    ]
+  }
+}

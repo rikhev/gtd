@@ -7,6 +7,8 @@
 export interface ReviewSession {
   startedAt: string;
   stepIdx: number;
+  /** The step by name, so a step added to the review later can't move a review in progress onto another one. */
+  stepId?: string;
   visited: string[];
   /** Steps with nothing to count as open (Mind sweep, Look back) are clear only once something was done in them. */
   acted?: string[];

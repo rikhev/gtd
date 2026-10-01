@@ -25,6 +25,9 @@ export const COLUMNS: Record<TableName, string[]> = {
   files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at"],
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
+  checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats"],
+  checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at"],
+  checklist_ticks: ["id", "item_id", "checklist_id", "day", "created_at"],
 };
 
 db.exec(`
@@ -58,6 +61,18 @@ CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, completed_at TEXT NOT N
 CREATE TABLE IF NOT EXISTS appointments (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', date TEXT NOT NULL,
   time TEXT, end_time TEXT, feed TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS checklists (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', area_id TEXT,
+  status TEXT NOT NULL DEFAULT 'active', sort REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+  updated_at TEXT, finished_at TEXT, trashed_at TEXT, trashed_from TEXT
+);
+CREATE TABLE IF NOT EXISTS checklist_items (
+  id TEXT PRIMARY KEY, checklist_id TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', section INTEGER NOT NULL DEFAULT 0,
+  checked_at TEXT, sort REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS checklist_ticks (
+  id TEXT PRIMARY KEY, item_id TEXT NOT NULL, checklist_id TEXT NOT NULL, day TEXT NOT NULL, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
@@ -119,6 +134,11 @@ for (const [was, now] of [["#0f8a8a", "#0e8181"], ["#b7791f", "#9f691b"]]) {
   for (const t of ["contexts", "areas"]) db.prepare(`UPDATE ${t} SET color = ? WHERE lower(color) = ?`).run(now, was);
 }
 
+// Checklists can repeat (habits): every day or every week.
+if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).some((c) => c.name === "repeats")) {
+  db.exec("ALTER TABLE checklists ADD COLUMN repeats TEXT");
+}
+
 /** Owner preferences kept on the server (so every browser agrees). */
 export function getSetting(key: string, fallback: string): string {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
@@ -175,6 +195,9 @@ export function loadState(): State {
     files: all("files"),
     reviews: all("reviews"),
     appointments: all("appointments"),
+    checklists: all("checklists"),
+    checklist_items: all("checklist_items"),
+    checklist_ticks: all("checklist_ticks"),
   };
 }
 
@@ -223,7 +246,7 @@ export function deleteRow(table: TableName, id: string) {
   db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
 }
 
-const TRASHABLE = new Set(["actions", "projects", "stuff", "refs"]);
+const TRASHABLE = new Set(["actions", "projects", "stuff", "refs", "checklists"]);
 
 /**
  * Deleting is a status: when a row turns "trashed" it records when (one time for the whole batch, so a project

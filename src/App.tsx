@@ -3,6 +3,7 @@ import { fits, openFit, useFit } from "./fit.ts";
 import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, allCommandsForPalette, keyLabel, runKey, type Command } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
@@ -18,6 +19,8 @@ import { ActionsView } from "./views/ActionsView.tsx";
 import { InboxView } from "./views/InboxView.tsx";
 import { ProjectsView, projectEditors } from "./views/ProjectsView.tsx";
 import { SomedayView, ReferenceView } from "./views/SimpleViews.tsx";
+import { ChecklistsView } from "./views/ChecklistsView.tsx";
+import { openChecklist, progress, progressLabel, startOver, useOpenChecklist } from "./checklists.ts";
 import { ClarifyView } from "./views/ClarifyView.tsx";
 // Views opened now and then load when first opened, so the lists come up faster on a cold phone.
 const CalendarView = lazy(() => import("./views/CalendarView.tsx").then((m) => ({ default: m.CalendarView })));
@@ -33,10 +36,14 @@ import { today } from "../shared/dates.ts";
  * them and a reload or bookmark lands on the same list. Search is a query, not a place, and gets no entry.
  */
 /** Lists with a View menu (⌥V), which touch reaches by a button in the heading. */
-const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "done", "agendas"];
-const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "done", "trash", "review", "settings", "clarify"];
+const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "done", "agendas", "checklists"];
+const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "checklists", "done", "trash", "review", "settings", "clarify"];
+/** The view an address belongs to: "#checklists/…" (one checklist, open) is still Checklists. */
+const hashView = (hash: string) => hash.slice(1).split("/")[0];
+/** The address of the checklist open in Checklists, if one is. */
+const openChecklistHash = () => (/^#checklists\/.+/.test(window.location.hash) ? window.location.hash : null);
 function viewFromHash(): ViewId | null {
-  const h = window.location.hash.slice(1) as ViewId;
+  const h = hashView(window.location.hash) as ViewId;
   // Clarify can't be rebuilt from an address (it needs the run that opened it): it lands on the Inbox it clarifies.
   if (h === "clarify") return "inbox";
   return ROUTED.includes(h) ? h : null;
@@ -109,6 +116,30 @@ export default function App() {
   const [pickerSeq, setPickerSeq] = useState(0);
   const [palette, setPalette] = useState<Command[] | null>(null);
   const [help, setHelp] = useState(false);
+
+  // A press outside the detail pane takes the keys out of it (owner's request): on a list row the row's list becomes
+  // the active region with that row under the cursor, anywhere else the list does, and a control outside (the rail,
+  // capture, search) takes focus as it would anyway. While a picker or dialog is open the press belongs to it.
+  const outside = useRef({ region, overlay: false });
+  outside.current = { region, overlay: Boolean(picker || palette || help) };
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || outside.current.region !== "detail" || outside.current.overlay) return;
+      const t = e.target as Element | null;
+      if (!t || t.closest(".detail, .picker, .overlay, .toast, .dropzone")) return;
+      const was = document.activeElement as HTMLElement | null;
+      if (was?.closest(".detail")) was.blur(); // an open field saves on blur, as a click away always did
+      setRegion("list");
+      // The press's own focus lands first (a rail stop or a field claims its region); if it left focus nowhere,
+      // the list takes it, so the keys and screen readers follow the row that was clicked.
+      requestAnimationFrame(() => {
+        if (!document.activeElement || document.activeElement === document.body)
+          document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true });
+      });
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [revealTarget, setRevealTarget] = useState<Target | null>(null);
   const [clarifyRun, setClarifyRun] = useState(0);
@@ -149,15 +180,21 @@ export default function App() {
 
   // Each view change becomes a browser history entry; Back and Forward (popstate) switch views without adding one.
   const popping = useRef(false);
+  // The tab names the view, and inside a checklist the checklist ("Packing for a trip · Checklists · Stiltje").
+  const openListId = useOpenChecklist();
+  const openList = view === "checklists" && openListId ? s.checklists.find((c) => c.id === openListId && c.status === "active") : undefined;
+  useEffect(() => {
+    document.title = `${openList ? `${openList.title || "Untitled checklist"} · ` : ""}${VIEW_TITLES[view] ?? "Stiltje"} · Stiltje`;
+  }, [view, openList?.title, openList]);
   const viewNow = useRef(view);
   viewNow.current = view;
   useEffect(() => {
-    document.title = `${VIEW_TITLES[view] ?? "Stiltje"} · Stiltje`;
     if (view === "search") return;
-    const hash = `#${view}`;
+    // Checklists keeps a checklist that is open in its address (#checklists/…).
+    const hash = view === "checklists" && openChecklistHash() ? openChecklistHash()! : `#${view}`;
     if (popping.current) {
       popping.current = false;
-      if (window.location.hash !== hash) window.history.replaceState(null, "", hash);
+      if (hashView(window.location.hash) !== view) window.history.replaceState(null, "", hash);
       return;
     }
     if (window.location.hash === hash) return;
@@ -165,7 +202,9 @@ export default function App() {
     else window.history.pushState(null, "", hash);
   }, [view]);
 
-  const go = useCallback((v: ViewId) => {
+  const go = useCallback((v: ViewId, popped = false) => {
+    // Going to Checklists lands on every checklist; Back and Forward land where their address says.
+    if (v === "checklists" && !popped) openChecklist(null, viewRef.current === "checklists");
     setView((cur) => {
       if (cur !== "search") prevView.current = cur;
       return v;
@@ -184,10 +223,10 @@ export default function App() {
     const onPop = () => {
       const v = viewFromHash() ?? "next";
       // An address that can't be shown as is (#clarify out of a run, or unknown) is rewritten to the view it lands on.
-      if (window.location.hash !== `#${v}` && viewNow.current !== "clarify") window.history.replaceState(null, "", `#${v}`);
+      if (hashView(window.location.hash) !== v && viewNow.current !== "clarify") window.history.replaceState(null, "", `#${v}`);
       if (v === viewNow.current) return;
       popping.current = true;
-      go(v);
+      go(v, true);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -378,7 +417,7 @@ export default function App() {
       group: "Review",
       enabled: view !== "review",
       run: () => {
-        saveSession({ ...loadSession(), stepIdx: 0 });
+        saveSession({ ...loadSession(), stepIdx: 0, stepId: "sweep" });
         ui.startReview();
       },
     },
@@ -465,6 +504,16 @@ export default function App() {
     })(),
     someday: plural(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
     reference: plural(s.refs.filter((r) => r.status === "active").length, "reference"),
+    // Inside a checklist, how far this run has got; otherwise how many checklists there are.
+    checklists: openList
+      ? (() => {
+          const p = progress(s, openList.id);
+          // Nothing to tick yet says so; a routine always counts its day or week ("0 of 5 today", "All 5 done this week").
+          if (!p.total) return "No items yet";
+          if (p.repeats) return progressLabel(p) || `0 of ${p.total} ${p.repeats === "day" ? "today" : "this week"}`;
+          return !p.ticked ? plural(p.total, "item") : p.ticked === p.total ? progressLabel(p) : `${p.ticked} of ${p.total} ticked`;
+        })()
+      : plural(s.checklists.filter((c) => c.status === "active").length, "checklist"),
     done: plural(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done" && p.archived_at).length, "item"),
     trash: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
   };
@@ -494,6 +543,9 @@ export default function App() {
       break;
     case "reference":
       body = <ReferenceView regionActive={listActive} />;
+      break;
+    case "checklists":
+      body = <ChecklistsView regionActive={listActive} />;
       break;
     case "clarify":
       body = <ClarifyView key={clarifyRun} regionActive={listActive} />;
@@ -548,7 +600,18 @@ export default function App() {
             />
           </header>
           <div className="viewhead">
-            <h1 className="viewtitle" id="view-title">{VIEW_TITLES[view]}</h1>
+            {openList ? (
+              // Inside a checklist: the way back up to every checklist, then the checklist's own name.
+              <>
+                <button type="button" className="viewcrumb" onClick={() => openChecklist(null)} title={`Every checklist (${keyLabel("escape")})`}>
+                  Checklists
+                </button>
+                <ChevronRight className="viewcrumb-sep" size={14} strokeWidth={2} aria-hidden />
+                <h1 className="viewtitle" id="view-title">{openList.title || "Untitled checklist"}</h1>
+              </>
+            ) : (
+              <h1 className="viewtitle" id="view-title">{VIEW_TITLES[view]}</h1>
+            )}
             {counts[view] && <span className="viewcount">{counts[view]}</span>}
             <span className="viewtools">
               {/* What fits now, in sight where it is used; while it is on, the line above the list takes over. */}
@@ -560,6 +623,12 @@ export default function App() {
               {view === "projects" && !areaFilter && s.areas.length > 0 && (
                 <button type="button" className="text-btn" onClick={() => openAreaFilter(ui)}>
                   Filter by area
+                </button>
+              )}
+              {/* A run under way can be started over from here: it has no key of its own (⌥V and ⌘K have it). */}
+              {openList && !openList.repeats && progress(s, openList.id).ticked > 0 && (
+                <button type="button" className="text-btn" onClick={() => startOver([openList.id])}>
+                  Start over
                 </button>
               )}
               {/* Touch has no ⌥V: the list's View menu (group, sort, show) as a button. */}

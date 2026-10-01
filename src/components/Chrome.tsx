@@ -10,7 +10,8 @@ import { daysBetween, today } from "../../shared/dates.ts";
 /**
  * The go-to keys follow the rail from the top, counted per group so every key sits under one hand (owner's request:
  * ⌃7–9 needed a second hand). The first group is Control+1–6 (Inbox, Calendar, Next Actions, Waiting For, Agendas,
- * Projects); the second group and the Trash below it are Control+Shift+1–4 (Someday, Reference, Done, Trash): Shift
+ * Projects); the second group and the Trash below it are Control+Shift+1–5 (Someday, Reference, Checklists, Done,
+ * Trash): Shift
  * means "the second group", counted from 1 again. Digits are read by their key, so it works on every layout. On the
  * Mac that is ⌃, not ⌘: ⌘⇧3–5 are macOS screenshots and ⌘1–8 are the browser's tabs. Elsewhere the page takes
  * Ctrl+1–6 over the browser's tab switching (Chrome and Firefox allow it); Ctrl+Shift+digits are free. Control with a
@@ -32,8 +33,10 @@ export const RAIL: { id: ViewId; key?: string }[] = [
   { id: "projects", key: go(6) },
   { id: "someday", key: go2(1) },
   { id: "reference", key: go2(2) },
-  { id: "done", key: go2(3) },
-  { id: "trash", key: go2(4) },
+  // GTD keeps checklists with the other support material, beside Reference.
+  { id: "checklists", key: go2(3) },
+  { id: "done", key: go2(4) },
+  { id: "trash", key: go2(5) },
   { id: "review" },
 ];
 
@@ -44,7 +47,7 @@ export const RAIL: { id: ViewId; key?: string }[] = [
 // The calendar follows the Inbox: in GTD it is the hard landscape, checked before the lists are worked.
 const LISTS: ViewId[][] = [
   ["inbox", "calendar", "next", "waiting", "agendas", "projects"],
-  ["someday", "reference", "done"],
+  ["someday", "reference", "checklists", "done"],
 ];
 
 type Entry = { key: string; view: ViewId; label: string; name: string; start?: boolean };
@@ -112,6 +115,8 @@ export function Rail({ active }: { active: boolean }) {
     { key: "settings", view: "settings", name: "Settings", label: "Settings" },
   ];
   const idx = (key: string) => entries.findIndex((e) => e.key === key);
+  // Where you are: the open list's stop (the review's own row while it runs), or the Inbox for views off the rail.
+  const here = Math.max(0, entries.findIndex((e) => e.view === ui.view));
   const open = (e: Entry) => {
     if (e.start) ui.startReview();
     // The oldest item is waiting to be clarified: the row does what its key (K) does, not the Inbox row's job.
@@ -121,7 +126,7 @@ export function Rail({ active }: { active: boolean }) {
   };
 
   useEffect(() => {
-    if (active) setCursor((c) => (entries[c] && document.activeElement?.closest("nav.rail") ? c : Math.max(0, idx(ui.view))));
+    if (active) setCursor((c) => (entries[c] && document.activeElement?.closest("nav.rail") ? c : here));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
@@ -166,7 +171,8 @@ export function Rail({ active }: { active: boolean }) {
     const current = !e.key.startsWith("h-") && ui.view === e.view;
     return {
       "data-rail": i,
-      tabIndex: cursor === i ? 0 : -1,
+      // Tab into an idle rail lands on where you are, not on whatever the cursor last touched.
+      tabIndex: (active ? cursor : here) === i ? 0 : -1,
       "aria-current": current ? ("page" as const) : undefined,
       "aria-label": e.label,
       "aria-keyshortcuts": keyAria(e.start ? "shift+r" : e.key === "h-oldest" ? "k" : e.view === "settings" ? "mod+shift+," : (keyOf(e.view) ?? "")) || undefined,
@@ -343,7 +349,7 @@ export function TabBar() {
   const [more, setMore] = useState(false);
   const inboxItems = s.stuff.filter((x) => x.status === "inbox");
   const inbox = inboxItems.length;
-  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "done", "trash", "settings"];
+  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "checklists", "done", "trash", "settings"];
   // The phone's system check, as in the rail: is the review due, and how old is the oldest thing in the Inbox?
   const t = today();
   const reviewAge = daysSinceReview(s);

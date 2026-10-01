@@ -60,6 +60,28 @@ export function exportZip(): Uint8Array {
   );
   md("reference.md", "Reference", s.refs.filter((r) => r.status === "active").map((r) => `## ${r.title}\n\n${r.notes}`).join("\n\n"));
   md(
+    "checklists.md",
+    "Checklists",
+    s.checklists
+      .filter((c) => c.status === "active")
+      .sort((a, b) => a.title.localeCompare(b.title))
+      .map((c) => {
+        const area = s.areas.find((a) => a.id === c.area_id)?.name;
+        // A routine lists each habit with how often it was done in the last four weeks.
+        const since = new Date(Date.now() - 27 * 86_400_000).toISOString().slice(0, 10);
+        const daysDone = (id: string) => new Set(s.checklist_ticks.filter((k) => k.item_id === id && k.day >= since).map((k) => k.day)).size;
+        const items = s.checklist_items
+          .filter((i) => i.checklist_id === c.id)
+          .sort((a, b) => a.sort - b.sort)
+          .map((i) =>
+            i.section ? `\n### ${i.title}\n` : c.repeats ? `- ${i.title}  _(done on ${daysDone(i.id)} of the last 28 days)_` : `- [${i.checked_at ? "x" : " "}] ${i.title}`,
+          );
+        const repeats = c.repeats === "day" ? "Repeats every day\n" : c.repeats === "week" ? "Repeats every week\n" : "";
+        return `## ${c.title}\n\n${area ? `Area: ${area}\n` : ""}${repeats}${c.notes ? `\n${c.notes}\n` : ""}\n${items.join("\n")}`;
+      })
+      .join("\n\n"),
+  );
+  md(
     "done.md",
     "Done",
     s.actions

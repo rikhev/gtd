@@ -1,5 +1,5 @@
-/** Empty states teach in plain words; the keys live in ⌘K and the ? overlay. */
-export function EmptyState({ title, lines, note }: { title: string; lines?: string[]; note?: string }) {
+/** Empty states teach in plain words; the keys live in ⌘K and the ? overlay. An empty list may offer its first step. */
+export function EmptyState({ title, lines, note, action }: { title: string; lines?: string[]; note?: string; action?: { label: string; run: () => void } }) {
   return (
     <div className="empty">
       <p className="empty-title">{title}</p>
@@ -10,6 +10,11 @@ export function EmptyState({ title, lines, note }: { title: string; lines?: stri
             <li key={l}>{l}</li>
           ))}
         </ul>
+      )}
+      {action && (
+        <button type="button" className="text-btn empty-action" onClick={action.run}>
+          {action.label}
+        </button>
       )}
     </div>
   );

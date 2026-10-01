@@ -10,6 +10,10 @@ import { useEffect, useRef } from "react";
  * As a scene (the sign-in screen, owner's request) the same pond fills the window: the horizon sits at 42% of its
  * height, the name stands on it larger, and a light rain falls now and then, a drop or two every few seconds,
  * anywhere across the water. It rains only while the page is visible, and not at all with reduced motion.
+ *
+ * The water can be touched (owner's request), in the rail and on the sign-in screen alike: a click on the water sends
+ * rings out from the pointer, and a click in the air above lets a drop fall from there to the water below. Touching
+ * the pond never takes focus from where it was (a list, the password field).
  */
 
 const HORIZON = 43; // px from the top: steel "air" above, water below; level with the top bar's bottom rule
@@ -184,17 +188,19 @@ export function Pond({ scene = false }: { scene?: boolean }) {
     };
 
     let settle = 0;
+    // The reflection shivers while the rings spread, then lies still again.
+    const stir = (n: number) => {
+      const pond = box.current;
+      if (!pond || reduce.matches) return;
+      pond.classList.remove("is-stirred");
+      void pond.offsetWidth;
+      pond.classList.add("is-stirred");
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => pond.classList.remove("is-stirred"), 1600 + n * 160);
+    };
     const onLanded = (e: Event) => {
       const n = Math.max(1, Math.min(5, Number((e as CustomEvent<number>).detail) || 1));
-      // The reflection shivers while the rings spread, then lies still again.
-      const pond = box.current;
-      if (pond && !reduce.matches) {
-        pond.classList.remove("is-stirred");
-        void pond.offsetWidth;
-        pond.classList.add("is-stirred");
-        window.clearTimeout(settle);
-        settle = window.setTimeout(() => pond.classList.remove("is-stirred"), 1600 + n * 160);
-      }
+      stir(n);
       if (!frame) {
         size();
         readColors();
@@ -206,6 +212,37 @@ export function Pond({ scene = false }: { scene?: boolean }) {
       }
     };
     window.addEventListener("gtd:landed", onLanded);
+
+    // A touch on the water rings out from the pointer; a touch in the air drops a bead from there, straight down.
+    const onTouch = (e: PointerEvent) => {
+      if (e.button !== 0 || !el.clientWidth) return; // a short window hides the water; there is nothing to touch
+      if (!frame) {
+        size();
+        readColors();
+      }
+      const r = el.getBoundingClientRect();
+      const x = Math.max(0, Math.min(w, e.clientX - r.left));
+      const y = e.clientY - r.top;
+      const top = horizon();
+      const now = performance.now() / 1000;
+      const depth = (yy: number) => Math.max(0, Math.min(1, (yy - top) / (h - top)));
+      if (y > top + 1) splashes.push({ x, y, t0: now, near: depth(y) });
+      else {
+        // It lands a little way out, just beyond the horizon, so its rings show on the water.
+        const hitY = top + Math.max(4, (h - top) * (scene ? 0.06 : 0.16));
+        if (reduce.matches) splashes.push({ x, y: hitY, t0: now, near: depth(hitY) });
+        // Start the fall at the pointer: back-date the drop to when it would have passed this height.
+        else drops.push({ x, hitY, t0: now - Math.sqrt((2 * (Math.max(-4, y) + 4)) / g) });
+      }
+      lastX = x;
+      stir(1);
+      if (!frame) frame = requestAnimationFrame(draw);
+    };
+    // Touching the water is not a click on the page: focus stays in the list or the field it was in.
+    const keepFocus = (e: MouseEvent) => e.button === 0 && e.preventDefault();
+    const pond = box.current;
+    pond?.addEventListener("pointerdown", onTouch);
+    pond?.addEventListener("mousedown", keepFocus);
 
     // The scene's rain: now and then a drop, sometimes two close together, while the page is in view.
     let rain = 0;
@@ -219,6 +256,8 @@ export function Pond({ scene = false }: { scene?: boolean }) {
 
     return () => {
       window.removeEventListener("gtd:landed", onLanded);
+      pond?.removeEventListener("pointerdown", onTouch);
+      pond?.removeEventListener("mousedown", keepFocus);
       cancelAnimationFrame(frame);
       window.clearTimeout(settle);
       window.clearTimeout(rain);

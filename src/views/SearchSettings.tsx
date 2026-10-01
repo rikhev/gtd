@@ -11,6 +11,7 @@ import { InlineEdit } from "./ActionsView.tsx";
 import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../actionCommands.tsx";
 import { isDark, setTheme, useTheme } from "../theme.ts";
 import type { ID } from "../../shared/types.ts";
+import { openChecklist } from "../checklists.ts";
 
 /* ------------------------------------------------------------------ */
 /* Search                                                               */
@@ -18,7 +19,8 @@ import type { ID } from "../../shared/types.ts";
 
 interface Hit {
   key: string;
-  kind: EntityKind;
+  /** A checklist has no details pane: going to it opens it in Checklists. */
+  kind: EntityKind | "checklist";
   id: ID;
   title: string;
   where: string;
@@ -51,11 +53,21 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
     const refs = s.refs
       .filter((r) => r.status === "active" && match(r.title, r.notes))
       .map((r) => ({ key: `r:${r.id}`, kind: "ref" as const, id: r.id, title: r.title, where: "Reference", home: "reference" as ViewId }));
+    // A checklist matches by its name or any of its items; the hit names the item that matched.
+    const lists = s.checklists
+      .filter((c) => c.status === "active")
+      .flatMap((c) => {
+        const items = s.checklist_items.filter((i) => i.checklist_id === c.id);
+        const inItem = match(c.title) ? undefined : items.find((i) => match(c.title, i.title));
+        if (!match(c.title) && !inItem) return [];
+        return [{ key: `c:${c.id}`, kind: "checklist" as const, id: c.id, title: c.title, where: inItem ? `Checklists · ${inItem.title}` : "Checklists", home: "checklists" as ViewId }];
+      });
     return [
       { key: "actions", label: "Actions", rows: actions },
       { key: "projects", label: "Projects", rows: projects },
       { key: "inbox", label: "Inbox", rows: stuff },
       { key: "refs", label: "Reference", rows: refs },
+      { key: "checklists", label: "Checklists", rows: lists as Hit[] },
     ].filter((g) => g.rows.length);
   }, [s, query]);
   // Results keep their kind groups; a heading click sorts inside each.
@@ -65,10 +77,15 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
   const all = hits.flatMap((g) => g.rows);
   const focused = all.find((h) => h.key === nav.focus);
   useEffect(() => {
-    ui.followDetail(focused ? { kind: focused.kind, id: focused.id } : null);
+    ui.followDetail(focused && focused.kind !== "checklist" ? { kind: focused.kind, id: focused.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focused?.key]);
 
+  const goTo = (h: Hit) => {
+    if (h.kind !== "checklist") return ui.reveal({ kind: h.kind, id: h.id });
+    ui.go("checklists");
+    openChecklist(h.id);
+  };
   const commands: Command[] = [
     ...nav.commands,
     {
@@ -77,7 +94,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
       group: "Search",
       keys: ["enter"],
       enabled: Boolean(focused),
-      run: () => focused && ui.reveal({ kind: focused.kind, id: focused.id }),
+      run: () => focused && goTo(focused),
     },
     { id: "search.refine", label: "Refine search", group: "Search", keys: ["alt+q", "/"], run: ui.openSearch },
   ];
@@ -98,8 +115,8 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
       nav={nav}
       active={regionActive}
       showHeaders
-      onOpen={() => focused && ui.reveal({ kind: focused.kind, id: focused.id })}
-      empty={<EmptyState title={query.trim() ? `Nothing matches “${query.trim()}”` : "Type to search every list"} lines={["Searches actions, projects, the Inbox and reference notes."]} />}
+      onOpen={() => focused && goTo(focused)}
+      empty={<EmptyState title={query.trim() ? `Nothing matches “${query.trim()}”` : "Type to search every list"} lines={["Searches actions, projects, the Inbox, reference notes and checklists."]} />}
     />
   );
 }

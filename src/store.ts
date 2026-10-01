@@ -13,6 +13,9 @@ const empty: State = {
   files: [],
   reviews: [],
   appointments: [],
+  checklists: [],
+  checklist_items: [],
+  checklist_ticks: [],
 };
 
 let state: State = empty;
@@ -229,7 +232,7 @@ function touchActions(ops: Op[]): Op[] {
   );
 }
 
-const TRASHABLE = new Set<TableName>(["actions", "projects", "stuff", "refs"]);
+const TRASHABLE = new Set<TableName>(["actions", "projects", "stuff", "refs", "checklists"]);
 /**
  * Deleting is a status: a row turning "trashed" records when (one time for the whole edit, so a project and the
  * actions deleted with it share it) and the status it had, for the Trash; any other status clears both.

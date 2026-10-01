@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { BookOpen, Circle, FileText, Layers, Mail, StickyNote } from "lucide-react";
+import { BookOpen, Circle, FileText, Layers, ListChecks, Mail, StickyNote } from "lucide-react";
 import { mutate, plural, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
@@ -9,7 +9,7 @@ import { stuffTitle } from "./InboxView.tsx";
 import { daysBetween, formatDate, today } from "../../shared/dates.ts";
 import type { ID, Op, State, TableName } from "../../shared/types.ts";
 
-type Kind = "action" | "project" | "stuff" | "ref";
+type Kind = "action" | "project" | "stuff" | "ref" | "checklist";
 interface Row {
   key: string;
   kind: Kind;
@@ -23,10 +23,12 @@ interface Row {
   icon?: "email" | "file" | "note";
 }
 
-const TABLE: Record<Kind, TableName> = { action: "actions", project: "projects", stuff: "stuff", ref: "refs" };
+const TABLE: Record<Kind, TableName> = { action: "actions", project: "projects", stuff: "stuff", ref: "refs", checklist: "checklists" };
 const LIST_NAMES: Record<string, string> = { next: "Next Actions", waiting: "Waiting For", someday: "Someday / Maybe", done: "Done" };
 /** What a restored item goes back to when it doesn't know what it was (deleted before this was tracked). */
-const HOME: Record<Kind, string> = { action: "next", project: "active", stuff: "inbox", ref: "active" };
+const HOME: Record<Kind, string> = { action: "next", project: "active", stuff: "inbox", ref: "active", checklist: "active" };
+/** Checklists have no details pane: in the Trash they are restored or deleted, not opened. */
+const opens = (k: Kind): k is Exclude<Kind, "checklist"> => k !== "checklist";
 
 function rowsOf(s: State, keepDays: number): Row[] {
   const now = Date.now();
@@ -50,6 +52,10 @@ function rowsOf(s: State, keepDays: number): Row[] {
   for (const r of s.refs) {
     if (r.status !== "trashed" || !alive(r.trashed_at)) continue;
     out.push({ key: `r:${r.id}`, kind: "ref", id: r.id, title: r.title || "Untitled", from: proj(r.project_id) ? `Reference · ${proj(r.project_id)}` : "Reference", at: r.trashed_at, left: leftOf(r.trashed_at) });
+  }
+  for (const c of s.checklists) {
+    if (c.status !== "trashed" || !alive(c.trashed_at)) continue;
+    out.push({ key: `c:${c.id}`, kind: "checklist", id: c.id, title: c.title || "Untitled checklist", from: "Checklists", at: c.trashed_at, left: leftOf(c.trashed_at) });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }
@@ -94,7 +100,7 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
   const targets = () => nav.targets().map((k) => all.find((r) => r.key === k)).filter((r): r is Row => Boolean(r));
 
   useEffect(() => {
-    ui.followDetail(focus ? { kind: focus.kind, id: focus.id } : null);
+    ui.followDetail(focus && opens(focus.kind) ? { kind: focus.kind, id: focus.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus?.key]);
 
@@ -118,13 +124,20 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
   };
   const purge = (rows: Row[], label?: string) => {
     if (!rows.length) return;
-    mutate(label ?? `${rows.length === 1 ? `“${rows[0].title}”` : plural(rows.length, "item")} deleted for good`, rows.map((r) => ({ type: "delete" as const, table: TABLE[r.kind], id: r.id })));
+    // A checklist goes for good with its items.
+    const items = s.checklist_items.filter((i) => rows.some((r) => r.kind === "checklist" && r.id === i.checklist_id));
+    const records = s.checklist_ticks.filter((k) => rows.some((r) => r.kind === "checklist" && r.id === k.checklist_id));
+    mutate(label ?? `${rows.length === 1 ? `“${rows[0].title}”` : plural(rows.length, "item")} deleted for good`, [
+      ...rows.map((r) => ({ type: "delete" as const, table: TABLE[r.kind], id: r.id })),
+      ...items.map((i) => ({ type: "delete" as const, table: "checklist_items" as const, id: i.id })),
+      ...records.map((k) => ({ type: "delete" as const, table: "checklist_ticks" as const, id: k.id })),
+    ]);
   };
 
   const commands: Command[] = [
     ...nav.commands,
     { id: "del.restore", label: "Restore (put back where it was)", group: "Trash", keys: ["r"], enabled: Boolean(focus), run: () => restore(targets()) },
-    { id: "del.open", label: "Open details", group: "Trash", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
+    { id: "del.open", label: "Open details", group: "Trash", keys: ["enter"], enabled: Boolean(focus && opens(focus.kind)), run: () => focus && opens(focus.kind) && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
     { id: "del.purge", label: "Delete for good", group: "Trash", keys: ["backspace", "delete", "shift+backspace", "shift+delete"], enabled: Boolean(focus), run: () => purge(targets()) },
     { id: "del.empty", label: `Empty the Trash${all.length ? ` (${plural(all.length, "item")})` : ""}`, group: "Trash", keys: [], enabled: all.length > 0, run: () => purge(all, `Trash emptied (${plural(all.length, "item")})`) },
   ];
@@ -137,6 +150,8 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
       <Layers size={14} strokeWidth={1.75} aria-label="Project" />
     ) : r.kind === "ref" ? (
       <BookOpen size={14} strokeWidth={1.75} aria-label="Reference" />
+    ) : r.kind === "checklist" ? (
+      <ListChecks size={14} strokeWidth={1.75} aria-label="Checklist" />
     ) : r.icon === "email" ? (
       <Mail size={14} strokeWidth={1.75} aria-label="Email" />
     ) : r.icon === "file" ? (
@@ -173,7 +188,7 @@ export function TrashView({ regionActive }: { regionActive: boolean }) {
       showHeaders={multi}
       onOpen={(k) => {
         const r = all.find((x) => x.key === k);
-        if (r) ui.openDetail({ kind: r.kind, id: r.id }, true);
+        if (r && opens(r.kind)) ui.openDetail({ kind: r.kind, id: r.id }, true);
       }}
       empty={
         <EmptyState

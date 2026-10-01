@@ -57,6 +57,35 @@ action("Clear out the downloads folder", { status: "done", completed_at: stamp(-
 ops.push({ type: "create", table: "refs", row: { id: id(), title: "Wi-Fi password for the workshop", notes: "Network: Verkstad-5G", project_id: null, status: "active", created_at: stamp(-8) } });
 ops.push({ type: "create", table: "refs", row: { id: id(), title: "Nordplast contact list", notes: "Anna Lind, purchasing\nPer Holm, production", project_id: P.shred, status: "active", created_at: stamp(-15) } });
 
+// Checklists: one with a run under way, one finished last week.
+const checklist = (title, areaName, lines, ticked = 0, finished = null) => {
+  const cid = id();
+  ops.push({ type: "create", table: "checklists", row: { id: cid, title, notes: "", area_id: area[areaName] ?? null, status: "active", sort: sort++, created_at: stamp(-30), updated_at: stamp(-30), finished_at: finished } });
+  let n = 0;
+  lines.forEach((line, i) => {
+    const section = line.endsWith(":") ? 1 : 0;
+    const tick = !section && n++ < ticked;
+    ops.push({ type: "create", table: "checklist_items", row: { id: id(), checklist_id: cid, title: section ? line.slice(0, -1) : line, section, checked_at: tick ? stamp(0) : null, sort: i + 1, created_at: stamp(-30) } });
+  });
+};
+checklist("Packing for a work trip", "Work", ["Papers:", "Passport", "Tickets and booking numbers", "Company card", "Kit:", "Laptop and charger", "Adapter plug", "Headphones", "Clothes:", "Shirts for each day", "Running shoes"], 4);
+checklist("Closing the month", "Finance", ["Reconcile the business account", "Send the invoices", "File the receipts", "Pay the supplier bills", "Update the cash forecast"], 0, stamp(-6));
+checklist("Before a long weekend away", "Home", ["Water the plants", "Empty the fridge", "Lock the garage", "Set the heating to away"]);
+// A routine: three daily habits with four weeks of history, done more often than not.
+{
+  const cid = id();
+  ops.push({ type: "create", table: "checklists", row: { id: cid, title: "Morning routine", notes: "", area_id: area.Health ?? null, status: "active", sort: sort++, created_at: stamp(-40), updated_at: stamp(-40), finished_at: null, repeats: "day" } });
+  ["Stretch for ten minutes", "Read for twenty minutes", "Plan the day from Next Actions"].forEach((title, i) => {
+    const iid = id();
+    ops.push({ type: "create", table: "checklist_items", row: { id: iid, checklist_id: cid, title, section: 0, checked_at: null, sort: i + 1, created_at: stamp(-40) } });
+    for (let d = -27; d <= -1; d++) {
+      // A steady recent run, a gap or two further back.
+      if ((d + i * 3) % 5 === 0 && d < -6) continue;
+      ops.push({ type: "create", table: "checklist_ticks", row: { id: id(), item_id: iid, checklist_id: cid, day: day(d), created_at: stamp(d) } });
+    }
+  });
+}
+
 const stuff = (text, kind = "text", d = 0) => ops.push({ type: "create", table: "stuff", row: { id: id(), text, kind, status: "inbox", created_at: stamp(d), processed_at: null } });
 stuff("mom birthday", "text", -2);
 stuff("new rotor blades for the 300-series? ask Per", "text", -1);

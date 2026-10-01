@@ -306,6 +306,26 @@ a:hover {
 .viewcount {
   color: var(--ink-2);
 }
+/* Inside a checklist the heading starts with the way back up: "Checklists ›" in ink-2, then the checklist's name. */
+.viewcrumb {
+  font-size: 19px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink-2);
+  border-radius: 3px;
+}
+.viewcrumb:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-strong);
+  text-underline-offset: 4px;
+}
+.viewcrumb-sep {
+  align-self: center;
+  color: var(--ink-3);
+  margin: 0 -6px;
+  flex: none;
+}
 /* Quiet tools at the right of the heading: What fits now on Next Actions, and on touch the list's View menu. */
 .viewtools {
   margin-left: auto;
@@ -603,6 +623,7 @@ a:hover {
   padding: 0 10px;
   border-radius: 3px;
   color: var(--ink-2);
+  position: relative;
 }
 .rail-item:hover {
   background: var(--rail-2);
@@ -622,16 +643,19 @@ a:hover {
   white-space: nowrap;
 }
 /* Key caps never move anything (owner's decision): they take no room, and while ⌃ or ⌘ is held they fade in over the
-   right end of the row, where the count is, and the count fades out underneath until the key is let go. */
-.rail-item {
-  position: relative;
-}
+   right end of the row, where the count is, and the count fades out underneath until the key is let go. All the caps
+   share one width, so they form a single right-hand column. */
 .rail .rail-meta .rail-key {
   position: absolute;
   right: 10px;
   top: 50%;
   translate: 0 -50%;
   min-width: 30px;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+  color: var(--ink-2);
   opacity: 0;
   pointer-events: none;
   transition: opacity 140ms var(--ease);
@@ -660,17 +684,11 @@ body.keys-held .rail .rail-meta .num {
 .rail-meta .is-quiet {
   color: var(--ink-3);
 }
-/* On the open list's row, and on a hovered row, a quiet count steps up to ink-2, so it keeps AA on the lifted surface
-   in dark and on the hover fill in light (ink-3 there measured 4.39:1). */
+/* On the open list's row, a hovered row and the cursor, a quiet count steps up to ink-2, so it keeps AA on the lifted
+   surface in dark, on the hover fill in light (ink-3 there measured 4.39:1) and on Selection Blue in dark (4.5:1). */
 .rail-item.is-current .rail-meta .is-quiet,
+.rail-item.is-cursor .rail-meta .is-quiet,
 .rail-item:hover .rail-meta .is-quiet {
-  color: var(--ink-2);
-}
-.rail-meta .kbd {
-  font-size: 11px;
-  line-height: 14px;
-  padding: 0 4px;
-  min-width: 16px;
   color: var(--ink-2);
 }
 /* On a hovered row, the open list's lifted row and the cursor's blue row, the alert red darkens (lightens in dark)
@@ -1447,6 +1465,77 @@ body.is-col-resizing * {
   align-items: center;
 }
 
+/* Checklists: a section heading inside a checklist reads as a group head (Label Caps, ink-2), sitting on the row's
+   line with a stronger rule under it, so the items below read as its group. It has no box and can't be ticked. */
+.row.is-section {
+  border-bottom-color: var(--rule-strong);
+}
+/* The heading spans the row from the box column, so it stands over its items as a group head does. */
+.row.is-section .cell:not(.c-subject) {
+  display: none;
+}
+.row.is-section .c-subject {
+  grid-column: 1 / -1;
+}
+.row.is-section .cl-section {
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.is-focus.is-section .cl-section {
+  color: var(--select-ink);
+}
+/* A habit's last four weeks: small squares, oldest first, filled in the done-mark ink where it was done and empty
+   (a hairline box) where not; the current day or week sits outlined at the end. No colour: green is project health. */
+.hstrip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  vertical-align: middle;
+}
+.hstrip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+}
+.hstrip.is-week i {
+  width: 8px;
+  height: 8px;
+}
+.hstrip i.is-on {
+  background: var(--mark);
+  box-shadow: none;
+}
+.hstrip i.is-now {
+  outline: 1px solid var(--ink-3);
+  outline-offset: 1px;
+}
+.is-focus .hstrip i.is-on {
+  background: var(--select-ink);
+}
+.is-focus .hstrip i {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--select-ink) 35%, transparent);
+}
+/* A habit done today greys like a ticked item, but its history doesn't: the record stays full strength. */
+.row.is-done .hstrip i.is-on {
+  background: var(--mark);
+}
+/* A narrow list (a phone) keeps the last two weeks. */
+.grid.is-compact .hstrip.is-day i:nth-child(-n + 14),
+.grid.is-compact .hstrip.is-week i:nth-child(-n + 4) {
+  display: none;
+}
+
+/* A ticked checklist item is greyed and struck through like a done action, but it keeps its place. */
+.cl-run {
+  color: var(--ink-2);
+}
+
 /* Done: a line strikes through the subject, then the row folds away. */
 .row.is-striking .subject-text {
   background-image: linear-gradient(var(--mark), var(--mark));
@@ -1623,6 +1712,48 @@ body.is-col-resizing * {
   list-style: none;
   color: var(--ink-2);
   max-width: 52ch;
+}
+/* An empty list's first step, for the mouse and touch (the keyboard has it in ⌘K). */
+.empty-action {
+  margin-top: 12px;
+  font-size: 13px;
+}
+/* Filing as a checklist in Clarify: the items it will get, in the list's own quiet type. */
+.cl-preview {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.cl-preview li {
+  padding: 2px 0;
+}
+.cl-preview li::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 8px;
+  border: 1.25px solid var(--ink-3);
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+.cl-preview li.is-section {
+  padding-top: 6px;
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cl-preview li.is-section::before,
+.cl-preview li.cl-preview-more::before {
+  display: none;
+}
+.cl-preview-more {
+  color: var(--ink-3);
 }
 
 .kbd {
@@ -3333,14 +3464,6 @@ textarea.field-text {
   font-weight: 600;
 }
 
-/* Rail shortcut legends: one right-hand column of equal-width key caps. */
-.rail .rail-key {
-  font-size: 11px;
-  line-height: 15px;
-  text-align: center;
-  color: var(--ink-2);
-  flex: none;
-}
 
 
 /* ------------------------------------------------------------------ */

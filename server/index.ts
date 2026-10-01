@@ -244,6 +244,13 @@ function purgeTrash() {
       db.prepare(`DELETE FROM ${t} WHERE id = ?`).run(id);
     }
   }
+  // A checklist goes for good with its items.
+  const gone = db.prepare("SELECT id FROM checklists WHERE status = 'trashed' AND trashed_at IS NOT NULL AND trashed_at < ?").all(cutoff) as { id: string }[];
+  for (const { id } of gone) {
+    db.prepare("DELETE FROM checklist_items WHERE checklist_id = ?").run(id);
+    db.prepare("DELETE FROM checklist_ticks WHERE checklist_id = ?").run(id);
+    db.prepare("DELETE FROM checklists WHERE id = ?").run(id);
+  }
 }
 purgeTrash();
 setInterval(purgeTrash, 3_600_000).unref();
