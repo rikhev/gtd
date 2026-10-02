@@ -247,6 +247,8 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
   );
   const nav = useListNav("reference", useMemo(() => [{ key: "refs", rowKeys: rows.map((r) => r.id), showHeader: false }], [rows]));
   const focusId = nav.focus;
+  // The reference under the cursor; undefined for a moment when it is gone (a new one discarded with Esc, a delete).
+  const focusRef = focusId ? s.refs.find((r) => r.id === focusId) : undefined;
 
   useEffect(() => {
     ui.followDetail(focusId ? { kind: "ref", id: focusId } : null);
@@ -322,13 +324,13 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     {
       id: "ref.open",
       row: true,
-      label: focusId && s.refs.find((r) => r.id === focusId)?.form === "list" ? "Open the list" : focusId && kindOf(s.refs.find((r) => r.id === focusId)!) === "document" ? "View the document" : "Open details",
+      label: focusRef?.form === "list" ? "Open the list" : focusRef && kindOf(focusRef) === "document" ? "View the document" : "Open details",
       group: "Reference",
       keys: ["enter"],
       enabled: Boolean(focusId),
       run: () => focusId && open(focusId),
     },
-    { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusId && s.refs.find((r) => r.id === focusId)?.form === "list") || Boolean(focusId && kindOf(s.refs.find((r) => r.id === focusId)!) === "document"), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
+    { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusRef && (focusRef.form === "list" || kindOf(focusRef) === "document")), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", row: true, label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "ref.jump", row: true, label: "Jump to its project", group: "Reference", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {
