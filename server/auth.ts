@@ -278,14 +278,15 @@ export const guard: MiddlewareHandler = async (c, next) => {
   }
   await next();
   c.header("X-Content-Type-Options", "nosniff");
-  c.header("X-Frame-Options", "DENY");
+  // Nothing is shown in a frame, except a file in the app's own viewer: those routes say SAMEORIGIN themselves.
+  if (!c.res.headers.has("X-Frame-Options")) c.header("X-Frame-Options", "DENY");
   c.header("Referrer-Policy", "no-referrer");
   c.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   // A route may set a stricter policy of its own (an uploaded file is sandboxed); keep it.
   if (process.env.NODE_ENV === "production" && !c.res.headers.has("Content-Security-Policy")) {
     c.header(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
   }
 };

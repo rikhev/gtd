@@ -151,7 +151,9 @@ app.get("/api/files/:id", (c) => {
   return c.body(readFileSync(path), 200, {
     "Content-Type": inline ? row.mime : "application/octet-stream",
     "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(row.name)}`,
-    ...(row.mime === "application/pdf" ? {} : { "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'" }),
+    // The viewer shows it in a frame of the app's own; nowhere else may.
+    "X-Frame-Options": "SAMEORIGIN",
+    "Content-Security-Policy": row.mime === "application/pdf" ? "frame-ancestors 'self'" : "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'",
   });
 });
 
@@ -166,7 +168,7 @@ app.get("/api/files/:id/view", async (c) => {
   if (!id || !row || row.sealed || !existsSync(path) || viewKind(row.mime) !== "page") return c.text("This file can't be shown here", 404);
   try {
     const html = await renderPage(row.name, row.mime, readFileSync(path), c.req.query("theme") === "dark", validZone(c.req.query("tz")) ?? undefined);
-    return c.html(html, 200, { "Content-Security-Policy": "sandbox; default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff" });
+    return c.html(html, 200, { "Content-Security-Policy": "sandbox; default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; frame-ancestors 'self'", "X-Frame-Options": "SAMEORIGIN", "X-Content-Type-Options": "nosniff" });
   } catch (e) {
     return c.text(`Couldn't read this file: ${(e as Error).message}`, 422);
   }
