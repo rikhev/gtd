@@ -6,7 +6,7 @@ import { useUI } from "../ui.tsx";
 import { keyLabel, useCommands, type Command } from "../keys.ts";
 import { usePersisted } from "../components/Grid.tsx";
 import { syncCalendars, toggleFeed, useEvents, useHiddenFeeds, useSyncing } from "../calendarFeed.ts";
-import { EventMark, Lamp, Marker } from "../components/bits.tsx";
+import { DoneBox, EventMark, Lamp, Marker } from "../components/bits.tsx";
 import { actionRowCommands, askContext, askWaitingOn, editors, linkAppointment, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { addDays, addMonths, daysBetween, formatLong, fromIso, today } from "../../shared/dates.ts";
@@ -49,6 +49,8 @@ interface Item {
   /** An appointment's subscribed calendar (its id). */
   feed?: string;
   stalled?: boolean;
+  /** One day's part of an appointment that runs past midnight: the whole of it, as the feed gives it. */
+  whole?: { start: string; end: string; time: string; endTime: string };
 }
 
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -157,8 +159,24 @@ const MIN_HOUR_PX = 20;
 /** The all-day band shows this many rows a day before "+N more". */
 const BAND_ROWS = 3;
 const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
-/** Timed, one-day appointments: placed in the hours. Everything else (deadlines, starts, all-day) sits in the band above. */
-const isTimed = (i: Item) => i.kind === "event" && Boolean(i.time) && i.start === i.end;
+/**
+ * Timed appointments are placed in the hours: one-day ones, and those running past midnight for less than a day (a
+ * night flight), as Outlook draws them (owner's request). Everything else (deadlines, starts, all-day, appointments of
+ * a day or more) sits in the band above.
+ */
+const isTimed = (i: Item) =>
+  i.kind === "event" && Boolean(i.time) && (i.start === i.end || (Boolean(i.endTime) && daysBetween(i.start, i.end) * 1440 + minutesOf(i.endTime!) - minutesOf(i.time!) < 1440));
+/**
+ * A timed appointment's part on one day: an overnight one runs from its start to midnight, then on from midnight to
+ * its end the next day. Each part keeps the whole appointment's times to show.
+ */
+function partOn(i: Item, d: string): Item | null {
+  if (d < i.start || d > i.end) return null;
+  if (i.start === i.end) return i;
+  // Ending at midnight sharp leaves nothing on the last day.
+  if (d === i.end && d !== i.start && i.endTime === "00:00") return null;
+  return { ...i, start: d, end: d, time: d === i.start ? i.time : "00:00", endTime: d === i.end ? i.endTime : "24:00", whole: { start: i.start, end: i.end, time: i.time!, endTime: i.endTime! } };
+}
 
 interface Block {
   item: Item;
@@ -169,7 +187,7 @@ interface Block {
   of: number;
 }
 /** One day's timed appointments as blocks; overlapping ones share the width, as in any calendar. */
-function layoutDay(list: Item[], px: number, h0: number): Block[] {
+function layoutDay(list: Item[], px: number, h0: number, h1 = 24): Block[] {
   const sorted = [...list].sort((a, b) => (a.time ?? "").localeCompare(b.time ?? "") || (b.endTime ?? "").localeCompare(a.endTime ?? ""));
   const out: Block[] = [];
   let cluster: Block[] = [];
@@ -180,9 +198,10 @@ function layoutDay(list: Item[], px: number, h0: number): Block[] {
     cluster = [];
   };
   for (const item of sorted) {
-    const start = minutesOf(item.time!);
+    // Kept within the hours shown: an overnight part can start before them or run past them.
+    const start = Math.max(h0 * 60, minutesOf(item.time!));
     // An appointment without an end, or one ending past midnight, runs its hour (or to the end of the day).
-    const end = item.endTime && minutesOf(item.endTime) > start ? minutesOf(item.endTime) : Math.min(24 * 60, start + 60);
+    const end = Math.min(h1 * 60, item.endTime && minutesOf(item.endTime) > start ? minutesOf(item.endTime) : Math.min(24 * 60, start + 60));
     if (start >= clusterEnd) flush();
     const top = (start / 60 - h0) * px;
     const taken = new Set(cluster.filter((b) => b.top + b.height > top).map((b) => b.slot));
@@ -225,6 +244,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const [cursor, setCursor] = useState(t);
   const [shown, setShown] = useState(t);
   const [itemKey, setItemKey] = useState<string | null>(null);
+  // Items being marked done: the pen strikes them through, then they leave the calendar (done work stays off it).
+  const [striking, setStriking] = useState<Set<string>>(new Set());
   const [drag, setDrag] = useState<Drag | null>(null);
   const root = useRef<HTMLDivElement>(null);
   // The hour grid opens on the working day (07:00), or an hour before the first appointment when that is earlier.
@@ -513,7 +534,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       group: "Calendar",
       keys: ["e"],
       enabled: editable,
-      run: () => focusItem && (focusItem.kind === "action" ? completeActions([focusItem.id]) : ped.complete([focusItem.id])),
+      run: () => focusItem && finish(focusItem),
     },
     {
       // Your own things only (owner's request): an appointment belongs to its calendar and is deleted there.
@@ -680,12 +701,30 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   };
 
   /** One item as an agenda line (phones): its mark, the full title, and what the date is to it. */
+  /** Marks an action or project done (E, or its Complete box): struck through first, then gone, ⌘Z to bring it back. */
+  const finish = (i: Item) => {
+    if ((i.kind !== "action" && i.kind !== "project") || striking.has(i.key)) return;
+    setStriking((p) => new Set(p).add(i.key));
+    window.setTimeout(() => {
+      if (i.kind === "action") completeActions([i.id]);
+      else ped.complete([i.id]);
+      setStriking((p) => new Set([...p].filter((k) => k !== i.key)));
+    }, 380);
+  };
   const agendaRow = (i: Item, d: string, label?: string) => {
     const what =
       label ??
       (i.role === "event" ? (i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""}` : "All day") : i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : i.role === "start" || (i.role === "span" && d === i.start && d !== i.end) ? "Starts" : i.end === d ? (i.startField === "defer" && i.start === i.end ? "On the day" : "Due") : `Until ${formatShort(i.end)}`);
+    // Your own work has the lists' Complete box (owner's request), ahead of its mark; an appointment belongs to its calendar.
+    const doable = i.kind === "action" || i.kind === "project";
+    const going = striking.has(i.key);
     return (
-      <li key={i.key}>
+      <li key={i.key} className={`cal-agenda-item ${going ? "is-striking" : ""}`}>
+        {doable && (
+          <span className="cal-agenda-done">
+            <DoneBox done={going} title={i.title} onToggle={() => finish(i)} />
+          </span>
+        )}
         <button
           type="button"
           className={`cal-agenda-row ${i.overdue && i.end === d ? "is-overdue" : ""} ${itemKey === i.key ? "is-focus" : ""}`}
@@ -910,9 +949,13 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     const row = layoutRow(weekDays, banded, bandOpen ? WEEK_LANES : BAND_ROWS);
     const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
     // The hours set in Settings, stretched to take in any of this week's appointments that fall outside them.
-    const timed = items.filter((i) => isTimed(i) && weekDays.includes(i.start));
-    const h0 = Math.min(dayHours[0], ...timed.map((i) => Math.floor(minutesOf(i.time!) / 60)));
-    const h1 = Math.max(dayHours[1], ...timed.map((i) => Math.ceil((i.endTime && minutesOf(i.endTime) > minutesOf(i.time!) ? minutesOf(i.endTime) : minutesOf(i.time!) + 60) / 60)));
+    const timed = items.filter(isTimed).flatMap((i) => weekDays.map((d) => partOn(i, d)).filter((x): x is Item => x !== null));
+    // An overnight appointment's parts stretch them only to its real start and end (an hour of it either side of
+    // midnight shows); the rest runs off the edge of the hours, its dashed end saying it carries on.
+    const firstMin = (i: Item) => (i.whole && i.start !== i.whole.start ? Math.max(0, minutesOf(i.endTime!) - 60) : minutesOf(i.time!));
+    const lastMin = (i: Item) => (i.whole && i.end !== i.whole.end ? Math.min(1440, minutesOf(i.time!) + 60) : i.endTime && minutesOf(i.endTime) > minutesOf(i.time!) ? minutesOf(i.endTime) : minutesOf(i.time!) + 60);
+    const h0 = Math.min(dayHours[0], ...timed.map((i) => Math.floor(firstMin(i) / 60)));
+    const h1 = Math.max(dayHours[1], ...timed.map((i) => Math.ceil(lastMin(i) / 60)));
     const px = Math.max(MIN_HOUR_PX, hoursHeight ? Math.floor((hoursHeight - 8) / (h1 - h0)) : 40);
     body = (
       <div className="cal-week is-hours">
@@ -939,14 +982,22 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                 className={`cal-hourcol ${d === t ? "is-today" : ""} ${d === cursor ? "is-cursor" : ""} ${dow(d) === 0 || dow(d) === 6 ? "is-weekend" : ""}`}
                 onMouseDown={() => (setItemKey(null), cursorFromMouse(d))}
               >
-                {layoutDay(items.filter((i) => isTimed(i) && i.start === d), px, h0).map((b) => (
+                {layoutDay(timed.filter((i) => i.start === d), px, h0, h1).map((b) => {
+                  // A part of an overnight appointment names the whole: "21:15–09:40", and in a short block the end when
+                  // it is the morning part.
+                  const w = b.item.whole;
+                  const from = w?.time ?? b.item.time;
+                  const to = w?.endTime ?? b.item.endTime;
+                  const when = w ? `${formatLong(w.start)} ${w.time} to ${formatLong(w.end)} ${w.endTime}` : `${formatLong(d)} ${from}${to ? ` to ${to}` : ""}`;
+                  return (
                   <div
                     key={b.item.key}
-                    className={`cal-block ${b.height < 40 ? "is-compact" : ""} ${itemKey === b.item.key ? "is-focus" : ""}`}
+                    // A part of an overnight appointment runs square into the day it continues from, or on to.
+                    className={`cal-block ${b.height < 40 ? "is-compact" : ""} ${itemKey === b.item.key ? "is-focus" : ""} ${b.item.whole && d !== b.item.whole.start ? "is-from-before" : ""} ${b.item.whole && d !== b.item.whole.end ? "is-to-after" : ""}`}
                     data-focused={itemKey === b.item.key || undefined}
                     style={{ top: b.top, height: b.height, left: `calc(${(b.slot / b.of) * 100}% + 2px)`, width: `calc(${100 / b.of}% - 4px)`, ...(b.item.color ? { ["--feed" as string]: b.item.color } : {}) }}
-                    title={`${b.item.time}${b.item.endTime ? `–${b.item.endTime}` : ""} ${b.item.title}${b.item.location ? ` · ${b.item.location}` : ""}${b.item.feedName ? `\n${b.item.feedName}` : ""}`}
-                    aria-label={`Appointment${b.item.feedName ? `, ${b.item.feedName}` : ""}: ${b.item.title}, ${formatLong(d)} ${b.item.time}${b.item.endTime ? ` to ${b.item.endTime}` : ""}`}
+                    title={`${from}${to ? `–${to}` : ""} ${b.item.title}${b.item.location ? ` · ${b.item.location}` : ""}${b.item.feedName ? `\n${b.item.feedName}` : ""}`}
+                    aria-label={`Appointment${b.item.feedName ? `, ${b.item.feedName}` : ""}: ${b.item.title}, ${when}`}
                     onMouseDown={(e) => {
                       e.stopPropagation();
                       setCursor(d);
@@ -955,8 +1006,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                     }}
                   >
                     <span className="cal-block-time">
-                      {b.item.time}
-                      {b.item.endTime && b.height >= 40 ? `–${b.item.endTime}` : ""}
+                      {b.height >= 40 ? `${from}${to ? `–${to}` : ""}` : w && d !== w.start ? `–${to}` : from}
                     </span>
                     {/* The title takes the lines the block has room for, less one for the place when it shows, then an
                         ellipsis: never a half-cut line, and the place never runs over it. */}
@@ -965,7 +1015,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                     </span>
                     {b.item.location && b.height > 56 && <span className="cal-block-sub">{placeName(b.item.location)}</span>}
                   </div>
-                ))}
+                );
+                })}
                 {d === t && nowMin >= h0 * 60 && nowMin <= h1 * 60 && <div className="cal-now" style={{ top: (nowMin / 60 - h0) * px }} aria-hidden="true" />}
               </div>
             ))}

@@ -40,9 +40,10 @@ function rowsOf(s: State): Row[] {
     out.push({ key: `a:${a.id}`, kind: "action", id: a.id, title: a.title || "Untitled action", from: p ? `${place} · ${p.title || "Untitled project"}` : place, place, project: a.project_id, at: a.completed_at ?? a.archived_at });
   }
   for (const p of s.projects) {
-    if (p.status !== "done" || !p.archived_at) continue;
+    // Every completed project: Done is the only place one is shown, archived or not (completed before that rule).
+    if (p.status !== "done") continue;
     const area = s.areas.find((x) => x.id === p.area_id);
-    out.push({ key: `p:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", from: area ? `Projects · #${area.name}` : "Projects", place: "Projects", project: p.id, at: p.completed_at ?? p.archived_at });
+    out.push({ key: `p:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", from: area ? `Projects · #${area.name}` : "Projects", place: "Projects", project: p.id, at: p.completed_at ?? p.archived_at ?? p.created_at });
   }
   // Newest first; on the same moment a project leads the actions closed along with it.
   return out.sort((a, b) => b.at.localeCompare(a.at) || (a.kind === b.kind ? 0 : a.kind === "project" ? -1 : 1));

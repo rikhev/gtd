@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Paperclip } from "lucide-react";
-import { quote, completeActions, getState, mutate, named, newAction, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
+import { FileText, List, Lock, Paperclip, StickyNote } from "lucide-react";
+import { itemCount, openRefList, setForm, useOpenRefList } from "../refList.ts";
+import { RefListView } from "./RefListView.tsx";
+import { fileKind } from "../components/Viewer.tsx";
+import { lockNow, lockWithPassword, removeLock, useLock } from "../lock.ts";
+import { quote, completeActions, getState, mutate, named, newAction, notify, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -10,7 +14,7 @@ import { InlineEdit } from "./ActionsView.tsx";
 import { actionRowCommands, editors, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { formatDate } from "../../shared/dates.ts";
-import type { ID, Op, Ref } from "../../shared/types.ts";
+import type { FileRow, ID, Op, Ref } from "../../shared/types.ts";
 
 /* ------------------------------------------------------------------ */
 /* Someday / Maybe: someday projects and someday actions together       */
@@ -196,11 +200,36 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
 /* Reference                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Reference has two levels, as Checklists has: every reference, and a reference list opened across the whole width
+ * (owner's request). A list's own address (#reference/<id>) brings it back; one that is gone lands on every reference.
+ */
 export function ReferenceView({ regionActive }: { regionActive: boolean }) {
+  const openId = useOpenRefList();
+  const refs = useStore((x) => x.refs);
+  const open = openId ? refs.find((r) => r.id === openId && r.status === "active" && r.form === "list") : undefined;
+  useEffect(() => {
+    if (openId && !open) {
+      window.history.replaceState(null, "", "#reference");
+      openRefList(null, false);
+    }
+  }, [openId, open]);
+  return open ? <RefListView key={open.id} r={open} regionActive={regionActive} /> : <ReferenceIndex regionActive={regionActive} />;
+}
+
+function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
   const [editing, setEditing] = useState<ID | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const lock = useLock();
+  // What each reference is, told by a mark before its title: a list, a document (a file and no notes), or a note.
+  const firstFile = useMemo(() => {
+    const m = new Map<string, FileRow>();
+    s.files.forEach((f) => f.owner_kind === "ref" && !m.has(f.owner_id) && m.set(f.owner_id, f));
+    return m;
+  }, [s.files]);
+  const kindOf = (r: Ref): "list" | "document" | "note" => (r.form === "list" ? "list" : !r.sealed && !r.notes.trim() && firstFile.has(r.id) ? "document" : "note");
   const filesBy = useMemo(() => {
     const m = new Map<string, number>();
     s.files.forEach((f) => f.owner_kind === "ref" && m.set(f.owner_id, (m.get(f.owner_id) ?? 0) + 1));
@@ -231,20 +260,47 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.revealTarget]);
 
-  const create = () => {
+  /** N: a new note; New list: a new list, opened to be filled once it is named. */
+  const create = (form: "list" | null = null) => {
     const id = uid();
-    mutate("New reference", [{ type: "create", table: "refs", row: { id, title: "", notes: "", project_id: null, status: "active", created_at: stamp() } }], { silent: true });
+    mutate(form ? "New list" : "New reference", [{ type: "create", table: "refs", row: { id, title: "", notes: "", project_id: null, status: "active", created_at: stamp(), form } }], { silent: true });
     nav.setFocus(id);
     setEditing(id);
+  };
+  /** Enter: a list opens across the width, a document in the viewer (its details beside it), a note its details. */
+  const open = (id: ID) => {
+    const r = s.refs.find((x) => x.id === id);
+    if (r?.form === "list") return openRefList(id);
+    if (r && kindOf(r) === "document") {
+      const files = s.files.filter((f) => f.owner_kind === "ref" && f.owner_id === id).map((f) => f.id);
+      ui.openDetail({ kind: "ref", id }, false);
+      return ui.openViewer(files, 0);
+    }
+    ui.openDetail({ kind: "ref", id }, true);
   };
   const commands: Command[] = [
     ...nav.commands,
     {
       id: "ref.new",
-      label: "New reference",
+      label: "New note",
       group: "Reference",
       keys: ["n"],
       run: () => create(),
+    },
+    { id: "ref.newlist", label: "New list", group: "Reference", run: () => create("list") },
+    {
+      // A note's lines become a list's items, and back; nothing is lost either way.
+      id: "ref.form",
+      row: true,
+      label: focusId && s.refs.find((r) => r.id === focusId)?.form === "list" ? "Show as a note" : "Show as a list",
+      group: "Reference",
+      enabled: Boolean(focusId),
+      run: () => {
+        const ids = nav.targets();
+        const toList = s.refs.find((r) => r.id === focusId)?.form !== "list";
+        if (ids.some((id) => s.refs.find((r) => r.id === id)?.sealed) && !lock.unlocked) return notify("Unlock first: a locked reference is changed only while it is open", { tone: "error" });
+        void setForm(ids, toList ? "list" : null);
+      },
     },
     {
       // Typing a title finds it (the list's letters are its commands, so the typing happens in a picker): what starts
@@ -263,7 +319,16 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
           onPick: (id) => id && nav.setFocus(id),
         }),
     },
-    { id: "ref.open", row: true, label: "Open details", group: "Reference", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
+    {
+      id: "ref.open",
+      row: true,
+      label: focusId && s.refs.find((r) => r.id === focusId)?.form === "list" ? "Open the list" : focusId && kindOf(s.refs.find((r) => r.id === focusId)!) === "document" ? "View the document" : "Open details",
+      group: "Reference",
+      keys: ["enter"],
+      enabled: Boolean(focusId),
+      run: () => focusId && open(focusId),
+    },
+    { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusId && s.refs.find((r) => r.id === focusId)?.form === "list") || Boolean(focusId && kindOf(s.refs.find((r) => r.id === focusId)!) === "document"), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", row: true, label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "ref.jump", row: true, label: "Jump to its project", group: "Reference", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {
@@ -275,6 +340,21 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
       enabled: Boolean(focusId),
       run: () => setProject(ui, "refs", nav.targets()),
     },
+    {
+      // L locks the reference (setting the lock password the first time); on a locked one it takes the lock off.
+      id: "ref.lock",
+      row: true,
+      label: focusId && s.refs.find((r) => r.id === focusId)?.sealed ? "Remove the lock" : "Lock with password",
+      group: "Reference",
+      keys: ["l"],
+      enabled: Boolean(focusId),
+      run: () => {
+        const ids = nav.targets();
+        if (s.refs.find((r) => r.id === focusId)?.sealed) removeLock(ui, ids.filter((id) => s.refs.find((r) => r.id === id)?.sealed));
+        else lockWithPassword(ui, ids);
+      },
+    },
+    { id: "ref.locknow", label: "Lock now", group: "Reference", enabled: lock.unlocked, run: () => lockNow() },
     { id: "ref.attach", row: true, label: "Attach file", group: "Reference", keys: ["mod+o"], enabled: Boolean(focusId), run: () => fileInput.current?.click() },
     {
       id: "ref.trash",
@@ -299,6 +379,19 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
 
   const columns: Column<Ref>[] = [
     {
+      key: "kind",
+      label: "",
+      width: "30px",
+      render: (r) => {
+        const k = kindOf(r);
+        return (
+          <span className="kind-icon" title={k === "list" ? "List" : k === "document" ? "Document" : "Note"}>
+            {k === "list" ? <List size={14} strokeWidth={1.75} aria-label="List" /> : k === "document" ? <FileText size={14} strokeWidth={1.75} aria-label="Document" /> : <StickyNote size={14} strokeWidth={1.75} aria-label="Note" />}
+          </span>
+        );
+      },
+    },
+    {
       key: "subject",
       label: "Reference",
       width: "minmax(240px, 2fr)",
@@ -311,12 +404,28 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
               setEditing(null);
               if (!v.trim() && !r.title) mutate("Discarded", [{ type: "delete", table: "refs", id: r.id }], { silent: true });
               else if (v.trim() !== r.title) mutate(`Renamed ${quote(v)}`, [{ type: "patch", table: "refs", id: r.id, data: { title: v.trim() } }]);
+              // A new list, once named, opens to be filled.
+              if (v.trim() && !r.title && r.form === "list") openRefList(r.id);
             }}
           />
         ) : (
           <span className="subject">
             <span className="subject-text">{r.title || "Untitled"}</span>
-            {r.notes && <span className="subject-more">{r.notes.split("\n")[0]}</span>}
+            {/* Locked: the lock says so, and nothing of the notes shows on the list, unlocked or not. */}
+            {r.sealed ? (
+              <span className="ref-lock" title={lock.unlocked ? "Locked · open now" : "Locked"}>
+                <Lock size={11} strokeWidth={2.25} aria-hidden />
+                <span className="visually-hidden">Locked</span>
+              </span>
+            ) : kindOf(r) === "list" ? (
+              <span className="subject-more">{itemCount(r.notes) ? plural(itemCount(r.notes), "item") : "Empty list"}</span>
+            ) : kindOf(r) === "document" ? (
+              <span className="subject-more">
+                {firstFile.get(r.id)!.name} · {fileKind(firstFile.get(r.id)!.name, firstFile.get(r.id)!.mime)}
+              </span>
+            ) : (
+              r.notes && <span className="subject-more">{r.notes.split("\n")[0]}</span>
+            )}
           </span>
         ),
     },
@@ -362,8 +471,14 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
         nav={nav}
         active={regionActive}
         showHeaders={false}
-        onOpen={(k) => ui.openDetail({ kind: "ref", id: k }, true)}
-        empty={<EmptyState title="No reference material" lines={["Add a note here, or file non-actionable stuff here when you clarify the Inbox."]} action={{ label: "New reference", run: create }} />}
+        onOpen={(k) => open(k)}
+        empty={
+          <EmptyState
+            title="No reference material"
+            lines={["A note, a list (⌘K › New list) or a document: anything to look up later. Stuff filed from the Inbox lands here too."]}
+            action={{ label: "New note", run: () => create() }}
+          />
+        }
       />
       <input
         ref={fileInput}

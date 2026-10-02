@@ -437,6 +437,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
           { id: "view.fit", label: fit ? "Change what fits now" : "Show what fits where you are", group: "View", keys: ["f"], run: () => openFit(ui) },
           // Allen's next two questions, there when wanted (no key: F asks only where you are).
           { id: "view.fittime", label: "Show what fits your time", group: "View", run: () => askTime(ui) },
+          { id: "view.deferred", label: showDeferred ? "Hide deferred actions" : "Show deferred actions", group: "View", run: () => setShowDeferred(!showDeferred) },
           { id: "view.fitenergy", label: "Show what fits your energy", group: "View", run: () => askEnergy(ui) },
           ...(fit ? [{ id: "view.fitoff", label: "Show every next action", group: "View", run: () => setFit(null) }] : []),
         ]

@@ -13,6 +13,7 @@ import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../acti
 import { isDark, setTheme, useTheme } from "../theme.ts";
 import type { ID } from "../../shared/types.ts";
 import { openChecklist } from "../checklists.ts";
+import { choosePassword, lockNow, useLock } from "../lock.ts";
 
 /* ------------------------------------------------------------------ */
 /* Search                                                               */
@@ -46,7 +47,8 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
     const fileWords = new Map<string, string[]>();
     for (const f of s.files) {
       const k = `${f.owner_kind}:${f.owner_id}`;
-      fileWords.set(k, [...(fileWords.get(k) ?? []), f.name, f.preview]);
+      // A locked file's row holds only ciphertext: it is found by nothing but its reference's title.
+      if (!f.sealed) fileWords.set(k, [...(fileWords.get(k) ?? []), f.name, f.preview]);
     }
     const filesOf = (kind: string, id: ID) => fileWords.get(`${kind}:${id}`) ?? [];
     const projectOf = (id: ID | null) => (id ? s.projects.find((p) => p.id === id)?.title : undefined);
@@ -139,7 +141,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: general, areas, contexts, export                          */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "context" | "area" | "stall" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "context" | "area" | "stall" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours" | "lock"; id: ID; text: string; status?: string; color?: string };
 
 /** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–4. */
 const TABS = [
@@ -157,6 +159,7 @@ const TAB_OF: Record<string, TabId> = {
   areas: "areas",
   contexts: "contexts",
   export: "data",
+  lock: "data",
 };
 
 export function SettingsView({ regionActive }: { regionActive: boolean }) {
@@ -165,6 +168,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const meta = useMeta();
   const [editing, setEditing] = useState<string | null>(null);
   const theme = useTheme();
+  const lock = useLock();
   const [storedTab, setTab] = usePersisted<TabId>("settings:tab", "general");
   // A tab remembered from before that no longer exists falls back to General.
   const tab: TabId = TABS.some((t) => t.id === storedTab) ? storedTab : "general";
@@ -219,6 +223,12 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ],
       },
       {
+        key: "lock",
+        label: "Lock",
+        hideCount: true,
+        rows: [{ key: "lock", kind: "lock" as const, id: "lock", text: "Lock password" }],
+      },
+      {
         key: "contexts",
         label: "Contexts",
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
@@ -254,6 +264,16 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     { id: "set.nexttab", label: "Go to the next settings tab", group: "Settings", keys: ["mod+."], inInput: true, run: () => setTab(TABS[(tabIdx + 1) % TABS.length].id) },
     { id: "set.prevtab", label: "Go to the previous settings tab", group: "Settings", keys: ["mod+,"], inInput: true, run: () => setTab(TABS[(tabIdx - 1 + TABS.length) % TABS.length].id) },
     ...TABS.map((t, i) => ({ id: `set.tab.${t.id}`, label: `Go to Settings › ${t.title}`, group: "Settings", keys: [String(i + 1)], run: () => setTab(t.id) })),
+    {
+      id: "set.lock",
+      row: true,
+      label: meta.lock ? "Change the lock password" : "Set a lock password",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "lock",
+      run: () => choosePassword(ui),
+    },
+    { id: "set.locknow", label: "Lock now", group: "Settings", enabled: lock.unlocked, run: () => lockNow() },
     {
       id: "set.export",
       row: true,
@@ -555,6 +575,14 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Theme</span>
             <span className="subject-more">Light, dark, or follow the system. Kept in this browser.</span>
           </span>
+        ) : r.kind === "lock" ? (
+          <span className="subject">
+            <span className="subject-text strong">Lock password</span>
+            <span className="subject-more">
+              Locks the reference notes and files you choose (L on Reference). They are encrypted in this browser before they are saved, so nobody can read
+              them without it. A forgotten password can't be reset.
+            </span>
+          </span>
         ) : r.kind === "export" ? (
           <span className="subject">
             <span className="subject-text strong">{r.text}</span>
@@ -622,6 +650,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           valueBtn(r, <span>{r.status ? "Can't read" : "Change link"}</span>)
         ) : r.kind === "addfeed" ? (
           valueBtn(r, <span>Add…</span>)
+        ) : r.kind === "lock" ? (
+          valueBtn(r, <span>{meta.lock ? "Change…" : "Set…"}</span>)
         ) : r.kind === "export" ? (
           valueBtn(r, <span>Download</span>, { icon: "download" })
         ) : r.kind === "area" ? (

@@ -76,12 +76,12 @@ export function reminderChoices(ui: UI | null, st: Stuff, r: Reminder, finish: (
         const from = a.status === "waiting" || a.status === "someday" || a.status === "later" ? a.status : "next";
         return finish(`${name(r)} done`, [handled, { type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, flagged: 0, done_from: from, archived_at: null } }]);
       }
-      // A completed project's open actions are done with it and filed in Done, as on Projects.
+      // A completed project's open actions are marked done with it, struck through on their lists, as on Projects.
       const open = getState().actions.filter((a) => a.project_id === r.item.id && ["next", "waiting", "later"].includes(a.status));
       finish(`${name(r)} complete${open.length ? ` · ${open.length} open ${open.length === 1 ? "action" : "actions"} done with it` : ""}`, [
         handled,
-        { type: "patch", table: "projects", id: r.item.id, data: { status: "done", completed_at: at, archived_at: null } },
-        ...open.map((a): Op => ({ type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, done_from: a.status, archived_at: at } })),
+        { type: "patch", table: "projects", id: r.item.id, data: { status: "done", completed_at: at, archived_at: at } },
+        ...open.map((a): Op => ({ type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, done_from: a.status, archived_at: null } })),
       ]);
     },
   });

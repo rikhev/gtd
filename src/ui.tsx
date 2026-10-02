@@ -21,7 +21,7 @@ export type ViewId =
 
 export type Region = "rail" | "list" | "detail";
 
-export type EntityKind = "action" | "project" | "stuff" | "ref" | "area" | "event" | "checkitem";
+export type EntityKind = "action" | "project" | "stuff" | "ref" | "area" | "event" | "checkitem" | "checklist";
 export interface Target {
   kind: EntityKind;
   id: ID;
@@ -68,6 +68,8 @@ export type PickerSpec =
       current: string;
       placeholder?: string;
       preview?: (s: string) => { ok: boolean; text: string };
+      /** A password: typed hidden, never offered by autofill. "new" asks the browser to suggest a strong one. */
+      secret?: "current" | "new";
       onPick: (s: string) => void;
     };
 
@@ -93,6 +95,10 @@ export interface UI {
   /** Back one step along the trail. */
   detailBack: () => void;
   openPicker: (p: PickerSpec) => void;
+  /** The document viewer: files shown in the app (owner's request), over the list, ←→ through them. */
+  viewer: { ids: ID[]; at: number } | null;
+  openViewer: (ids: ID[], at: number) => void;
+  closeViewer: () => void;
   pickerOpen: boolean;
   focusCapture: () => void;
   openPalette: () => void;

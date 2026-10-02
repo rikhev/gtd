@@ -252,7 +252,7 @@ export function Picker({ spec, close }: Props) {
       <input
         ref={input}
         className="picker-input"
-        type="text"
+        type={spec.type === "text" && spec.secret ? "password" : "text"}
         value={q}
         placeholder={placeholder}
         onChange={(e) => setQ(e.target.value)}
@@ -264,7 +264,7 @@ export function Picker({ spec, close }: Props) {
         aria-controls="picker-list"
         aria-activedescendant={options[hi] ? `po-${hi}` : undefined}
         spellCheck={false}
-        autoComplete="off"
+        autoComplete={spec.type === "text" && spec.secret ? (spec.secret === "new" ? "new-password" : "current-password") : "off"}
       />
       <ul className="picker-list" id="picker-list" role="listbox" aria-label={title}>
         {options.map((o, i) => [

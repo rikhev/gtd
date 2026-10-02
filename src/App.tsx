@@ -4,7 +4,7 @@ import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { quote, archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, onHold, plural, signOut } from "./store.ts";
+import { quote, archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, notStarted, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
@@ -15,13 +15,15 @@ import { DoneView } from "./views/DoneView.tsx";
 import { AgendasView } from "./views/AgendasView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
+import { Viewer } from "./components/Viewer.tsx";
 import { ActionsView } from "./views/ActionsView.tsx";
 import { InboxView } from "./views/InboxView.tsx";
 import { ProjectsView, projectEditors } from "./views/ProjectsView.tsx";
 import { SomedayView, ReferenceView } from "./views/SimpleViews.tsx";
 import { ChecklistsView } from "./views/ChecklistsView.tsx";
 import { HorizonsView } from "./views/HorizonsView.tsx";
-import { dayWords, openChecklist, progress, progressLabel, startOver, useChecklistDay, useOpenChecklist } from "./checklists.ts";
+import { itemCount, openRefList, useOpenRefList } from "./refList.ts";
+import { dayWords, openChecklist, progress, progressLabel, setChecklistDay, startOver, useChecklistDay, useOpenChecklist } from "./checklists.ts";
 import { ClarifyView } from "./views/ClarifyView.tsx";
 // Views opened now and then load when first opened, so the lists come up faster on a cold phone.
 const CalendarView = lazy(() => import("./views/CalendarView.tsx").then((m) => ({ default: m.CalendarView })));
@@ -60,6 +62,8 @@ function focusedName(): string {
 }
 
 const openChecklistHash = () => (/^#checklists\/.+/.test(window.location.hash) ? window.location.hash : null);
+/** The address of the reference list open in Reference, if one is. */
+const openRefListHash = () => (/^#reference\/.+/.test(window.location.hash) ? window.location.hash : null);
 function viewFromHash(): ViewId | null {
   const h = hashView(window.location.hash) as ViewId;
   // Clarify can't be rebuilt from an address (it needs the run that opened it): it lands on the Inbox it clarifies.
@@ -71,11 +75,12 @@ function homeOf(t: Target): ViewId {
   const s = getState();
   if (t.kind === "stuff") return "inbox";
   if (t.kind === "ref") return "reference";
+  if (t.kind === "checklist" || t.kind === "checkitem") return "checklists";
   if (t.kind === "area") return "settings"; // areas are managed in Settings; Projects groups by them
   if (t.kind === "project") {
     const p = s.projects.find((x) => x.id === t.id);
-    // An archived completed project is in Done, with everything else that is finished.
-    return p?.status === "someday" ? "someday" : p?.status === "done" && p.archived_at ? "done" : "projects";
+    // A completed project is in Done, with everything else that is finished.
+    return p?.status === "someday" ? "someday" : p?.status === "done" ? "done" : "projects";
   }
   const a = s.actions.find((x) => x.id === t.id);
   if (!a) return "next";
@@ -132,6 +137,7 @@ export default function App() {
     }
   }, []);
   const [picker, setPicker] = useState<PickerSpec | null>(null);
+  const [viewer, setViewer] = useState<{ ids: string[]; at: number } | null>(null);
   const [pickerSeq, setPickerSeq] = useState(0);
   // The palette, ⌘K: what it lists is taken as it opens, before it takes the keys, with where the focus is.
   const [palette, setPalette] = useState<{ entries: LayeredCommand[]; where: string; rowName: string } | null>(null);
@@ -203,15 +209,19 @@ export default function App() {
   const openListId = useOpenChecklist();
   const checklistDay = useChecklistDay();
   const openList = view === "checklists" && openListId ? s.checklists.find((c) => c.id === openListId && c.status === "active") : undefined;
+  // Inside a reference list, as inside a checklist: the heading and the tab name it.
+  const openRefId = useOpenRefList();
+  const openRef = view === "reference" && openRefId ? s.refs.find((r) => r.id === openRefId && r.status === "active" && r.form === "list") : undefined;
   useEffect(() => {
-    document.title = `${openList ? `${openList.title || "Untitled checklist"} · ` : ""}${VIEW_TITLES[view] ?? "Stiltje"} · Stiltje`;
-  }, [view, openList?.title, openList]);
+    const inside = openList ? openList.title || "Untitled checklist" : openRef ? openRef.title || "Untitled list" : "";
+    document.title = `${inside ? `${inside} · ` : ""}${VIEW_TITLES[view] ?? "Stiltje"} · Stiltje`;
+  }, [view, openList, openRef]);
   const viewNow = useRef(view);
   viewNow.current = view;
   useEffect(() => {
     if (view === "search") return;
     // Checklists keeps a checklist that is open in its address (#checklists/…).
-    const hash = view === "checklists" && openChecklistHash() ? openChecklistHash()! : `#${view}`;
+    const hash = view === "checklists" && openChecklistHash() ? openChecklistHash()! : view === "reference" && openRefListHash() ? openRefListHash()! : `#${view}`;
     if (popping.current) {
       popping.current = false;
       if (hashView(window.location.hash) !== view) window.history.replaceState(null, "", hash);
@@ -223,8 +233,10 @@ export default function App() {
   }, [view]);
 
   const go = useCallback((v: ViewId, popped = false) => {
+    setViewer(null);
     // Going to Checklists lands on every checklist; Back and Forward land where their address says.
     if (v === "checklists" && !popped) openChecklist(null, viewRef.current === "checklists");
+    if (v === "reference" && !popped) openRefList(null, viewRef.current === "reference");
     setView((cur) => {
       if (cur !== "search") prevView.current = cur;
       return v;
@@ -311,6 +323,17 @@ export default function App() {
         setPicker(p);
       },
       pickerOpen: Boolean(picker),
+      viewer,
+      openViewer: (ids, at) => {
+        setViewer({ ids, at });
+        // The viewer's keys (←→, Esc) belong to the list region it covers; on a phone the details sheet steps aside for it.
+        setRegion("list");
+        if (window.matchMedia("(max-width: 820px)").matches && !pinnedRef.current) setDetail(null);
+      },
+      closeViewer: () => {
+        setViewer(null);
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
+      },
       focusCapture: () => captureRef.current?.focus(),
       openPalette: () => {
         const entries = paletteSnapshot();
@@ -435,7 +458,7 @@ export default function App() {
       revealTarget,
       clearReveal: () => setRevealTarget(null),
     }),
-    [view, go, region, detail, detailTrail, detailPinned, setDetailPinned, picker, searchQuery, revealTarget],
+    [view, go, region, detail, detailTrail, detailPinned, setDetailPinned, picker, searchQuery, revealTarget, viewer],
   );
 
   const cycleRegion = (dir: 1 | -1) => {
@@ -445,7 +468,7 @@ export default function App() {
   };
 
   const inboxCount = s.stuff.filter((x) => x.status === "inbox").length;
-  const archivable = s.actions.filter((a) => a.status === "done" && !a.archived_at).length + s.projects.filter((p) => p.status === "done" && !p.archived_at).length;
+  const archivable = s.actions.filter((a) => a.status === "done" && !a.archived_at).length;
 
   const theme = useTheme();
   const themeTo = (pref: "system" | "light" | "dark") => {
@@ -542,12 +565,13 @@ export default function App() {
     };
   }, []);
 
-  const listActive = region === "list" && !picker && !palette;
+  const listActive = region === "list" && !picker && !palette && !viewer;
   const t = today();
   const deferredNext = s.actions.filter((a) => a.status === "next" && !onHold(a, s) && isDeferred(a, t)).length;
   const fitNow = useFit();
   const areaFilter = useAreaFilter();
   const activeProjects = s.projects.filter((p) => p.status === "active");
+  const scheduledProjects = activeProjects.filter((p) => notStarted(p, t) && (!areaFilter || inAreas(p.area_id, areaFilter))).length;
   const nextShown = s.actions.filter((a) => (a.status === "next" && !onHold(a, s) && !isDeferred(a, t)) || isChase(a, t));
   // A count says how many there are; none is said by the list's empty state, so the heading carries no "0 items".
   const some = (n: number, noun: string) => (n ? plural(n, noun) : "");
@@ -564,16 +588,23 @@ export default function App() {
       .filter(Boolean)
       .join(" · "),
     // While Projects is narrowed to areas, the count says how many of them are shown.
-    projects: areaFilter
-      ? `${activeProjects.filter((p) => inAreas(p.area_id, areaFilter)).length} of ${plural(activeProjects.length, "active project")}`
-      : some(activeProjects.length, "active project"),
+    // A standing fact, as "· 1 deferred" on Next Actions: how many haven't started yet (they can be hidden).
+    projects: [
+      areaFilter
+        ? `${activeProjects.filter((p) => inAreas(p.area_id, areaFilter)).length} of ${plural(activeProjects.length, "active project")}`
+        : some(activeProjects.length, "active project"),
+      ...(scheduledProjects ? [`${scheduledProjects} scheduled`] : []),
+    ]
+      .filter(Boolean)
+      .join(" · "),
     waiting: some(s.actions.filter((a) => a.status === "waiting" && !onHold(a, s)).length, "item"),
     agendas: (() => {
       const n = new Set(s.actions.flatMap((a) => (a.status === "next" ? [a.person] : a.status === "waiting" ? [a.waiting_who] : [])).filter((w): w is string => Boolean(w?.trim())).map((w) => w.trim().toLowerCase())).size;
       return n ? `${n} ${n === 1 ? "person" : "people"}` : "";
     })(),
     someday: some(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
-    reference: some(s.refs.filter((r) => r.status === "active").length, "reference"),
+    // Inside a list, how many items it holds; otherwise how many references there are.
+    reference: openRef ? (openRef.sealed ? "Locked" : some(itemCount(openRef.notes), "item")) : some(s.refs.filter((r) => r.status === "active").length, "reference"),
     // Inside a checklist, how far this run has got; otherwise how many checklists there are.
     checklists: openList
       ? (() => {
@@ -586,7 +617,7 @@ export default function App() {
         })()
       : some(s.checklists.filter((c) => c.status === "active").length, "checklist"),
     horizons: some(s.horizons.filter((h) => h.kind === "goal" && h.status === "active").length, "goal"),
-    done: some(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done" && p.archived_at).length, "item"),
+    done: some(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done").length, "item"),
     trash: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
   };
 
@@ -684,10 +715,19 @@ export default function App() {
                 <ChevronRight className="viewcrumb-sep" size={14} strokeWidth={2} aria-hidden />
                 <h1 className="viewtitle" id="view-title">{openList.title || "Untitled checklist"}</h1>
               </>
+            ) : openRef ? (
+              // Inside a reference list: the way back up to every reference, then the list's name.
+              <>
+                <button type="button" className="viewcrumb" onClick={() => openRefList(null)} title={`Every reference (${keyLabel("escape")})`}>
+                  Reference
+                </button>
+                <ChevronRight className="viewcrumb-sep" size={14} strokeWidth={2} aria-hidden />
+                <h1 className="viewtitle" id="view-title">{openRef.title || "Untitled list"}</h1>
+              </>
             ) : (
               <h1 className="viewtitle" id="view-title">{VIEW_TITLES[view]}</h1>
             )}
-            {counts[view] && <span className="viewcount">{counts[view]}</span>}
+            {counts[view] && <span className={`viewcount ${openList?.repeats && checklistDay ? "is-past" : ""}`}>{counts[view]}</span>}
             <span className="viewtools">
               {/* What fits now, in sight where it is used; while it is on, the line above the list takes over. */}
               {view === "next" && !fitNow && (
@@ -698,6 +738,12 @@ export default function App() {
               {view === "projects" && !areaFilter && s.areas.length > 0 && (
                 <button type="button" className="text-btn" onClick={() => openAreaFilter(ui)}>
                   Filter by area
+                </button>
+              )}
+              {/* A routine stepped back to an earlier day: the way back to today (⌥⇧Y), beside the count that names the day. */}
+              {openList?.repeats && checklistDay && (
+                <button type="button" className="text-btn" onClick={() => setChecklistDay(null, openList.repeats!)}>
+                  {openList.repeats === "week" ? "Back to this week" : "Back to today"}
                 </button>
               )}
               {/* A run under way can be started over from here: it has no key of its own (⌥V and ⌘K have it). */}
@@ -721,7 +767,11 @@ export default function App() {
               aria-label={VIEW_TITLES[view]}
               tabIndex={(detail || detailPinned) && region !== "list" && window.matchMedia("(max-width: 820px)").matches ? 0 : undefined}
             >
-              {meta.loaded ? <Suspense fallback={<div className="loading" aria-busy="true" />}>{body}</Suspense> : <div className="loading" aria-busy="true" />}
+              {/* The viewer covers the list, which stays as it was beneath it (cursor, scroll) for when it closes. */}
+              {viewer && <Viewer key={viewer.ids[viewer.at]} ids={viewer.ids} at={viewer.at} active={region === "list" && !picker && !palette} onStep={(at) => setViewer((v) => (v ? { ...v, at } : v))} />}
+              <div className="list-body" hidden={Boolean(viewer)}>
+                {meta.loaded ? <Suspense fallback={<div className="loading" aria-busy="true" />}>{body}</Suspense> : <div className="loading" aria-busy="true" />}
+              </div>
             </section>
             {(detail || detailPinned) && <Detail target={detail} active={region === "detail" && !picker && !palette} />}
           </div>

@@ -8,7 +8,8 @@ export const FILES_DIR = `${DATA_DIR}/files`;
 mkdirSync(FILES_DIR, { recursive: true });
 
 export const db = new DatabaseSync(`${DATA_DIR}/gtd.sqlite`);
-db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = OFF;");
+// secure_delete zeroes what a change leaves behind, so a reference's notes are not left readable in the file once it is locked.
+db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = OFF; PRAGMA secure_delete = ON;");
 
 /** Column lists double as the write whitelist for generic ops. */
 export const COLUMNS: Record<TableName, string[]> = {
@@ -19,10 +20,10 @@ export const COLUMNS: Record<TableName, string[]> = {
   ],
   projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at", "trashed_at", "trashed_from", "start", "purpose", "ideas", "goal_id"],
   stuff: ["id", "text", "kind", "status", "created_at", "processed_at", "trashed_at", "trashed_from", "back_kind", "back_id"],
-  refs: ["id", "title", "notes", "project_id", "status", "created_at", "trashed_at", "trashed_from", "updated_at"],
+  refs: ["id", "title", "notes", "project_id", "status", "created_at", "trashed_at", "trashed_from", "updated_at", "sealed", "form"],
   contexts: ["id", "name", "color", "sort"],
   areas: ["id", "name", "sort", "color"],
-  files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at"],
+  files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at", "sealed"],
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
   checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id", "repeats_since"],
@@ -116,6 +117,19 @@ for (const t of ["actions", "projects", "stuff", "refs"]) {
 if (!(db.prepare("PRAGMA table_info(refs)").all() as { name: string }[]).some((c) => c.name === "updated_at")) {
   db.exec("ALTER TABLE refs ADD COLUMN updated_at TEXT");
   db.exec("UPDATE refs SET updated_at = created_at");
+}
+// A locked reference keeps its notes encrypted (sealed holds the ciphertext; notes is empty), and so do its files:
+// a sealed file's bytes on disk are ciphertext, and its row carries its real name and type encrypted in preview.
+if (!(db.prepare("PRAGMA table_info(refs)").all() as { name: string }[]).some((c) => c.name === "sealed")) {
+  db.exec("ALTER TABLE refs ADD COLUMN sealed TEXT");
+}
+if (!(db.prepare("PRAGMA table_info(files)").all() as { name: string }[]).some((c) => c.name === "sealed")) {
+  db.exec("ALTER TABLE files ADD COLUMN sealed INTEGER NOT NULL DEFAULT 0");
+}
+// A reference can be a list (owner's request): its notes are then read line by line as items, "## " marking a section
+// heading. Null is a note.
+if (!(db.prepare("PRAGMA table_info(refs)").all() as { name: string }[]).some((c) => c.name === "form")) {
+  db.exec("ALTER TABLE refs ADD COLUMN form TEXT");
 }
 // Projects can start on a date, so the calendar draws them as a bar from start to due.
 if (!(db.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).some((c) => c.name === "start")) {
@@ -310,4 +324,7 @@ export function applyOps(ops: Op[]) {
     db.exec("ROLLBACK");
     throw e;
   }
+  // Locking a reference: the write-ahead log still holds the notes as they were, so it is folded into the database
+  // (where secure_delete has zeroed them) and emptied at once, rather than at SQLite's next checkpoint.
+  if (ops.some((op) => op.type === "patch" && op.table === "refs" && op.data.sealed)) db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 }

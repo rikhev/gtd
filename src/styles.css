@@ -328,6 +328,11 @@ a:hover {
 .viewcount {
   color: var(--ink-2);
 }
+/* A routine stepped back to an earlier day: the count that names the day is in full ink, so it isn't missed. */
+.viewcount.is-past {
+  color: var(--ink);
+  font-weight: 600;
+}
 /* Inside a checklist the heading starts with the way back up: "Checklists ›" in ink-2, then the checklist's name. */
 .viewcrumb {
   font-size: var(--fs-headline);
@@ -375,10 +380,129 @@ a:hover {
   grid-row: 1 / -1;
 }
 .list-region {
+  position: relative;
   flex: 1;
   min-width: 0;
   overflow: auto;
   padding: 0 20px 72px; /* room below the last row so a toast never sits on it */
+}
+/* The list's own content; while the viewer covers it, it waits hidden, cursor and all. */
+.list-body {
+  display: contents;
+}
+.list-body[hidden] {
+  display: none;
+}
+
+/* The document viewer: over the list, as Quick Look is over the Finder. A bar like the list's heading row, then the
+   document on the paper, filling the rest. */
+.viewer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+.viewer-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-md);
+  min-height: 40px;
+  padding: 0 12px 0 20px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--sheet);
+}
+.viewer-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.viewer-name strong {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.viewer-name svg {
+  flex: none;
+  color: var(--ink-3);
+}
+.viewer-meta {
+  flex: none;
+  color: var(--ink-3);
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+.viewer-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.viewer-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: var(--sp-md);
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.viewer-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.viewer-stage iframe {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--sheet);
+}
+/* A picture sits on the paper with room around it, as large as fits, never larger than it is. */
+.viewer-stage.is-image {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: auto;
+}
+.viewer-stage.is-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: var(--sheet);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 16px rgb(0 0 0 / 0.08);
+}
+.viewer-note {
+  margin: auto;
+  max-width: 44ch;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.viewer-note p {
+  margin: 0;
+}
+.viewer-note svg {
+  color: var(--ink-3);
+}
+.viewer-opening {
+  margin: auto;
+  color: var(--ink-3);
+}
+@media (max-width: 820px) {
+  .viewer-bar {
+    padding-left: 12px;
+  }
+  .viewer-meta {
+    display: none;
+  }
 }
 
 .loading {
@@ -1915,6 +2039,101 @@ body.is-col-resizing * {
   font-size: var(--fs-small);
   margin: 0;
 }
+
+/* Locked references. On the list, a small lock after the title stands where the notes' first line would be. */
+.ref-lock {
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-3);
+  flex: none;
+}
+/* In the pane, while shut: what is locked, and the password field right there. A wash panel, not a card: it takes
+   the place of the notes and files it hides. */
+.ref-locked {
+  display: grid;
+  gap: var(--sp-sm);
+  padding: 12px 14px 14px;
+  background: var(--wash);
+  border-radius: 4px;
+  color: var(--wash-ink);
+}
+.ref-locked-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ref-locked-text {
+  margin: 0;
+  font-size: var(--fs-small);
+  text-wrap: pretty;
+}
+.ref-locked-form {
+  display: flex;
+  gap: var(--sp-sm);
+  margin-top: 2px;
+}
+.ref-locked-form .field-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ref-locked-form .field-text[aria-invalid] {
+  border-color: var(--alert);
+}
+.ref-locked-err {
+  margin: 0;
+  color: var(--alert);
+  font-size: var(--fs-small);
+}
+.lock-button {
+  flex: none;
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--sheet);
+  border: 1px solid var(--ink);
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lock-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.lock-button:disabled {
+  opacity: 0.5;
+}
+/* Open: one quiet line says it is locked, with the two ways out. */
+.ref-lock-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--sp-md);
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-small);
+}
+.ref-lock-line svg {
+  flex: none;
+}
+.ref-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  align-self: start;
+  text-decoration: none;
+}
 .detail-h {
   font-family: var(--font-label);
   font-stretch: 75%;
@@ -2199,6 +2418,57 @@ textarea.field-text {
 .mini-meta {
   color: var(--ink-3);
   font-size: var(--fs-small);
+}
+/* A checklist run from the pane: the row is the tick, so its box sits where an action's marker does. */
+.mini-row.is-tickable .done-box {
+  width: 22px;
+  height: 22px;
+}
+.mini-row.is-tickable:hover .done-box .box {
+  stroke: var(--ink);
+}
+/* Its section headings: the list's own small caps, with room above, no row of their own to walk. */
+.mini-section {
+  padding: 12px 2px 4px;
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--rule);
+}
+/* A reference list's items carry a small square bullet: a list to read, not boxes to tick. */
+.ref-bullet {
+  justify-self: center;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--ink-3);
+}
+.row .ref-bullet {
+  display: block;
+  margin: 0 auto;
+}
+.is-focus .ref-bullet {
+  background: currentColor;
+}
+/* Rewriting an item in the pane: the field takes the row's place and height. */
+.ref-line-edit {
+  height: 28px;
+  margin: 0;
+}
+.checklist-pane-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--sp-md);
+  margin: 0;
+  font-size: var(--fs-small);
+}
+.checklist-pane-foot .muted-text {
+  color: var(--ink-3);
 }
 .mini-row.is-done .mini-title {
   text-decoration: line-through;
@@ -3822,6 +4092,34 @@ textarea.field-text {
   text-align: left;
   border-radius: 3px;
 }
+/* Every row leaves room at its start for the Complete box, so titles line up whether a row has one or not. The box
+   sits over the row (not inside its button), and the row's focus fill runs under it. */
+.cal-agenda-item {
+  position: relative;
+}
+.cal-agenda .cal-agenda-row {
+  padding-left: 32px;
+}
+.cal-agenda-done {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: inline-flex;
+}
+.cal-agenda-item.is-striking .cal-agenda-title {
+  background-image: linear-gradient(var(--mark), var(--mark));
+  background-repeat: no-repeat;
+  background-position: 0 58%;
+  animation: strike 200ms var(--ease) forwards;
+}
+.cal-agenda-item.is-striking .is-focus .cal-agenda-title {
+  background-image: linear-gradient(var(--select-ink), var(--select-ink));
+}
+.cal-agenda-item.is-striking {
+  animation: fold 180ms 190ms ease-in forwards;
+}
 .cal-agenda-row.is-focus {
   background: var(--select);
   color: var(--select-ink);
@@ -3855,7 +4153,7 @@ textarea.field-text {
 }
 .cal-agenda-none {
   margin: 0;
-  padding: 4px 4px 6px 44px;
+  padding: 4px 4px 6px 72px;
   color: var(--ink-3);
   font-size: var(--fs-head);
 }
@@ -5037,6 +5335,17 @@ body.is-cal-dragging {
 }
 .cal-block.is-focus {
   box-shadow: 0 0 0 2px var(--accent);
+}
+/* An overnight appointment's parts meet at midnight: square and open at the edge where it carries on, as Outlook draws it. */
+.cal-block.is-from-before {
+  border-top-style: dashed;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.cal-block.is-to-after {
+  border-bottom-style: dashed;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 .cal-block-time {
   flex: none;

@@ -2,6 +2,7 @@ import type { FeedInfo } from "./calendarFeed.ts";
 import { useMemo, useSyncExternalStore } from "react";
 import type { Action, Appointment, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
 import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
+import { uploadSealed } from "./lock.ts";
 
 const empty: State = {
   actions: [],
@@ -35,7 +36,9 @@ let meta: {
   calendars: FeedInfo[];
   /** The hours the Calendar's week shows, [from, to), e.g. [7, 19]. */
   dayHours: [number, number];
-} = { today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, calendars: [], dayHours: [7, 19] };
+  /** The lock for references: the random key, wrapped with the lock password (see lock.ts); null until a password is set. */
+  lock: { v: 1; salt: string; iter: number; wrapped: string } | null;
+} = { today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, calendars: [], dayHours: [7, 19], lock: null };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -485,16 +488,15 @@ export function archiveDone(ids: ID[], where = "") {
   );
 }
 
-/** Everything done but still on its list, everywhere: done actions (Inbox ones included) and completed projects. */
+/** Everything done but still on its list, everywhere: done actions (Inbox ones included). A completed project is in Done already. */
 function doneEverywhere() {
-  const s = getState();
-  return { actions: s.actions.filter((a) => a.status === "done" && !a.archived_at), projects: s.projects.filter((p) => p.status === "done" && !p.archived_at) };
+  return { actions: getState().actions.filter((a) => a.status === "done" && !a.archived_at) };
 }
 
 /** ⇧E: every done item on every list goes to Done in one step (owner's request), one ⌘Z to undo. */
 export function archiveAllDone() {
-  const { actions, projects } = doneEverywhere();
-  const n = actions.length + projects.length;
+  const { actions } = doneEverywhere();
+  const n = actions.length;
   if (!n) return notify("Nothing done to archive");
   const at = stamp();
   mutate(`${plural(n, "done item")} archived to Done`, [
@@ -503,7 +505,6 @@ export function archiveAllDone() {
       // Ticked-off Inbox stuff leaves the Inbox with its action.
       ...(a.done_from === "inbox" && find("stuff", a.id)?.status === "done" ? [{ type: "patch" as const, table: "stuff" as const, id: a.id, data: { status: "processed" } }] : []),
     ]),
-    ...projects.map((p): Op => ({ type: "patch", table: "projects", id: p.id, data: { archived_at: at } })),
   ]);
 }
 
@@ -656,6 +657,8 @@ export async function capture(text: string, id: ID = uid()) {
 export async function upload(files: File[] | FileList, owner?: { kind: string; id: ID }) {
   const list = Array.from(files);
   if (!list.length) return;
+  // A locked reference's files are encrypted here first, wherever they are dropped or attached.
+  if (owner?.kind === "ref" && state.refs.find((r) => r.id === owner.id)?.sealed) return uploadSealed(list, owner.id);
   const form = new FormData();
   list.forEach((f) => form.append("file", f));
   if (owner) {

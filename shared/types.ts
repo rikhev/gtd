@@ -96,6 +96,10 @@ export interface Ref {
   /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */
   trashed_at?: string | null;
   trashed_from?: string | null;
+  /** Locked with the lock password: its notes, encrypted in the browser (notes is then empty). Null when not locked. */
+  sealed?: string | null;
+  /** "list": its notes are a list, one item a line ("## " a section heading). Null: a note. */
+  form?: "list" | null;
 }
 
 export interface Context {
@@ -122,6 +126,8 @@ export interface FileRow {
   owner_kind: "stuff" | "project" | "ref" | "action";
   owner_id: ID;
   created_at: string;
+  /** 1 when the file is encrypted (a locked reference's): its bytes are ciphertext and preview holds its real name and type, encrypted. */
+  sealed?: number;
 }
 
 /**

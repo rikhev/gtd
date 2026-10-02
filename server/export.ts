@@ -75,7 +75,19 @@ export function exportZip({ day = today(), weekStart = 1 }: { day?: string; week
       .map((r) => {
         const project = s.projects.find((p) => p.id === r.project_id)?.title;
         const files = s.files.filter((f) => f.owner_kind === "ref" && f.owner_id === r.id).map((f) => f.name);
-        return `## ${r.title}\n\n${project ? `Project: ${project}\n` : ""}${files.length ? `Files: ${files.join("; ")}\n` : ""}${r.notes ? `\n${r.notes}` : ""}`;
+        // A locked reference exports only what the server can read: its title and project. Its notes and files stay encrypted.
+        if (r.sealed) return `## ${r.title}\n\n${project ? `Project: ${project}\n` : ""}Locked: its notes${files.length ? ` and ${files.length === 1 ? "file" : `${files.length} files`}` : ""} are encrypted with the lock password.`;
+        // A list exports as one: "- " for each item, a section heading one level under the reference's.
+        const body =
+          r.form === "list"
+            ? r.notes
+                .split("\n")
+                .filter((l) => l.trim())
+                .map((l) => (/^#{1,6}\s+/.test(l) ? `\n### ${l.replace(/^#{1,6}\s+/, "").trim()}\n` : `- ${l.trim()}`))
+                .join("\n")
+                .trim()
+            : r.notes;
+        return `## ${r.title}\n\n${project ? `Project: ${project}\n` : ""}${files.length ? `Files: ${files.join("; ")}\n` : ""}${body ? `\n${body}` : ""}`;
       })
       .join("\n\n"),
   );

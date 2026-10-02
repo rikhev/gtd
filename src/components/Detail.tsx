@@ -1,19 +1,21 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks } from "lucide-react";
-import { quote, plural, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
+import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock } from "lucide-react";
+import { linesOf, noteAsList, openRefList, setForm, textOf, useRefText } from "../refList.ts";
+import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes, useSealedThumb } from "../lock.ts";
+import { quote, plural, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, stamp, startsToday, uid, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { habitStats, historyTitle, longHistory, openChecklist, progress, progressLabel, repeatsLabel, setChecklistDay, useChecklistDay } from "../checklists.ts";
+import { habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, progress, progressLabel, repeatsLabel, setChecklistDay, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
 import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
 import { AreaName, ContextCode, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
-import type { Action, ChecklistItem, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
+import type { Action, Checklist, ChecklistItem, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
 /** Text field that commits on blur (one undo step per edit, not per keystroke). */
 function TextField({
@@ -194,7 +196,10 @@ function removeFile(f: FileRow) {
 }
 
 function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }) {
+  const ui = useUI();
   const files = useStore((s) => s.files).filter((f) => f.owner_kind === owner.kind && f.owner_id === owner.id);
+  // A click (or Enter under the pane's cursor) opens a file in the viewer, with the item's other files a step away.
+  const view = (id: string) => ui.openViewer(files.map((f) => f.id), files.findIndex((f) => f.id === id));
   const input = useRef<HTMLInputElement>(null);
   // Delete on a file under the pane's cursor removes it, as the × does; both are a row change ⌘Z takes back.
   const active = useContext(DetailActive);
@@ -227,10 +232,23 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
       </h3>
 
       <ul>
-        {files.map((f) => (
+        {files.map((f) =>
+          f.sealed ? (
+            <SealedFile key={f.id} f={f} onOpen={() => view(f.id)} />
+          ) : (
           <li key={f.id} className="file-row">
             <Paperclip size={13} strokeWidth={1.75} aria-hidden />
-            <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" className="file-name" data-file={f.id}>
+            <a
+              href={`/api/files/${f.id}`}
+              className="file-name"
+              data-file={f.id}
+              onClick={(e) => {
+                // ⌘-click still opens it in a tab of its own, as a link does.
+                if (e.metaKey || e.ctrlKey) return;
+                e.preventDefault();
+                view(f.id);
+              }}
+            >
               {f.name}
             </a>
             <span className="file-size">{fileSize(f.size)}</span>
@@ -245,7 +263,8 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
             {f.mime.startsWith("image/") && <img className="file-thumb" src={`/api/files/${f.id}`} alt={f.name} />}
             {f.preview && !f.mime.startsWith("image/") && (owner.kind === "stuff" || owner.kind === "ref") && <pre className="file-preview">{f.preview.slice(0, 1600)}</pre>}
           </li>
-        ))}
+          ),
+        )}
       </ul>
       {/* The mouse's way in, beside ⌘O and dropping files on the pane. */}
       <button type="button" className="text-btn attach-btn" onClick={() => input.current?.click()}>
@@ -792,8 +811,8 @@ function ProjectDetail({ p }: { p: Project }) {
 
 /**
  * The project's support material (GTD keeps it with the project, apart from its actions): the references and
- * checklists linked to it, A–Z, references first. A reference opens here in the pane (Esc comes back); a checklist
- * opens in Checklists. The last row links another.
+ * checklists linked to it, A–Z, references first. Both open here in the pane (Esc comes back): a checklist to be run
+ * (ticked and added to) while working the project, with the way to Checklists for the rest (owner's request).
  */
 function SupportMaterial({ projectId }: { projectId: string }) {
   const ui = useUI();
@@ -828,11 +847,8 @@ function SupportMaterial({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 className="mini-row"
-                title={`Checklist: ${c.title || "Untitled"}. Opens in Checklists`}
-                onClick={() => {
-                  ui.go("checklists");
-                  openChecklist(c.id);
-                }}
+                title={`Checklist: ${c.title || "Untitled"}`}
+                onClick={() => ui.drillDetail({ kind: "checklist", id: c.id })}
               >
                 <span className="kind-icon">
                   <ListChecks size={14} strokeWidth={1.75} aria-label="Checklist" />
@@ -867,6 +883,116 @@ function StuffDetail({ st }: { st: Stuff }) {
       <TextField label="Notes" value={parts.rest} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("stuff", st.id, { text: joinStuff(parts.title, v, parts.prefix) }, "Edited")} />
       <Files owner={{ kind: "stuff", id: st.id }} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
+    </>
+  );
+}
+
+/**
+ * A checklist run from the pane (opened from a project's support material): its items to tick (a routine ticks
+ * today), a line to add one at the end, and Start over. Building it (sections, order, a routine's four weeks, an
+ * earlier day) stays in Checklists, one click away. Items are pane stops like the project's actions: ↑↓ walk them and
+ * Enter (or a click) ticks.
+ */
+function ChecklistDetail({ c }: { c: Checklist }) {
+  const ui = useUI();
+  const s = useStore((x) => x);
+  const active = useContext(DetailActive);
+  const items = itemsOf(s, c.id);
+  const p = progress(s, c.id);
+  const [draft, setDraft] = useState("");
+  const addInput = useRef<HTMLInputElement>(null);
+  const proj = s.projects.find((x) => x.id === c.project_id);
+  const openFull = () => {
+    ui.go("checklists");
+    openChecklist(c.id);
+  };
+  const addItem = () => {
+    const title = draft.trim();
+    if (!title) return;
+    const row: ChecklistItem = { id: uid(), checklist_id: c.id, title, section: 0, checked_at: null, sort: Math.max(0, ...items.map((x) => x.sort)) + 1, created_at: stamp() };
+    mutate(`Added “${title}”`, [{ type: "create", table: "checklist_items", row: { ...row } }, touchChecklist(c.id)]);
+    setDraft("");
+  };
+  useCommands(
+    "detail-checklist",
+    [
+      { id: "detail.cl.full", label: "Open in Checklists", group: "Details", run: openFull },
+      { id: "detail.cl.add", label: "Add an item", group: "Details", keys: ["n"], run: () => addInput.current?.focus() },
+      ...(proj ? [{ id: "detail.cl.jump", label: "Jump to the project it supports", group: "Details", keys: ["j"], run: () => ui.jumpFromSupport("checklist", c.id) }] : []),
+      ...(!c.repeats && p.ticked > 0 ? [{ id: "detail.cl.over", label: "Start over", group: "Details", run: () => startOver([c.id]) }] : []),
+    ],
+    { priority: 21, active },
+  );
+  return (
+    <>
+      <TextField label="Checklist" value={c.title} onCommit={(v) => patch("checklists", c.id, { title: v.trim(), updated_at: stamp() }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
+      <section className="detail-actions">
+        <h3 className="detail-h">
+          {c.repeats ? "Habits" : "Items"} <span className="count">{p.total || ""}</span>
+          <span className="detail-h-note">{[repeatsLabel(c.repeats), p.total ? progressLabel(p) || (c.repeats ? `0 of ${p.total} ${c.repeats === "week" ? "this week" : "today"}` : "") : ""].filter(Boolean).join(" · ")}</span>
+        </h3>
+        <ul className="timeline">
+          {items.map((i) =>
+            i.section ? (
+              <li key={i.id} className="mini-section">
+                {i.title || "Untitled section"}
+              </li>
+            ) : (
+              (() => {
+                const done = isTicked(s, i);
+                const run = c.repeats ? streakLabel(streak(s, i, c.repeats), c.repeats) : "";
+                return (
+                  <li key={i.id}>
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={done}
+                      className={`mini-row is-tickable ${done ? "is-done" : ""}`}
+                      title={run ? `${run} in a row` : undefined}
+                      onClick={() => tickItems([i.id])}
+                    >
+                      <span className={`done-box ${done ? "is-checked" : ""}`} aria-hidden="true">
+                        <svg viewBox="0 0 14 14" width="14" height="14">
+                          <rect className="box" x="1" y="1" width="12" height="12" rx="2" />
+                          <path className="check" d="M3.8 7.2l2.2 2.2 4.3-4.8" />
+                        </svg>
+                      </span>
+                      <span className="mini-title">{i.title || "Untitled"}</span>
+                      <span className="mini-meta num">{run}</span>
+                    </button>
+                  </li>
+                );
+              })()
+            ),
+          )}
+        </ul>
+        <input
+          ref={addInput}
+          className="field-text add-action"
+          value={draft}
+          placeholder={c.repeats ? "Add a habit" : "Add an item"}
+          aria-label={c.repeats ? "Add a habit" : "Add an item"}
+          aria-keyshortcuts="N"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && draft.trim()) {
+              e.preventDefault();
+              addItem();
+            }
+          }}
+        />
+      </section>
+      <p className="checklist-pane-foot">
+        <button type="button" className="text-btn" onClick={openFull}>
+          Open in Checklists
+        </button>
+        {!c.repeats && p.ticked > 0 && (
+          <button type="button" className="text-btn" onClick={() => startOver([c.id])}>
+            Start over
+          </button>
+        )}
+        <span className="muted-text">{c.repeats ? "Earlier days, sections and order are there" : "Sections and order are there"}</span>
+      </p>
     </>
   );
 }
@@ -971,13 +1097,226 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
   );
 }
 
+/**
+ * A locked reference's file, while unlocked: its real name (kept encrypted in its row), opened by decrypting it here.
+ * An image shows its thumbnail the same way; nothing is read out of other files, so there is no text preview.
+ */
+function SealedFile({ f, onOpen }: { f: FileRow; onOpen: () => void }) {
+  const m = useOpenedFile(f);
+  const thumb = useSealedThumb(f, m?.mime);
+  const name = m?.name ?? "Opening…";
+  return (
+    <li className="file-row">
+      <Paperclip size={13} strokeWidth={1.75} aria-hidden />
+      <a
+        href={`/api/files/${f.id}`}
+        className="file-name"
+        data-file={f.id}
+        onClick={(e) => {
+          e.preventDefault();
+          onOpen();
+        }}
+      >
+        {name}
+      </a>
+      <span className="file-size">{fileSize(f.size)}</span>
+      <button type="button" className="icon-btn" aria-label={`Remove ${name}`} onClick={() => mutate(`“${name}” removed`, [{ type: "delete", table: "files", id: f.id }])}>
+        <X size={13} strokeWidth={2} />
+      </button>
+      {thumb && <img className="file-thumb" src={thumb} alt={name} />}
+    </li>
+  );
+}
+
+/**
+ * A locked reference while the lock is shut: the pane says what is locked and takes the password right here, where
+ * you are looking, rather than in a picker.
+ */
+function RefUnlock({ files }: { files: number }) {
+  const [pw, setPw] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "wrong">("idle");
+  const field = useRef<HTMLInputElement>(null);
+  const active = useContext(DetailActive);
+  useEffect(() => {
+    if (active) field.current?.focus({ preventScroll: true });
+  }, [active]);
+  const submit = async () => {
+    if (!pw || state === "busy") return;
+    setState("busy");
+    const ok = await unlock(pw);
+    setPw("");
+    setState(ok ? "idle" : "wrong");
+    if (!ok) field.current?.focus();
+  };
+  return (
+    <section className="ref-locked" aria-labelledby="ref-locked-h">
+      <h3 className="ref-locked-h" id="ref-locked-h">
+        <Lock size={14} strokeWidth={2} aria-hidden />
+        Locked
+      </h3>
+      <p className="ref-locked-text">Its notes{files ? ` and ${plural(files, "file")}` : ""} are encrypted. The lock password opens every locked reference for 5 minutes.</p>
+      <form
+        className="ref-locked-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <input
+          ref={field}
+          type="password"
+          className="field-text"
+          value={pw}
+          placeholder="Lock password"
+          aria-label="Lock password"
+          aria-invalid={state === "wrong" || undefined}
+          aria-describedby={state === "wrong" ? "ref-locked-err" : undefined}
+          autoComplete="current-password"
+          onChange={(e) => {
+            setPw(e.target.value);
+            if (state === "wrong") setState("idle");
+          }}
+        />
+        <button type="submit" className="lock-button" disabled={!pw || state === "busy"}>
+          {state === "busy" ? "Unlocking…" : "Unlock"}
+        </button>
+      </form>
+      {state === "wrong" && (
+        <p className="ref-locked-err" id="ref-locked-err" role="alert">
+          That isn't the lock password.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * A reference list in the pane: its items as rows (a click or Enter rewrites one; emptied, it goes), its section
+ * headings as quiet labels, a line to add at the end (N; a pasted list becomes items), and the way to the whole list,
+ * where it is reordered and kept with the list's keys.
+ */
+function RefListPane({ r }: { r: Ref }) {
+  const ui = useUI();
+  const active = useContext(DetailActive);
+  const { text, save } = useRefText(r);
+  const lines = text === null ? [] : linesOf(text);
+  const [edit, setEdit] = useState<{ key: string; v: string } | null>(null);
+  const [draft, setDraft] = useState("");
+  const addInput = useRef<HTMLInputElement>(null);
+  useCommands("detail-reflist", [{ id: "detail.rl.add", label: "Add an item", group: "Details", keys: ["n"], run: () => addInput.current?.focus() }], { priority: 21, active });
+  if (text === null) return null;
+  const commitEdit = () => {
+    if (!edit) return;
+    const i = lines.findIndex((l) => l.key === edit.key);
+    setEdit(null);
+    if (i < 0 || edit.v.trim() === lines[i].text) return;
+    const next = [...lines];
+    if (!edit.v.trim()) next.splice(i, 1);
+    else next[i] = { ...next[i], text: edit.v.trim() };
+    save(textOf(next), edit.v.trim() ? "Rewritten" : `“${lines[i].text}” removed`);
+  };
+  const addItems = (raw: string) => {
+    const incoming = raw.includes("\n") ? linesOf(noteAsList(raw)) : raw.trim() ? [{ key: "", text: raw.trim(), section: false }] : [];
+    if (!incoming.length) return;
+    save(textOf([...lines, ...incoming]), incoming.length === 1 ? `Added “${incoming[0].text}”` : `${plural(incoming.length, "item")} added`);
+    setDraft("");
+  };
+  const items = lines.filter((l) => !l.section).length;
+  return (
+    <section className="detail-actions" aria-label="List">
+      <h3 className="detail-h">
+        List <span className="count">{items || ""}</span>
+      </h3>
+      <ul className="timeline">
+        {lines.map((l) =>
+          l.section ? (
+            <li key={l.key} className="mini-section">
+              {l.text}
+            </li>
+          ) : edit?.key === l.key ? (
+            <li key={l.key}>
+              <input
+                className="field-text ref-line-edit"
+                value={edit.v}
+                autoFocus
+                aria-label="Item"
+                onChange={(e) => setEdit({ key: l.key, v: e.target.value })}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+              />
+            </li>
+          ) : (
+            <li key={l.key}>
+              <button type="button" className="mini-row" title="Rewrite (empty it to remove)" onClick={() => setEdit({ key: l.key, v: l.text })}>
+                <span className="ref-bullet" aria-hidden="true" />
+                <span className="mini-title">{l.text}</span>
+                <span className="mini-meta" />
+              </button>
+            </li>
+          ),
+        )}
+      </ul>
+      <input
+        ref={addInput}
+        className="field-text add-action"
+        value={draft}
+        placeholder="Add an item"
+        aria-label="Add an item"
+        aria-keyshortcuts="N"
+        onChange={(e) => setDraft(e.target.value)}
+        onPaste={(e) => {
+          const t = e.clipboardData.getData("text");
+          if (t.includes("\n")) {
+            e.preventDefault();
+            addItems(t);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && draft.trim()) {
+            e.preventDefault();
+            addItems(draft);
+          }
+        }}
+      />
+      <p className="checklist-pane-foot">
+        <button type="button" className="text-btn" onClick={() => (ui.go("reference"), openRefList(r.id))}>
+          Open the list
+        </button>
+        <span className="muted-text">Sections and order are kept there</span>
+      </p>
+    </section>
+  );
+}
+
 function RefDetail({ r }: { r: Ref }) {
   const ui = useUI();
   const s = useStore((x) => x);
+  const lock = useLock();
+  const notes = useOpenedNotes(r);
   // J, as on the Reference list: to the project it supports, and J there comes back.
   const active = useContext(DetailActive);
-  useCommands("detail-ref", [{ id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["j"], run: () => ui.jumpFromSupport("ref", r.id) }], { priority: 21, active });
+  useCommands(
+    "detail-ref",
+    [
+      { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["j"], run: () => ui.jumpFromSupport("ref", r.id) },
+      ...(!r.sealed || lock.unlocked ? [{ id: "detail.r.form", label: r.form === "list" ? "Show as a note" : "Show as a list", group: "Details", run: () => void setForm([r.id], r.form === "list" ? null : "list") }] : []),
+      r.sealed
+        ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", run: () => removeLock(ui, [r.id]) }
+        : { id: "detail.r.seal", label: "Lock with password", group: "Details", run: () => lockWithPassword(ui, [r.id]) },
+      ...(lock.unlocked ? [{ id: "detail.r.locknow", label: "Lock now", group: "Details", run: () => lockNow() }] : []),
+    ],
+    { priority: 21, active },
+  );
   const proj = s.projects.find((p) => p.id === r.project_id);
+  const files = s.files.filter((f) => f.owner_kind === "ref" && f.owner_id === r.id);
+  // A file left in the clear on a locked reference (locking was cut short) is encrypted as soon as it is open.
+  useEffect(() => {
+    if (r.sealed && lock.unlocked) files.filter((f) => !f.sealed).forEach((f) => void sealFile(f).catch(() => {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [r.sealed, lock.unlocked, files.length]);
+  const open = !r.sealed || lock.unlocked;
   return (
     <>
       <TextField label="Title" value={r.title} onCommit={(v) => patch("refs", r.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
@@ -989,8 +1328,38 @@ function RefDetail({ r }: { r: Ref }) {
       >
         {proj ? proj.title : none}
       </PickField>
-      <TextField label="Notes" value={r.notes} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("refs", r.id, { notes: v })} />
-      <Files owner={{ kind: "ref", id: r.id }} />
+      {!open ? (
+        <RefUnlock files={files.length} />
+      ) : r.form === "list" ? (
+        <RefListPane r={r} />
+      ) : r.sealed ? (
+        notes === null ? (
+          <p className="detail-meta">Opening…</p>
+        ) : (
+          <TextField label="Notes" value={notes} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => void saveSealedNotes(r, v)} />
+        )
+      ) : (
+        <TextField label="Notes" value={r.notes} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("refs", r.id, { notes: v })} />
+      )}
+      {open && <Files owner={{ kind: "ref", id: r.id }} />}
+      {r.sealed && lock.unlocked && (
+        <p className="ref-lock-line">
+          <Lock size={12} strokeWidth={2} aria-hidden />
+          <span>Locked: notes and files are encrypted before they are saved.</span>
+          <button type="button" className="text-btn" onClick={() => lockNow()}>
+            Lock now
+          </button>
+          <button type="button" className="text-btn" onClick={() => removeLock(ui, [r.id])}>
+            Remove the lock
+          </button>
+        </p>
+      )}
+      {!r.sealed && (
+        <button type="button" className="text-btn ref-lock-btn" onClick={() => lockWithPassword(ui, [r.id])}>
+          <Lock size={12} strokeWidth={2} aria-hidden />
+          Lock with password
+        </button>
+      )}
       <p className="detail-meta">
         Created {formatLong(r.created_at.slice(0, 10))}
         {refUpdated(s, r) > r.created_at ? ` · updated ${formatLong(refUpdated(s, r).slice(0, 10))}` : ""}
@@ -1016,6 +1385,8 @@ export function Detail({ target, active }: { target: Target | null; active: bool
             ? s.appointments.find((x) => x.id === t.id)?.title
             : t.kind === "checkitem"
               ? s.checklist_items.find((x) => x.id === t.id)?.title
+              : t.kind === "checklist"
+                ? s.checklists.find((x) => x.id === t.id)?.title
               : s.refs.find((x) => x.id === t.id)?.title;
 
   /*
@@ -1155,6 +1526,9 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   } else if (target.kind === "ref") {
     const r = s.refs.find((x) => x.id === target.id);
     body = r ? <RefDetail key={r.id} r={r} /> : null;
+  } else if (target.kind === "checklist") {
+    const c = s.checklists.find((x) => x.id === target.id);
+    body = c ? <ChecklistDetail key={c.id} c={c} /> : null;
   } else if (target.kind === "checkitem") {
     const item = s.checklist_items.find((x) => x.id === target.id);
     body = item ? <ChecklistItemDetail key={item.id} item={item} /> : null;

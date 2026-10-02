@@ -184,16 +184,17 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       let closed = 0;
       for (const id of ids) {
         if (s.projects.find((p) => p.id === id)?.status === "done") continue;
-        // The project stays on Projects, struck through, until archived (⇧E), like a done action on its list.
-        ops.push({ type: "patch", table: "projects", id, data: { status: "done", completed_at: at, archived_at: null } });
-        // A finished project's open actions and planned (later) steps go straight to Done (archived), not onto the lists
-        // struck through. They share the project's completion stamp, so unticking the project brings them back with it.
+        // A completed project leaves Projects for Done at once (owner's request): Done is the only place it is shown.
+        ops.push({ type: "patch", table: "projects", id, data: { status: "done", completed_at: at, archived_at: at } });
+        // A finished project's open actions and planned (later) steps are marked done, struck through on their lists until
+        // archived like any done action (owner's request). They share the project's completion stamp, so unticking the
+        // project brings them back with it.
         for (const a of s.actions.filter((a) => a.project_id === id && ["next", "waiting", "later"].includes(a.status))) {
-          ops.push({ type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, done_from: a.status, archived_at: at } });
+          ops.push({ type: "patch", table: "actions", id: a.id, data: { status: "done", completed_at: at, done_from: a.status, archived_at: null } });
           closed++;
         }
       }
-      // Say what went with it (owner's request): its next actions and waiting fors are done too, and now in Done.
+      // Say what went with it (owner's request): its next actions and waiting fors are done too.
       if (ops.length) mutate(`${n(ids)} complete${closed ? ` · ${plural(closed, "open action")} done with it` : ""}`, ops);
     },
     /** Not done after all: active again, with the actions that were closed along with it. */
@@ -202,18 +203,11 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       const ops: Op[] = [];
       for (const p of s.projects.filter((p) => ids.includes(p.id) && p.status === "done")) {
         ops.push({ type: "patch", table: "projects", id: p.id, data: { status: "active", completed_at: null, archived_at: null } });
-        for (const a of s.actions.filter((a) => a.project_id === p.id && a.status === "done" && p.completed_at && a.completed_at === p.completed_at && a.archived_at === p.completed_at)) {
+        for (const a of s.actions.filter((a) => a.project_id === p.id && a.status === "done" && p.completed_at && a.completed_at === p.completed_at)) {
           ops.push({ type: "patch", table: "actions", id: a.id, data: { status: a.done_from && a.done_from !== "inbox" ? a.done_from : "next", completed_at: null, done_from: null, archived_at: null } });
         }
       }
       if (ops.length) mutate(`${n(ids)} not done`, ops);
-    },
-    /** Moves completed projects off the Projects list (they stay under "Show someday and completed"). */
-    archive(ids: ID[]) {
-      const done = getState().projects.filter((p) => ids.includes(p.id) && p.status === "done" && !p.archived_at);
-      if (!done.length) return;
-      const at = stamp();
-      mutate(`${plural(done.length, "completed project")} archived`, done.map((p) => ({ type: "patch" as const, table: "projects" as const, id: p.id, data: { archived_at: at } })));
     },
     trash(ids: ID[], permanent: boolean) {
       if (!ids.length) return;
@@ -247,17 +241,20 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   // F narrows the list to one or more areas of focus; the rest step aside until the filter is cleared.
   const areas = useAreaFilter();
 
-  // Completed projects stay on the list, struck through at the bottom of their area, until archived (⇧E), as on every list.
-  const [showDone, setShowDone] = usePersisted("showdone:projects", true);
-  const doneHere = useMemo(() => s.projects.filter((p) => p.status === "done" && !p.archived_at).map((p) => p.id), [s.projects]);
+  // A completed project strikes through, folds away and is in Done; it is never shown here.
+  // Scheduled projects (a start date after today: nothing to act on yet) can be hidden (owner's request). On its start
+  // day a project is back, since it then wants a next action.
+  const [showScheduled, setShowScheduled] = usePersisted("projects:scheduled", true);
+  const scheduledCount = useMemo(() => s.projects.filter((p) => (p.status === "active" || (filter !== "active" && p.status === "someday")) && notStarted(p)).length, [s.projects, filter]);
   const [striking, setStriking] = useState<Set<ID>>(new Set());
   const rows = useMemo(
     () =>
       s.projects
-        .filter((p) => (filter === "active" ? p.status === "active" || (showDone && p.status === "done" && !p.archived_at) : p.status !== "trashed"))
+        .filter((p) => (filter === "active" ? p.status === "active" : p.status === "active" || p.status === "someday"))
+        .filter((p) => showScheduled || !notStarted(p))
         .filter((p) => !areas || inAreas(p.area_id, areas))
         .sort((a, b) => a.sort - b.sort),
-    [s.projects, filter, showDone, areas],
+    [s.projects, filter, showScheduled, areas],
   );
   const openCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -314,7 +311,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   }, [rows, groupByArea, areaById]);
   // Areas keep their order; a heading click sorts the projects inside each one.
   const groups = useMemo(
-    () => sortGroups(baseGroups, sorters, sort).map((g) => ({ ...g, rows: [...g.rows.filter((p) => p.status !== "done"), ...g.rows.filter((p) => p.status === "done")] })),
+    () => sortGroups(baseGroups, sorters, sort),
     [baseGroups, sorters, sort],
   );
 
@@ -376,7 +373,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     setEditing(p.id);
   };
 
-  // ⌥↑/⌥↓ moves the whole selection one place within its area; completed projects stay put at the bottom.
+  // ⌥↑/⌥↓ moves the whole selection one place within its area.
   const reorder = (dir: -1 | 1) => {
     const moved = stepRows(groups, (p) => p.id, (p) => p.sort, (p) => p.status !== "done", nav.targets(), dir);
     if (!moved) return;
@@ -393,8 +390,6 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.jump", row: true, label: focusId && ui.jumpBackTo(focusId) ? `Jump back to the ${ui.jumpBackTo(focusId)}` : "Jump to its next action", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
     { id: "proj.rename", row: true, label: "Rename", group: "Projects", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "proj.done", row: true, label: "Complete project", group: "Projects", keys: ["e"], enabled: has, run: () => toggleDone(nav.targets()) },
-    { id: "proj.archive", label: `Archive completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", enabled: doneHere.length > 0, run: () => ed.archive(doneHere) },
-    { id: "proj.showdone", label: showDone ? "Hide completed projects" : "Show completed projects", group: "View", run: () => setShowDone(!showDone) },
     { id: "proj.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
     { id: "proj.goal", row: true, label: "Set the goal it serves", group: "Fields", keys: ["g"], enabled: has, run: () => pickGoal(ui, nav.targets()) },
     { id: "proj.due", row: true, label: "Set due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },
@@ -420,20 +415,19 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             { id: "s:due", label: "Sort by due date", hint: sort?.key === "due" ? "Current" : "", section: "sort" },
             { id: "s:", label: "Manual order", hint: !sort ? "Current" : "", section: "sort" },
             { id: "areas", label: areas ? `Areas: ${areaFilterLabel(areas)}` : "Filter by area…", hint: areas ? "On" : "", section: "show" },
-            { id: "filter", label: filter === "active" ? "Show someday and archived projects" : "Show active projects only", section: "show" },
-            ...(filter === "active" ? [{ id: "showdone", label: showDone ? `Hide completed projects${doneHere.length ? ` (${doneHere.length})` : ""}` : `Show completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, section: "done" }] : []),
-            ...(doneHere.length ? [{ id: "archive", label: `Archive completed projects (${doneHere.length})`, section: "done" }] : []),
+            { id: "filter", label: filter === "active" ? "Show someday projects too" : "Show active projects only", section: "show" },
+            { id: "scheduled", label: showScheduled ? `Hide scheduled projects${scheduledCount ? ` (${scheduledCount})` : ""}` : `Show scheduled projects${scheduledCount ? ` (${scheduledCount})` : ""}`, section: "show" },
           ],
           onPick: (id) => {
-            if (id === "showdone") setShowDone(!showDone);
-            if (id === "archive") ed.archive(doneHere);
             if (id === "area") setGroupByArea(!groupByArea);
             if (id?.startsWith("s:")) setSort(id === "s:" ? null : { key: id.slice(2), dir: 1 });
             if (id === "filter") setFilter(filter === "active" ? "all" : "active");
+            if (id === "scheduled") setShowScheduled(!showScheduled);
             if (id === "areas") window.setTimeout(() => openAreaFilter(ui));
           },
         }),
     },
+    { id: "proj.scheduled", label: showScheduled ? "Hide scheduled projects" : "Show scheduled projects", group: "View", run: () => setShowScheduled(!showScheduled) },
     { id: "proj.areas", label: areas ? "Filter by area (change or clear)" : "Filter by area", group: "View", keys: ["f"], run: () => openAreaFilter(ui) },
     ...(areas ? [{ id: "proj.areasoff", label: "Show every area", group: "View", run: () => setAreaFilter([]) }] : []),
   ];
@@ -474,7 +468,6 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           <span className="subject">
             <span className="subject-text strong">{p.title || "Untitled project"}</span>
             {p.status === "someday" && <span className="badge muted">Someday</span>}
-            {p.status === "done" && p.archived_at && <span className="badge muted">Done</span>}
           </span>
         ),
     },
@@ -569,7 +562,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       active={regionActive}
       showHeaders={multi}
       rowClass={(p) =>
-        [isStalled(s, p) ? "is-stalled" : "", striking.has(p.id) ? `is-striking ${showDone ? "" : "is-leaving"}` : "", p.status === "done" ? "is-done" : ""].join(" ")
+        [isStalled(s, p) ? "is-stalled" : "", striking.has(p.id) ? "is-striking is-leaving" : ""].join(" ")
       }
       onOpen={(k) => ui.openDetail({ kind: "project", id: k }, true)}
       // Touch: swipe right to complete the project (or reopen it), left to trash it with its actions.
@@ -577,6 +570,8 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       empty={
         areas ? (
           <EmptyState title={`No projects in ${areaFilterLabel(areas)}`} lines={["Choose other areas, or show every area."]} action={{ label: "Show every area", run: () => setAreaFilter([]) }} />
+        ) : !showScheduled && scheduledCount ? (
+          <EmptyState title="Nothing to act on yet" lines={[`${plural(scheduledCount, "scheduled project")} hidden until ${scheduledCount === 1 ? "it starts" : "they start"}.`]} action={{ label: "Show scheduled projects", run: () => setShowScheduled(true) }} />
         ) : (
           <EmptyState title="No projects yet" lines={["Start one here, or make one when you clarify your Inbox."]} action={{ label: "New project", run: create }} />
         )

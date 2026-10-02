@@ -666,17 +666,13 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     />
   );
   if (!repeats || !day) return grid;
-  // Stepped back to an earlier day (or week): a quiet line says which, and the way back. Today shows nothing.
+  // Stepped back to an earlier day (or week): the heading's count names it and holds the way back, so the list
+  // stays exactly where it was (owner's request: a line above it pushed every row down). Screen readers are told here.
   return (
     <>
-      <div className="fit-bar" role="status">
-        <span>
-          Ticking for <strong>{dayName(day, repeats)}</strong>
-        </span>
-        <button type="button" className="text-btn" onClick={() => setChecklistDay(null, repeats)}>
-          {repeats === "week" ? "Back to this week" : "Back to today"}
-        </button>
-      </div>
+      <span className="visually-hidden" role="status">
+        Ticking for {dayName(day, repeats)}
+      </span>
       {grid}
     </>
   );

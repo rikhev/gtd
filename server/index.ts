@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync } from "node:fs";
 import { applyOps, db, FILES_DIR, getSetting, insertRow, loadState, now, patchRow, setSetting } from "./db.ts";
 import { extract, guessMime, looksLikeEmail } from "./extract.ts";
+import { renderPage, viewKind } from "./view.ts";
 import { exportJson, exportZip } from "./export.ts";
 import { authRequired, guard, login, logout, me, readAuth } from "./auth.ts";
 import { addFeed, eventsBetween, feedInfo, probe, removeFeed, syncAll, takeLinkNotes, updateFeed, validZone } from "./calendar.ts";
@@ -52,7 +53,7 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), calendars: feedInfo(), dayHours: dayHours() } });
+  return c.json({ state: loadState(), meta: { today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), calendars: feedInfo(), dayHours: dayHours(), lock: lockKey() } });
 });
 
 app.post("/api/ops", async (c) => {
@@ -72,6 +73,18 @@ app.post("/api/upload", async (c) => {
   const list = (Array.isArray(raw) ? raw : [raw]).filter((f): f is File => f instanceof File);
   const ownerKind = (body["owner_kind"] as string) || null;
   const ownerId = (body["owner_id"] as string) || null;
+  // A file for a locked reference arrives encrypted (the browser chose its id, which the encryption is bound to): it
+  // is stored as it came, with nothing read out of it. Its name and type travel encrypted too.
+  if (body["sealed"] === "1") {
+    const file = list[0];
+    const fid = fileId(String(body["id"] ?? ""));
+    if (!file || !fid || !ownerKind || !ownerId || db.prepare("SELECT 1 FROM files WHERE id = ?").get(fid)) return c.json({ error: "Bad locked file" }, 400);
+    const buf = Buffer.from(await file.arrayBuffer());
+    writeFileSync(`${FILES_DIR}/${fid}`, buf);
+    const frow = { id: fid, name: "Locked file", mime: "application/octet-stream", size: buf.length, preview: String(body["meta"] ?? ""), owner_kind: ownerKind, owner_id: ownerId, created_at: now(), sealed: 1 };
+    insertRow("files", frow);
+    return c.json({ stuff: [], files: [frow] });
+  }
   const created: { stuff: unknown[]; files: FileRow[] } = { stuff: [], files: [] };
   for (const file of list) {
     const buf = Buffer.from(await file.arrayBuffer());
@@ -140,6 +153,67 @@ app.get("/api/files/:id", (c) => {
     "Content-Disposition": `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(row.name)}`,
     ...(row.mime === "application/pdf" ? {} : { "Content-Security-Policy": "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'" }),
   });
+});
+
+/**
+ * A document as a page for the viewer (Word, email, CSV, text): made here, and served under the strictest policy, so
+ * nothing in it can run, be fetched or reach the app (the frame is sandboxed as well). Pictures inside it come along.
+ */
+app.get("/api/files/:id/view", async (c) => {
+  const id = fileId(c.req.param("id"));
+  const row = id ? (db.prepare("SELECT * FROM files WHERE id = ?").get(id) as FileRow | undefined) : undefined;
+  const path = `${FILES_DIR}/${id}`;
+  if (!id || !row || row.sealed || !existsSync(path) || viewKind(row.mime) !== "page") return c.text("This file can't be shown here", 404);
+  try {
+    const html = await renderPage(row.name, row.mime, readFileSync(path), c.req.query("theme") === "dark", validZone(c.req.query("tz")) ?? undefined);
+    return c.html(html, 200, { "Content-Security-Policy": "sandbox; default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'", "X-Content-Type-Options": "nosniff" });
+  } catch (e) {
+    return c.text(`Couldn't read this file: ${(e as Error).message}`, 422);
+  }
+});
+
+/**
+ * Locking or unlocking a reference rewrites its files in place: encrypted (the bytes as sent, the real name and type
+ * encrypted in meta), or back in the clear (named again, and read for search as on upload). The old content is
+ * overwritten, never kept beside it.
+ */
+app.put("/api/files/:id/content", async (c) => {
+  const id = fileId(c.req.param("id"));
+  const row = id ? (db.prepare("SELECT * FROM files WHERE id = ?").get(id) as FileRow | undefined) : undefined;
+  if (!id || !row) return c.json({ error: "File not found" }, 404);
+  const buf = Buffer.from(await c.req.arrayBuffer());
+  const sealed = c.req.query("sealed") === "1";
+  let data: Record<string, unknown>;
+  if (sealed) data = { name: "Locked file", mime: "application/octet-stream", size: buf.length, preview: c.req.header("x-file-meta") ?? "", sealed: 1 };
+  else {
+    const name = decodeURIComponent(c.req.header("x-file-name") ?? "") || "File";
+    const mime = guessMime(name, c.req.header("x-file-type") ?? "");
+    data = { name, mime, size: buf.length, preview: (await extract(name, mime, buf)).text, sealed: 0 };
+  }
+  writeFileSync(`${FILES_DIR}/${id}`, buf);
+  patchRow("files", id, data);
+  return c.json({ ...row, ...data });
+});
+
+/**
+ * The lock for references: one password, set by the owner, never sent here. The browser makes a random key that
+ * encrypts locked notes and files, and keeps it here only wrapped (encrypted) with a key derived from the password, so
+ * a new password just wraps it again. Without the password nothing locked can be read, here or in a backup.
+ */
+type LockKey = { v: 1; salt: string; iter: number; wrapped: string };
+const lockKey = (): LockKey | null => {
+  const raw = getSetting("lock", "");
+  return raw ? (JSON.parse(raw) as LockKey) : null;
+};
+app.put("/api/settings/lock", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Partial<LockKey> & { replaces?: string | null };
+  const b64 = (v: unknown) => typeof v === "string" && /^[A-Za-z0-9+/=]{16,512}$/.test(v);
+  if (!b64(body.salt) || !b64(body.wrapped) || !(Number(body.iter) >= 100_000)) return c.json({ error: "That lock can't be saved" }, 400);
+  // The wrapped key it replaces must be the one stored, so two browsers can't each set a different one.
+  if ((lockKey()?.wrapped ?? null) !== (body.replaces ?? null)) return c.json({ error: "The lock password was changed elsewhere; reload and try again" }, 409);
+  const key: LockKey = { v: 1, salt: body.salt!, iter: Number(body.iter), wrapped: body.wrapped! };
+  setSetting("lock", JSON.stringify(key));
+  return c.json({ lock: key });
 });
 
 /**
