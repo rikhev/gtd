@@ -25,7 +25,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   files: ["id", "name", "mime", "size", "preview", "owner_kind", "owner_id", "created_at"],
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
-  checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id"],
+  checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id", "repeats_since"],
   checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at"],
   checklist_ticks: ["id", "item_id", "checklist_id", "day", "created_at"],
   horizons: ["id", "kind", "title", "notes", "area_id", "target", "status", "sort", "created_at", "completed_at", "trashed_at", "trashed_from"],
@@ -157,6 +157,14 @@ if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).s
 // A checklist can support a project, as a reference can.
 if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).some((c) => c.name === "project_id")) {
   db.exec("ALTER TABLE checklists ADD COLUMN project_id TEXT");
+}
+// The day a routine began repeating, so a habit's record counts from then. Routines from before it count from their
+// first tick, or the day the checklist was made.
+if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).some((c) => c.name === "repeats_since")) {
+  db.exec("ALTER TABLE checklists ADD COLUMN repeats_since TEXT");
+  db.exec(
+    "UPDATE checklists SET repeats_since = COALESCE((SELECT MIN(day) FROM checklist_ticks t WHERE t.checklist_id = checklists.id), substr(created_at, 1, 10)) WHERE repeats IS NOT NULL",
+  );
 }
 
 /** Owner preferences kept on the server (so every browser agrees). */

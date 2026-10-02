@@ -22,16 +22,20 @@ import {
   progress,
   progressLabel,
   repeatsLabel,
+  resetChecklistDay,
+  setChecklistDay,
   setRepeats,
   startOver,
   streak,
   streakLabel,
   tickItems,
   touchChecklist,
+  useChecklistDay,
   useOpenChecklist,
+  dayName,
   type Repeats,
 } from "../checklists.ts";
-import { formatDate } from "../../shared/dates.ts";
+import { addDays, formatDate, today } from "../../shared/dates.ts";
 import { setChecklistProject } from "../support.ts";
 import type { Checklist, ChecklistItem, ID, Op } from "../../shared/types.ts";
 
@@ -51,9 +55,10 @@ export function ChecklistsView({ regionActive }: { regionActive: boolean }) {
       openChecklist(null, false);
     }
   }, [openId, open]);
-  // Checklists have no details of their own: the pane, if pinned, has nothing to show here.
+  // A checklist has no details of its own: on every checklist the pinned pane has nothing to show. Inside one, the
+  // pane follows the item under the cursor (its record, on a routine).
   useEffect(() => {
-    ui.followDetail(null);
+    if (!openId) ui.followDetail(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId]);
   return open ? <ChecklistItems key={open.id} list={open} regionActive={regionActive} /> : <ChecklistIndex regionActive={regionActive} />;
@@ -338,6 +343,10 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
   const ui = useUI();
   const s = useTables("checklist_items", "checklist_ticks");
   const repeats = list.repeats ?? null;
+  // A routine can be stepped back to an earlier day (or week) to tick what was done but not ticked then.
+  const viewDay = useChecklistDay();
+  useEffect(() => resetChecklistDay, []);
+  const day = repeats ? viewDay : null;
   const items = useMemo(() => itemsOf(s, list.id), [s, list.id]);
   const [editing, setEditing] = useState<{ id: ID; fresh: boolean } | null>(null);
   // The pen strikes through a ticked item before it greys, as it does for a done action.
@@ -345,8 +354,13 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
 
   const nav = useListNav("checklist", useMemo(() => [{ key: "items", rowKeys: items.map((i) => i.id), showHeader: false }], [items]));
   const focus = items.find((i) => i.id === nav.focus);
+  // A pinned details pane follows the cursor down the items, as it does on every list.
+  useEffect(() => {
+    ui.followDetail(focus ? { kind: "checkitem", id: focus.id } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.id]);
   const targets = () => nav.targets().filter((id) => items.some((i) => i.id === id));
-  const done = (i: ChecklistItem) => !i.section && isTicked(s, i);
+  const done = (i: ChecklistItem) => !i.section && isTicked(s, i, day ?? undefined);
   const ticked = items.filter(done).length;
   /** A section is its heading and the items under it, down to the next heading. */
   const sectionItems = (heading: ChecklistItem) => {
@@ -405,7 +419,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     const rows = items.filter((i) => ids.includes(i.id) && !i.section);
     if (!rows.length) return void (ids.length && notify("A section heading has nothing to tick. L makes it an item."));
     const ticking = rows.some((i) => !done(i));
-    if (!ticking) return tickItems(rows.map((i) => i.id));
+    if (!ticking) return tickItems(rows.map((i) => i.id), day);
     // Running down the list: the cursor moves on to the next item still to tick.
     if (rows.length === 1 && focus?.id === rows[0].id) {
       const at = items.findIndex((i) => i.id === focus.id);
@@ -414,7 +428,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     }
     // The tick lands at once, so ⌘Z right after it undoes the tick; the pen only draws the line.
     const open = rows.filter((i) => !done(i)).map((i) => i.id);
-    tickItems(rows.map((i) => i.id));
+    tickItems(rows.map((i) => i.id), day);
     setStriking((p) => new Set([...p, ...open]));
     window.setTimeout(() => setStriking((p) => new Set([...p].filter((id) => !open.includes(id)))), 220);
   };
@@ -494,13 +508,24 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     });
   const back = () => openChecklist(null);
 
+  // ← and → step a routine's day (or week), never past today; they go before the list's own keys, which would take them.
+  const step = (n: -1 | 1) => repeats && setChecklistDay(addDays(day ?? today(), n * (repeats === "day" ? 1 : 7)), repeats);
+  const unit = repeats === "week" ? "week" : "day";
   const commands: Command[] = [
+    ...(repeats
+      ? [
+          { id: "ci.prevday", label: `Go to the previous ${unit}`, group: "Checklist", keys: ["arrowleft"], run: () => step(-1) },
+          { id: "ci.nextday", label: `Go to the next ${unit}`, group: "Checklist", keys: ["arrowright"], enabled: Boolean(day), run: () => step(1) },
+          { id: "ci.today", label: repeats === "week" ? "Go to this week" : "Go to today", group: "Checklist", keys: ["alt+shift+y"], enabled: Boolean(day), run: () => setChecklistDay(null, repeats) },
+        ]
+      : []),
     ...nav.commands,
     { id: "ci.tick", row: true, label: "Tick, or untick", group: "Checklist", keys: ["e"], enabled: Boolean(focus), run: () => tick(targets()) },
     { id: "ci.new", label: "New item below", group: "Checklist", keys: ["n"], run: () => add(0) },
     { id: "ci.section", label: "New section heading below", group: "Checklist", run: () => add(1) },
     { id: "ci.makesection", row: true, label: focus?.section ? "Make it an item" : "Make it a section heading", group: "Checklist", keys: ["l"], enabled: Boolean(focus), run: () => toggleSection(targets()) },
-    { id: "ci.rename", row: true, label: "Rename", group: "Checklist", keys: ["f2", "enter"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
+    { id: "ci.open", row: true, label: "Open details", group: "Checklist", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: "checkitem", id: focus.id }, true) },
+    { id: "ci.rename", row: true, label: "Rename", group: "Checklist", keys: ["f2"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
     // GTD: a checklist is a trigger for new actions. The item stays as it is; ticking still only ticks.
     { id: "ci.action", row: true, label: "New next action from this item", group: "Checklist", keys: ["t"], enabled: Boolean(focus && !focus.section), run: () => focus && quickAddNextAction(ui, focus.title, list.project_id ?? null) },
     { id: "ci.remove", row: true, label: "Remove", group: "Checklist", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => remove(targets()) },
@@ -598,7 +623,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     // A routine's habits carry their last four weeks and how long the current run is.
     ...(repeats
       ? [
-          { key: "history", label: "Last four weeks", width: repeats === "day" ? "262px" : "88px", drop: 2, render: (i: ChecklistItem) => (i.section ? null : <Strip s={s} item={i} repeats={repeats} />) },
+          { key: "history", label: "Last four weeks", width: repeats === "day" ? "262px" : "88px", drop: 2, render: (i: ChecklistItem) => (i.section ? null : <Strip s={s} item={i} repeats={repeats} viewing={day} />) },
           {
             key: "streak",
             label: "In a row",
@@ -610,7 +635,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       : []),
   ];
 
-  return (
+  const grid = (
     <Grid
       listId="checklist"
       label={list.title || "Checklist"}
@@ -623,8 +648,9 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       head={Boolean(repeats)}
       showHeaders={false}
       rowClass={(i) => [i.section ? "is-section" : "", done(i) ? "is-done" : "", striking.has(i.id) ? "is-striking" : ""].join(" ")}
-      // A tap on a phone ticks (running the list is what a phone is for); a double-click rewrites.
-      onOpen={(k) => (pressedByTouch() ? tick([k]) : setEditing({ id: k, fresh: false }))}
+      // A tap on a phone ticks (running the list is what a phone is for); Enter or a double-click opens the item's
+      // details (a habit's record), and a double-click on its words rewrites them, as F2 does.
+      onOpen={(k) => (pressedByTouch() ? tick([k]) : ui.openDetail({ kind: "checkitem", id: k }, true))}
       swipe={{ right: { label: "Tick", run: (k) => tick([k]) }, left: { label: "Remove", run: (k) => remove([k]) } }}
       reorder={{
         onMove: (keys, beforeKey) => {
@@ -638,6 +664,21 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       }}
       empty={<EmptyState title="Nothing on this checklist yet" lines={["Add the first item. Enter after each one starts the next."]} action={{ label: "Add an item", run: () => add(0) }} />}
     />
+  );
+  if (!repeats || !day) return grid;
+  // Stepped back to an earlier day (or week): a quiet line says which, and the way back. Today shows nothing.
+  return (
+    <>
+      <div className="fit-bar" role="status">
+        <span>
+          Ticking for <strong>{dayName(day, repeats)}</strong>
+        </span>
+        <button type="button" className="text-btn" onClick={() => setChecklistDay(null, repeats)}>
+          {repeats === "week" ? "Back to this week" : "Back to today"}
+        </button>
+      </div>
+      {grid}
+    </>
   );
 }
 
@@ -662,13 +703,23 @@ function pickRepeats(ui: UI, ids: ID[]) {
  * A habit's last four weeks as a strip of small squares, oldest first: filled in ink where it was done, empty where
  * not, the current day or week outlined. No colour: green belongs to project health.
  */
-function Strip({ s, item, repeats }: { s: Parameters<typeof history>[0]; item: ChecklistItem; repeats: Repeats }) {
+function Strip({ s, item, repeats, viewing }: { s: Parameters<typeof history>[0]; item: ChecklistItem; repeats: Repeats; viewing: string | null }) {
   const cells = history(s, item, repeats);
   const n = cells.filter((c) => c.done).length;
+  // A square opens its day (or week), to tick there; the day being ticked for is outlined in place of today.
   return (
     <span className={`hstrip is-${repeats}`} role="img" aria-label={`Done ${n} of the last ${cells.length} ${repeats === "day" ? "days" : "weeks"}`}>
       {cells.map((c) => (
-        <i key={c.day} className={`${c.done ? "is-on" : ""} ${c.now ? "is-now" : ""}`} title={historyTitle(c, repeats)} />
+        <i
+          key={c.day}
+          className={`${c.done ? "is-on" : ""} ${(viewing ? c.day === viewing : c.now) ? "is-now" : ""}`}
+          title={historyTitle(c, repeats)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            setChecklistDay(c.day, repeats);
+          }}
+        />
       ))}
     </span>
   );

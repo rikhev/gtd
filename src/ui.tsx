@@ -21,7 +21,7 @@ export type ViewId =
 
 export type Region = "rail" | "list" | "detail";
 
-export type EntityKind = "action" | "project" | "stuff" | "ref" | "area" | "event";
+export type EntityKind = "action" | "project" | "stuff" | "ref" | "area" | "event" | "checkitem";
 export interface Target {
   kind: EntityKind;
   id: ID;

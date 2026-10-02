@@ -163,6 +163,8 @@ export interface Checklist {
    * it was done (ChecklistTick). Null for an ordinary checklist, whose ticks wait for Start over.
    */
   repeats?: "day" | "week" | null;
+  /** The day it began repeating (YYYY-MM-DD): a habit's record counts from then, or from when the habit was added. */
+  repeats_since?: string | null;
   /** The project it supports, if any: it shows among the project's support material. */
   project_id?: ID | null;
   /** When it was deleted (the Trash keeps it for the keep period), and the status it had. */

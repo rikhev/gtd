@@ -21,7 +21,7 @@ import { ProjectsView, projectEditors } from "./views/ProjectsView.tsx";
 import { SomedayView, ReferenceView } from "./views/SimpleViews.tsx";
 import { ChecklistsView } from "./views/ChecklistsView.tsx";
 import { HorizonsView } from "./views/HorizonsView.tsx";
-import { openChecklist, progress, progressLabel, startOver, useOpenChecklist } from "./checklists.ts";
+import { dayWords, openChecklist, progress, progressLabel, startOver, useChecklistDay, useOpenChecklist } from "./checklists.ts";
 import { ClarifyView } from "./views/ClarifyView.tsx";
 // Views opened now and then load when first opened, so the lists come up faster on a cold phone.
 const CalendarView = lazy(() => import("./views/CalendarView.tsx").then((m) => ({ default: m.CalendarView })));
@@ -201,6 +201,7 @@ export default function App() {
   const popping = useRef(false);
   // The tab names the view, and inside a checklist the checklist ("Packing for a trip · Checklists · Stiltje").
   const openListId = useOpenChecklist();
+  const checklistDay = useChecklistDay();
   const openList = view === "checklists" && openListId ? s.checklists.find((c) => c.id === openListId && c.status === "active") : undefined;
   useEffect(() => {
     document.title = `${openList ? `${openList.title || "Untitled checklist"} · ` : ""}${VIEW_TITLES[view] ?? "Stiltje"} · Stiltje`;
@@ -576,10 +577,11 @@ export default function App() {
     // Inside a checklist, how far this run has got; otherwise how many checklists there are.
     checklists: openList
       ? (() => {
-          const p = progress(s, openList.id);
+          // A routine counts the day (or week) it is being ticked for: "3 of 5 yesterday".
+          const p = progress(s, openList.id, (openList.repeats && checklistDay) || undefined);
           // Nothing to tick yet is said by the empty checklist itself; a routine always counts its day or week ("0 of 5 today", "All 5 done this week").
           if (!p.total) return "";
-          if (p.repeats) return progressLabel(p) || `0 of ${p.total} ${p.repeats === "day" ? "today" : "this week"}`;
+          if (p.repeats) return progressLabel(p, checklistDay) || `0 of ${p.total} ${dayWords(checklistDay, p.repeats)}`;
           return !p.ticked ? plural(p.total, "item") : p.ticked === p.total ? progressLabel(p) : `${p.ticked} of ${p.total} ticked`;
         })()
       : some(s.checklists.filter((c) => c.status === "active").length, "checklist"),

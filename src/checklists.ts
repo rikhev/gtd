@@ -59,8 +59,56 @@ export function openChecklist(id: ID | null, history = true, at: ID | null = nul
   landing = at;
   if (id === open) return;
   open = id;
+  // A checklist opens on today: a day stepped back to belongs to the checklist it was stepped in.
+  viewDay = null;
   if (history) window.history.pushState(null, "", id ? `#checklists/${encodeURIComponent(id)}` : "#checklists");
   emit();
+}
+
+/* ---------------- the day a routine is ticked for ---------------- */
+
+/**
+ * A repeating checklist can be stepped back to an earlier day (or week) and ticked there, for a habit done but not
+ * ticked at the time (owner's request): ← and → step, never past today. null is today.
+ */
+let viewDay: string | null = null;
+const dayListeners = new Set<() => void>();
+export function useChecklistDay(): string | null {
+  return useSyncExternalStore(
+    (l) => {
+      dayListeners.add(l);
+      return () => dayListeners.delete(l);
+    },
+    () => viewDay,
+  );
+}
+/** Steps to a day (the start of its week on a weekly routine); today, or later, is null. */
+export function setChecklistDay(day: string | null, repeats: Repeats) {
+  const now = periodOf(today(), repeats);
+  const next = day && periodOf(day, repeats) < now ? periodOf(day, repeats) : null;
+  if (next === viewDay) return;
+  viewDay = next;
+  dayListeners.forEach((l) => l());
+}
+export const checklistDay = () => viewDay;
+/** Back to today (on leaving a checklist, so it opens on today next time). */
+export function resetChecklistDay() {
+  if (viewDay === null) return;
+  viewDay = null;
+  dayListeners.forEach((l) => l());
+}
+
+/** The day or week a routine is looked at, by name: "today", "yesterday", "Tue 29 Sep", "last week", "the week of 14 Sep". */
+export function dayName(day: string | null, repeats: Repeats): string {
+  const now = periodOf(today(), repeats);
+  const d = day ? periodOf(day, repeats) : now;
+  if (repeats === "week") return d === now ? "this week" : d === addDays(now, -7) ? "last week" : `the week of ${formatLong(d)}`;
+  return d === now ? "today" : d === addDays(now, -1) ? "yesterday" : formatLong(d);
+}
+/** The same after a count or a verb: "3 of 5 today", "ticked on Tue 29 Sep", "done in the week of 14 Sep". */
+export function dayWords(day: string | null, repeats: Repeats): string {
+  const name = dayName(day, repeats);
+  return /^(today|yesterday|this week|last week)$/.test(name) ? name : repeats === "week" ? `in ${name}` : `on ${name}`;
 }
 
 /* ---------------- reading ---------------- */
@@ -128,6 +176,83 @@ export function streak(s: Lists, item: ChecklistItem, repeats: Repeats, t = toda
   return n;
 }
 
+/** The local day a stored stamp falls on. */
+const dayOf = (stamp: string) => iso(new Date(stamp));
+
+/**
+ * A habit's record, from the day it became one (the routine began repeating, or the habit was added since): how often
+ * it was done, how the last four weeks compare with the four before, its longest run, and on a daily habit the
+ * weekdays it slips. Only past periods are counted; this one counts once it is done. Nothing here is kept: it is all
+ * read from the ticks.
+ */
+export function habitStats(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()) {
+  const list = s.checklists.find((c) => c.id === item.checklist_id);
+  const step = repeats === "day" ? 1 : 7;
+  const begun = [list?.repeats_since ?? (list ? dayOf(list.created_at) : t), dayOf(item.created_at)].sort().pop()!;
+  const since = periodOf(begun, repeats);
+  const now = periodOf(t, repeats);
+  const done = new Set(s.checklist_ticks.filter((k) => k.item_id === item.id).map((k) => periodOf(k.day, repeats)));
+  // Every period from the first to this one; this one only counts once it is done (the day isn't over).
+  const periods: string[] = [];
+  for (let d = since; d <= now; d = addDays(d, step)) periods.push(d);
+  const counted = periods.filter((d) => d < now || done.has(d));
+  const kept = counted.filter((d) => done.has(d)).length;
+  const span = repeats === "day" ? 28 : 4;
+  const past = periods.filter((d) => d < now);
+  const recent = past.slice(-span);
+  const before = past.slice(-2 * span, -span);
+  let longest = 0;
+  let longestEnd: string | null = null;
+  let run = 0;
+  for (const d of periods) {
+    if (done.has(d)) {
+      run++;
+      if (run > longest) {
+        longest = run;
+        longestEnd = d;
+      }
+    } else if (d < now) run = 0;
+  }
+  // On a daily habit, how each weekday went, in the week's own order.
+  const first = getMeta().weekStart;
+  const weekdays =
+    repeats === "day"
+      ? Array.from({ length: 7 }, (_, n) => {
+          const wd = (first + n) % 7;
+          const days = past.filter((d) => fromIso(d).getDay() === wd);
+          return { wd, done: days.filter((d) => done.has(d)).length, of: days.length };
+        })
+      : [];
+  return {
+    since,
+    kept,
+    of: counted.length,
+    recent: { kept: recent.filter((d) => done.has(d)).length, of: recent.length },
+    before: { kept: before.filter((d) => done.has(d)).length, of: before.length },
+    longest,
+    longestEnd,
+    current: streak(s, item, repeats, t),
+    weekdays,
+  };
+}
+
+/** Half a year of a habit, oldest first: 26 weeks of days (a grid, week by week), or 26 weeks on a weekly habit. */
+export function longHistory(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()) {
+  const done = new Set(s.checklist_ticks.filter((k) => k.item_id === item.id).map((k) => periodOf(k.day, repeats)));
+  const now = periodOf(t, repeats);
+  if (repeats === "week")
+    return Array.from({ length: 26 }, (_, i) => {
+      const day = addDays(now, -(25 - i) * 7);
+      return { day, done: done.has(day), now: day === now, future: false };
+    });
+  // Days: whole weeks from the week's first day, 26 of them, so each column is a week.
+  const start = addDays(periodOf(t, "week"), -25 * 7);
+  return Array.from({ length: 26 * 7 }, (_, i) => {
+    const day = addDays(start, i);
+    return { day, done: done.has(day), now: day === now, future: day > now };
+  });
+}
+
 export const streakLabel = (n: number, repeats: Repeats) => (n ? plural(n, repeats === "day" ? "day" : "week") : "");
 
 /** A square of the strip, named for its hover: "Tue 29 Sep: done", "Week of 21 Sep: not done". */
@@ -152,7 +277,8 @@ export function setRepeats(ids: ID[], repeats: Repeats | null) {
   const t = today();
   const ops: Op[] = [];
   for (const c of s.checklists.filter((x) => ids.includes(x.id) && (x.repeats ?? null) !== repeats)) {
-    ops.push({ type: "patch", table: "checklists", id: c.id, data: { repeats } });
+    // Turned on, it notes the day it began repeating, which a habit's record counts from.
+    ops.push({ type: "patch", table: "checklists", id: c.id, data: repeats && !c.repeats ? { repeats, repeats_since: t } : { repeats } });
     for (const i of itemsOf(s, c.id).filter((x) => !x.section)) {
       if (repeats && !c.repeats && i.checked_at) {
         ops.push({ type: "patch", table: "checklist_items", id: i.id, data: { checked_at: null } });
@@ -167,10 +293,10 @@ export function setRepeats(ids: ID[], repeats: Repeats | null) {
 }
 
 /** "4 of 12", "All 12 ticked" ("All 5 done today" on a routine), or nothing while no run is under way. */
-export function progressLabel(p: { ticked: number; total: number; repeats?: Repeats | null }) {
+export function progressLabel(p: { ticked: number; total: number; repeats?: Repeats | null }, day: string | null = null) {
   if (!p.ticked || !p.total) return "";
-  // A routine says which period it counts: "3 of 5 today", "2 of 4 this week".
-  const when = p.repeats === "day" ? " today" : p.repeats === "week" ? " this week" : "";
+  // A routine says which period it counts: "3 of 5 today", "2 of 4 this week", "4 of 5 yesterday".
+  const when = p.repeats ? ` ${dayWords(day, p.repeats)}` : "";
   if (p.ticked === p.total) return p.repeats ? `All ${p.total} done${when}` : `All ${p.total} ticked`;
   return `${p.ticked} of ${p.total}${when}`;
 }
@@ -228,9 +354,10 @@ export const touchChecklist = (id: ID): Op => ({ type: "patch", table: "checklis
  * Ticks or unticks items. When the last open item is ticked the run is finished: the checklist records when, and the
  * toast says so. Unticking leaves that date alone (it is when the last run was finished).
  */
-export function tickItems(ids: ID[]) {
+export function tickItems(ids: ID[], day: string | null = null) {
   const s = getState();
-  const t = today();
+  // On a routine stepped back to an earlier day, the tick is that day's record.
+  const t = day ?? today();
   const items = s.checklist_items.filter((i) => ids.includes(i.id) && !i.section);
   if (!items.length) return;
   // A mixed selection ticks what is open; all ticked already, it unticks them.
@@ -247,12 +374,14 @@ export function tickItems(ids: ID[]) {
         : ticksNow(s, i, r, t).map((k): Op => ({ type: "delete", table: "checklist_ticks", id: k.id }))
       : [{ type: "patch", table: "checklist_items", id: i.id, data: { checked_at: tick ? at : null } }],
   );
-  let label = tick ? `${itemName(change)} ticked` : `${itemName(change)} unticked`;
+  const past = r && day ? ` ${dayWords(day, r)}` : "";
+  let label = tick ? `${itemName(change)} ticked${past}` : `${itemName(change)} unticked${past}`;
   if (tick && list) {
     const p = progress(s, list.id, t);
     if (p.ticked + change.length === p.total) {
-      ops.push({ type: "patch", table: "checklists", id: list.id, data: { finished_at: at } });
-      label = r ? `${title(list)}: all ${p.total} done ${r === "day" ? "today" : "this week"}` : `${title(list)}: all ${p.total} ticked. Start over when you run it again.`;
+      // A day caught up afterwards finishes nothing now: "last finished" stays the latest real run.
+      if (!past) ops.push({ type: "patch", table: "checklists", id: list.id, data: { finished_at: at } });
+      label = r ? `${title(list)}: all ${p.total} done ${dayWords(day, r)}` : `${title(list)}: all ${p.total} ticked. Start over when you run it again.`;
     }
   }
   mutate(label, ops);

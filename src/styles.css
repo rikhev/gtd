@@ -1500,6 +1500,8 @@ body.is-col-resizing * {
   height: 7px;
   border-radius: 1.5px;
   box-shadow: inset 0 0 0 1px var(--rule-strong);
+  /* A square opens its day, to tick there. */
+  cursor: pointer;
 }
 .hstrip.is-week i {
   width: 8px;
@@ -1522,6 +1524,82 @@ body.is-col-resizing * {
 /* A habit done today greys like a ticked item, but its history doesn't: the record stays full strength. */
 .row.is-done .hstrip i.is-on {
   background: var(--mark);
+}
+/* A habit's record in the details pane: plain lines, the weekdays as seven small ink bars, and half a year of the
+   strip's squares (week by week in columns on a daily habit). Ink only, as on the row: green is project health. */
+.habit-record {
+  margin: 14px 0 0;
+}
+.habit-record p {
+  margin: 0 0 var(--sp-xs);
+  color: var(--ink-2);
+}
+.habit-record p strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.habit-weekdays {
+  display: flex;
+  gap: var(--sp-sm);
+  margin: var(--sp-md) 0 var(--sp-xs);
+}
+.habit-weekdays span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-hair);
+  width: 14px;
+  height: 34px;
+}
+.habit-weekdays i {
+  width: 8px;
+  background: var(--ink-3);
+  border-radius: 1px;
+}
+.habit-weekdays span.is-slip i {
+  background: var(--ink);
+}
+.habit-weekdays b {
+  font: 600 var(--fs-key) var(--font-ui);
+  color: var(--ink-3);
+}
+.habit-year {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 7px);
+  gap: var(--sp-hair);
+  margin-top: var(--sp-xs);
+}
+.habit-year.is-week {
+  grid-auto-flow: row;
+  grid-template-rows: none;
+  grid-template-columns: repeat(13, 8px);
+}
+.habit-year i {
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+  cursor: pointer;
+}
+.habit-year.is-week i {
+  width: 8px;
+  height: 8px;
+}
+.habit-year i.is-on {
+  background: var(--mark);
+  box-shadow: none;
+}
+.habit-year i.is-now {
+  outline: 1px solid var(--ink-3);
+  outline-offset: 1px;
+}
+.habit-year i.is-future {
+  visibility: hidden;
+}
+.habit-year i.is-before {
+  opacity: 0.3;
 }
 /* A narrow list (a phone) keeps the last two weeks. */
 .grid.is-compact .hstrip.is-day i:nth-child(-n + 14),

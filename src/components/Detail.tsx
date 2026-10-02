@@ -1,19 +1,19 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks } from "lucide-react";
-import { quote, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
+import { quote, plural, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, startsToday, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { openChecklist, progress, progressLabel, repeatsLabel } from "../checklists.ts";
+import { habitStats, historyTitle, longHistory, openChecklist, progress, progressLabel, repeatsLabel, setChecklistDay, useChecklistDay } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
 import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
 import { AreaName, ContextCode, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
-import type { Action, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
+import type { Action, ChecklistItem, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
 /** Text field that commits on blur (one undo step per edit, not per keystroke). */
 function TextField({
@@ -871,6 +871,106 @@ function StuffDetail({ st }: { st: Stuff }) {
   );
 }
 
+const WEEKDAY = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+const WEEKDAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
+
+/**
+ * A checklist item. On a routine it is a habit, and the pane gives its record (owner's request): how often it was done
+ * since it became a habit, the last four weeks against the four before, its longest run, on a daily habit the
+ * weekdays it slips, and half a year of squares, each opening its day to tick there. All of it is read from the
+ * ticks; nothing here asks for upkeep, and nothing celebrates (no totals that only grow, no badges).
+ */
+function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
+  const s = useStore((x) => x);
+  const list = s.checklists.find((c) => c.id === item.checklist_id);
+  const repeats = list?.repeats ?? null;
+  const viewDay = useChecklistDay();
+  const unit = repeats === "week" ? "week" : "day";
+  const rate = (k: number, of: number) => (of ? ` (${Math.round((100 * k) / of)}%)` : "");
+  const stats = repeats && !item.section ? habitStats(s, item, repeats) : null;
+  // The weekday it slips on: well under its usual rate, and seen at least three times.
+  const slip = (() => {
+    if (!stats || stats.weekdays.length === 0) return null;
+    const seen = stats.weekdays.filter((d) => d.of >= 3);
+    if (seen.length < 7) return null;
+    const avg = stats.kept / Math.max(1, stats.of);
+    const worst = [...seen].sort((a, b) => a.done / a.of - b.done / b.of)[0];
+    return worst.done / worst.of < Math.min(0.6, avg - 0.2) ? worst : null;
+  })();
+  const ticked = !repeats && item.checked_at;
+  return (
+    <>
+      <TextField label={item.section ? "Section" : repeats ? "Habit" : "Item"} value={item.title} onCommit={(v) => patch("checklist_items", item.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
+      <p className="detail-meta">
+        In {quote(list?.title ?? "", "Untitled checklist")}
+        {repeats ? ` · ${repeatsLabel(repeats)}` : ""}
+        {ticked ? ` · ticked ${formatLong(item.checked_at!.slice(0, 10))}` : ""}
+      </p>
+      {stats && repeats && (
+        <>
+          <section className="habit-record" aria-label="Record">
+            <h3 className="detail-h">Record</h3>
+            <p>
+              Done <strong>{stats.kept}</strong> of {plural(stats.of, unit)}
+              {rate(stats.kept, stats.of)} since {formatLong(stats.since)}
+            </p>
+            {stats.recent.of > 0 && (
+              <p>
+                Last 4 weeks <strong>{stats.recent.kept}</strong> of {stats.recent.of}
+                {stats.before.of > 0 && (
+                  <span className="muted-text">
+                    {" "}
+                    · the 4 before {stats.before.kept} of {stats.before.of}
+                  </span>
+                )}
+              </p>
+            )}
+            {stats.longest > 0 && (
+              <p>
+                Longest run <strong>{plural(stats.longest, unit)}</strong>
+                {stats.longestEnd && stats.longest > stats.current ? <span className="muted-text">, to {formatLong(stats.longestEnd)}</span> : null}
+                <span className="muted-text"> · now {plural(stats.current, unit)}</span>
+              </p>
+            )}
+            {stats.weekdays.length > 0 && (
+              <>
+                <div className="habit-weekdays" role="img" aria-label={stats.weekdays.map((d) => `${WEEKDAY[d.wd]} ${d.done} of ${d.of}`).join(", ")}>
+                  {stats.weekdays.map((d) => (
+                    <span key={d.wd} className={slip?.wd === d.wd ? "is-slip" : ""}>
+                      <i style={{ height: `${d.of ? Math.max(2, Math.round((18 * d.done) / d.of)) : 0}px` }} />
+                      <b>{WEEKDAY_LETTER[d.wd]}</b>
+                    </span>
+                  ))}
+                </div>
+                {slip && (
+                  <p className="muted-text">
+                    Slips most on {WEEKDAY[slip.wd]} ({slip.done} of {slip.of})
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+          <section className="habit-record" aria-label="Half a year">
+            <h3 className="detail-h">Half a year</h3>
+            <span className={`habit-year is-${repeats}`} role="img" aria-label={`Done ${stats.recent.kept} of the last ${stats.recent.of} ${unit}s; each square opens its ${unit}`}>
+              {longHistory(s, item, repeats).map((c) => (
+                <i
+                  key={c.day}
+                  // Days before it was a habit are no misses: they fade.
+                  className={`${c.done ? "is-on" : ""} ${(viewDay ? c.day === viewDay : c.now) ? "is-now" : ""} ${c.future ? "is-future" : ""} ${c.day < stats.since && !c.done ? "is-before" : ""}`}
+                  title={c.future ? undefined : historyTitle(c, repeats)}
+                  onClick={() => !c.future && setChecklistDay(c.day, repeats)}
+                />
+              ))}
+            </span>
+          </section>
+        </>
+      )}
+      <p className="detail-meta">Added {formatLong(item.created_at.slice(0, 10))}</p>
+    </>
+  );
+}
+
 function RefDetail({ r }: { r: Ref }) {
   const ui = useUI();
   const s = useStore((x) => x);
@@ -914,7 +1014,9 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           ? s.stuff.find((x) => x.id === t.id)?.text.split("\n")[0]
           : t.kind === "event"
             ? s.appointments.find((x) => x.id === t.id)?.title
-            : s.refs.find((x) => x.id === t.id)?.title;
+            : t.kind === "checkitem"
+              ? s.checklist_items.find((x) => x.id === t.id)?.title
+              : s.refs.find((x) => x.id === t.id)?.title;
 
   /*
    * The pane is a list of fields, walked like every other region (owner's decision): a cursor sits on one field, ↑↓
@@ -1032,7 +1134,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   // The pane is announced by what it shows: "Action details: Pay the VAT for Q3".
   const paneName = (() => {
     if (!target) return "Details";
-    const kind = ({ action: "Action", project: "Project", stuff: "Inbox item", ref: "Reference", event: "Appointment" } as Record<string, string>)[target.kind] ?? "Item";
+    const kind = ({ action: "Action", project: "Project", stuff: "Inbox item", ref: "Reference", event: "Appointment", checkitem: "Checklist item" } as Record<string, string>)[target.kind] ?? "Item";
     const title = (target.kind === "event" ? eventHere?.title : undefined) ?? titleOf(target);
     return `${kind} details${title ? `: ${title}` : ""}`;
   })();
@@ -1053,6 +1155,9 @@ export function Detail({ target, active }: { target: Target | null; active: bool
   } else if (target.kind === "ref") {
     const r = s.refs.find((x) => x.id === target.id);
     body = r ? <RefDetail key={r.id} r={r} /> : null;
+  } else if (target.kind === "checkitem") {
+    const item = s.checklist_items.find((x) => x.id === target.id);
+    body = item ? <ChecklistItemDetail key={item.id} item={item} /> : null;
   } else if (target.kind === "event") {
     // An appointment linked to a project opens from the project even when its week hasn't been fetched: what the link
     // kept of it (title, day, time) stands in until the calendar has it.
