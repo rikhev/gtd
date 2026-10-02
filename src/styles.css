@@ -3627,11 +3627,106 @@ textarea.field-text {
   .viewhead {
     padding: 12px 16px 6px;
   }
+  /* Room under the last row for the + button, so it never sits on a row that can't scroll out from under it. */
   .list-region {
-    padding: 0 16px 32px;
+    padding: 0 16px 88px;
   }
   .grid {
     min-width: 0;
+  }
+  /* A phone's list rows: two lines (owner's request: lists easier to work with on a phone). The title in 15px, up to
+     two lines, never cut to one; under it, in 13px, what the wide list shows in columns (context, project, dates),
+     with no empty ones. No column heads: there are no columns. */
+  .grid.is-phone .grid-head {
+    display: none;
+  }
+  .grid.is-phone .row {
+    height: auto;
+    min-height: 56px;
+    align-items: stretch;
+  }
+  .grid.is-phone .cell {
+    height: auto;
+    display: flex;
+    align-items: center;
+  }
+  .grid.is-phone .cell.is-stacked {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 3px;
+    padding-block: 9px;
+    white-space: normal;
+  }
+  .grid.is-phone .is-stacked .subject {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+  .grid.is-phone .is-stacked .subject-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+    font-size: 15px;
+    line-height: 1.3;
+    text-wrap: pretty;
+  }
+  .grid.is-phone .is-stacked .subject-more {
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 12px;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--ink-2);
+  }
+  .row-meta:empty,
+  .row-meta-item:empty,
+  .row-meta-item:has(> .dash:only-child) {
+    display: none;
+  }
+  .row-meta-item {
+    display: inline-flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .row.is-focus .row-meta {
+    color: inherit;
+  }
+  /* Adding, where a thumb is: an ink circle over the list's lower right, above the capture line and the tab bar. */
+  .phone-add {
+    position: fixed;
+    right: 16px;
+    bottom: calc(53px + 48px + 16px + env(safe-area-inset-bottom, 0px));
+    z-index: 55;
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--sheet);
+    box-shadow: var(--shadow);
+  }
+  .phone-add:active {
+    transform: scale(0.96);
+  }
+  .phone-add:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* The Lists sheet: the lists, then Done and the Trash to look back at, apart. */
+  .more-back {
+    border-top: 1px solid var(--rule);
   }
   /* Which columns a phone shows is decided by the list itself (Grid keeps the marks, the subject and one date). */
   .detail {

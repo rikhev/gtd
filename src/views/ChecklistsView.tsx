@@ -649,7 +649,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       showHeaders={false}
       rowClass={(i) => [i.section ? "is-section" : "", done(i) ? "is-done" : "", striking.has(i.id) ? "is-striking" : ""].join(" ")}
       // A tap on a phone ticks (running the list is what a phone is for); Enter or a double-click opens the item's
-      // details (a habit's record), and a double-click on its words rewrites them, as F2 does.
+      // details (a habit's record), and a slow double-click on its words rewrites them, as F2 does.
       onOpen={(k) => (pressedByTouch() ? tick([k]) : ui.openDetail({ kind: "checkitem", id: k }, true))}
       swipe={{ right: { label: "Tick", run: (k) => tick([k]) }, left: { label: "Remove", run: (k) => remove([k]) } }}
       reorder={{

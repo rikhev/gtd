@@ -1,8 +1,8 @@
-import { forwardRef, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Search, Check, LogOut } from "lucide-react";
+import { forwardRef, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Search, Check, LogOut, Plus } from "lucide-react";
 import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { useCommands, keyLabel, keyAria, IS_MAC, type Command, type LayeredCommand } from "../keys.ts";
+import { useCommands, keyLabel, keyAria, IS_MAC, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
 import { Kbd } from "./bits.tsx";
 import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
@@ -368,77 +368,53 @@ function RailKey({ k }: { k?: string }) {
   ) : null;
 }
 
-/** On a phone the rail becomes a bottom tab bar: the Inbox, Next, Waiting, and More for the rest. */
+/**
+ * On a phone the rail becomes a bottom bar (owner's request: the phone is slimmer, the Inbox, the Calendar and the
+ * lists): Inbox, Calendar, Next, Waiting, and Lists for the rest of the lists. The Weekly Review, Settings and the
+ * system check stay on the desktop.
+ */
+const PHONE_LISTS: ViewId[] = ["agendas", "projects", "checklists", "reference", "someday"];
+const PHONE_LOOK_BACK: ViewId[] = ["done", "trash"];
 export function TabBar() {
   const ui = useUI();
-  const s = useTables("stuff", "actions", "projects", "reviews");
+  const s = useTables("stuff");
   const { authRequired } = useMeta();
-  const [more, setMore] = useState(false);
-  const inboxItems = s.stuff.filter((x) => x.status === "inbox");
-  const inbox = inboxItems.length;
-  const rest: ViewId[] = ["agendas", "calendar", "projects", "someday", "reference", "checklists", "done", "trash", "settings"];
-  // The phone's system check, as in the rail: is the review due, and how old is the oldest thing in the Inbox?
-  const t = today();
-  const reviewAge = daysSinceReview(s);
-  const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
-  const reviewDue = reviewAge === null ? (firstDay ? daysBetween(firstDay.slice(0, 10), t) >= 7 : false) : reviewAge >= 7;
-  const oldest = inboxItems.reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
-  const oldestDays = oldest ? daysBetween(oldest.slice(0, 10), t) : null;
-  const checkDue = reviewDue || (oldestDays !== null && oldestDays >= 7);
-  // The More sheet closes on a tap anywhere outside it (the More tab itself toggles it).
+  const [open, setOpen] = useState(false);
+  const inbox = s.stuff.filter((x) => x.status === "inbox").length;
+  const rest = [...PHONE_LISTS, ...PHONE_LOOK_BACK];
+  // The Lists sheet closes on a tap anywhere outside it (the Lists tab itself toggles it).
   const barRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (!more) return;
+    if (!open) return;
     const outside = (e: PointerEvent) => {
-      if (!barRef.current?.contains(e.target as Node)) setMore(false);
+      if (!barRef.current?.contains(e.target as Node)) setOpen(false);
     };
     window.addEventListener("pointerdown", outside, true);
     return () => window.removeEventListener("pointerdown", outside, true);
-  }, [more]);
+  }, [open]);
   const go = (v: ViewId) => {
-    setMore(false);
-    if (v === "review") ui.startReview();
-    else ui.go(v);
+    setOpen(false);
+    ui.go(v);
   };
   const tab = (v: ViewId, label: ReactNode) => (
     <button type="button" className={`tab ${ui.view === v ? "is-current" : ""}`} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
       {label}
     </button>
   );
+  const row = (v: ViewId) => (
+    <li key={v}>
+      <button type="button" className={ui.view === v ? "is-current" : ""} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
+        {VIEW_TITLES[v]}
+      </button>
+    </li>
+  );
   return (
     <nav ref={barRef} className="tabbar" aria-label="Lists">
-      {more && (
-        // The phone's rail: the pond and its name, the system check, then the rest of the lists.
+      {open && (
         <div className="tabbar-more">
-          <div className="more-pond" aria-hidden="true">
-            <span className="pond-name">Stiltje</span>
-            <span className="pond-name pond-mirror">Stiltje</span>
-          </div>
-          <ul className="more-check" aria-label="System check">
-            <li>
-              <button type="button" className={ui.view === "review" ? "is-current" : ""} onClick={() => go("review")}>
-                Weekly Review
-                <span className={reviewDue ? "is-due" : "more-meta"}>{reviewDue ? "due" : reviewAge === null ? "not yet" : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
-              </button>
-            </li>
-            {oldestDays !== null && (
-              <li>
-                <button type="button" onClick={() => go("inbox")}>
-                  Oldest in Inbox
-                  <span className={oldestDays >= 7 ? "is-due" : "more-meta"}>{oldestDays === 0 ? "today" : `${oldestDays}d`}</span>
-                </button>
-              </li>
-            )}
-          </ul>
-          <ul className="more-list">
-            {rest.map((v) => (
-              <li key={v}>
-                <button type="button" className={ui.view === v ? "is-current" : ""} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
-                  {VIEW_TITLES[v]}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <ul className="more-list">{PHONE_LISTS.map(row)}</ul>
+          {/* Looking back: what is finished, and what was deleted. */}
+          <ul className="more-list more-back">{PHONE_LOOK_BACK.map(row)}</ul>
           {authRequired && (
             <ul className="more-signout">
               <li>
@@ -458,16 +434,33 @@ export function TabBar() {
           {inbox > 0 && <span className="tab-count num">{inbox}</span>}
         </>,
       )}
+      {tab("calendar", <span className="tab-name">Calendar</span>)}
       {tab("next", <span className="tab-name">Next</span>)}
       {tab("waiting", <span className="tab-name">Waiting</span>)}
-      <button type="button" className={`tab ${more || rest.includes(ui.view) ? "is-current" : ""}`} aria-expanded={more} onClick={() => setMore(!more)}>
-        {/* A tab is narrow: a list with a long name goes by its short one ("Someday"). */}
-        <span className="tab-name">{rest.includes(ui.view) && !more ? (ui.view === "someday" ? "Someday" : VIEW_TITLES[ui.view]) : "More"}</span>
-        {/* Something in the system check wants attention: a small alert dot, named for screen readers. */}
-        {/* The dot belongs to "More" (the system check is in there), not to a list whose name the tab is showing. */}
-        {checkDue && !more && !rest.includes(ui.view) && <span className="tab-dot" role="img" aria-label="The Weekly Review or the Inbox needs attention" />}
+      <button type="button" className={`tab ${open || rest.includes(ui.view) ? "is-current" : ""}`} aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(!open)}>
+        {/* A tab is narrow: a list goes by its short name ("Someday"), and the tab says Lists while the sheet is open. */}
+        <span className="tab-name">{rest.includes(ui.view) && !open ? (ui.view === "someday" ? "Someday" : VIEW_TITLES[ui.view]) : "Lists"}</span>
       </button>
     </nav>
+  );
+}
+
+/**
+ * The phone's way to add (owner's request: lists easier to work with on a phone): a round button over the list,
+ * within a thumb's reach, doing what N does there (a new action, project, note, item; a capture in the Inbox). It
+ * shows only where N does something, and steps aside while a details sheet, a picker or the viewer is open.
+ */
+export function PhoneAdd() {
+  const ui = useUI();
+  useSyncExternalStore(subscribeLayers, layersVersion);
+  if (ui.region !== "list" || ui.detail || ui.pickerOpen || ui.viewer) return null;
+  // The Inbox's N is the capture line, already at the foot of the phone: no second way to the same place.
+  const cmd = activeCommands().find((c) => c.keys?.includes("n") && c.enabled !== false && !c.row && c.id !== "inbox.new");
+  if (!cmd) return null;
+  return (
+    <button type="button" className="phone-add" aria-label={cmd.label} title={cmd.label} onClick={() => cmd.run()}>
+      <Plus size={22} strokeWidth={2.25} aria-hidden="true" />
+    </button>
   );
 }
 

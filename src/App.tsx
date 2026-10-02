@@ -7,7 +7,7 @@ import { ChevronRight } from "lucide-react";
 import { quote, archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, notStarted, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
-import { Rail, RAIL, TabBar, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
+import { Rail, RAIL, TabBar, PhoneAdd, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView } from "./views/TrashView.tsx";
@@ -16,6 +16,7 @@ import { AgendasView } from "./views/AgendasView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { Viewer } from "./components/Viewer.tsx";
+import { usePhone } from "./phone.ts";
 import { ActionsView } from "./views/ActionsView.tsx";
 import { InboxView } from "./views/InboxView.tsx";
 import { ProjectsView, projectEditors } from "./views/ProjectsView.tsx";
@@ -566,6 +567,12 @@ export default function App() {
   }, []);
 
   const listActive = region === "list" && !picker && !palette && !viewer;
+  // The phone is slimmer (owner's request): the Weekly Review, Settings and Horizons stay on the desktop. An address
+  // for one (a bookmark, Back) lands on the Inbox instead.
+  const phone = usePhone();
+  useEffect(() => {
+    if (phone && (view === "review" || view === "settings" || view === "horizons")) go("inbox");
+  }, [phone, view, go]);
   const t = today();
   const deferredNext = s.actions.filter((a) => a.status === "next" && !onHold(a, s) && isDeferred(a, t)).length;
   const fitNow = useFit();
@@ -678,6 +685,7 @@ export default function App() {
       <div className={`app ${detail || detailPinned ? "has-detail" : ""}`} data-region={region}>
         <Rail active={region === "rail" && !picker && !palette} />
         <TabBar />
+        {phone && <PhoneAdd />}
         <main className="main">
           <header className="topbar">
             <CaptureBar ref={captureRef} onDone={() => ui.setRegion("list")} />

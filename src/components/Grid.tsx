@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { activeCommands, isEditable, IS_MAC, isTouchDevice, pressedByTouch, runKey, useCommands, type Command } from "../keys.ts";
 import { useUI } from "../ui.tsx";
 import { KeyHints } from "./bits.tsx";
+import { usePhone } from "../phone.ts";
 
 export interface Column<T> {
   key: string;
@@ -22,6 +23,10 @@ export interface Column<T> {
 
 /** On a phone the list keeps one column after the subject: the first of these it has. */
 const COMPACT_HIDE = ["done", "kind"];
+/** Columns a phone row's second line leaves out: wide records (a habit's strip) and counts that say little there. */
+const PHONE_SKIP = ["history", "files", "created"];
+/** A phone row's second line: what the wide list shows in columns, in their order, as a quiet line under the title. */
+type Stacked<T> = Column<T> & { stack?: Column<T>[] };
 /** Names for the unlabelled lead columns, for screen readers. */
 const LEAD_NAME: Record<string, string> = { mark: "Status", done: "Done", kind: "Kind" };
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
@@ -833,9 +838,19 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   };
 
   const sized = useMemo(() => visible.map((c) => ({ ...c, width: widthOf(c) })), [visible, colWidth, liveWidth]); // eslint-disable-line react-hooks/exhaustive-deps
-  const columns = useMemo(() => {
+  const phone = usePhone();
+  const columns: Stacked<T>[] = useMemo(() => {
     const visible = sized;
     if (!width) return visible;
+    // A phone (owner's request: lists easier to work with there): two lines a row. The marker, then the subject with
+    // the room left, and under it, in small `ink-3`, what the other columns hold. Nothing is cut to fit one line.
+    if (phone) {
+      const firstLabelled = visible.findIndex((c) => c.label);
+      const lead = visible.slice(0, firstLabelled < 0 ? 0 : firstLabelled).filter((c) => !COMPACT_HIDE.includes(c.key));
+      const subject = visible.find((c) => c.key === lockedKey);
+      const stack = visible.filter((c) => c !== subject && !lead.includes(c) && !COMPACT_HIDE.includes(c.key) && !PHONE_SKIP.includes(c.key) && c.label);
+      return [...lead, ...(subject ? [{ ...subject, width: "minmax(0, 1fr)", stack }] : [])];
+    }
     // On a phone-width list, keep what identifies a row: its marker (flag, lamp), the subject with all the remaining
     // room, and one date or value column. The done box and the kind icon go (owner's request: room for the text; a
     // swipe right does what the box did). Chosen by what the columns are, never by their position.
@@ -853,7 +868,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       cols = cols.filter((x) => x !== c);
     }
     return cols;
-  }, [sized, width]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sized, width, phone]); // eslint-disable-line react-hooks/exhaustive-deps
   columnsRef.current = columns;
   const template = columns.map((c) => c.width).join(" ");
 
@@ -1078,6 +1093,14 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   }, []);
   // Swipe a row (touch): the cells follow the finger over a band naming the action; past a third of the row it acts.
   const swipedRef = useRef(false);
+  /*
+   * As in the Finder (owner's request): a quick double-click opens the row; a slow one on its subject (a second click
+   * after the double-click time, within 1.5s) renames it in place. The rename waits a moment, so the first click of a
+   * quick double-click that follows doesn't rename as well.
+   */
+  const lastSubjectClick = useRef<{ key: string; at: number } | null>(null);
+  const renameTimer = useRef<number | undefined>(undefined);
+  const canRename = () => activeCommands().some((c) => c.keys?.includes("f2") && c.enabled !== false);
   const swipeRef = useRef(swipe);
   swipeRef.current = swipe;
   const startSwipe = (e: { clientX: number; clientY: number; currentTarget: HTMLElement; pointerId: number }, key: string) => {
@@ -1146,7 +1169,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   return (
     <div
       ref={box}
-      className={`grid ${active ? "is-active" : ""} ${width && width < 560 ? "is-compact" : ""}`}
+      className={`grid ${active ? "is-active" : ""} ${width && width < 560 ? "is-compact" : ""} ${phone ? "is-phone" : ""}`}
       // Text cut short with an ellipsis (a long project, subject or next action) shows in full on hover: the first
       // clipped element under the pointer, up to its cell, takes its own text as a title.
       onMouseOver={(e) => {
@@ -1326,22 +1349,48 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                         if (swipedRef.current) return;
                         nav.click(k, e);
                         // A tap opens the row on a touch screen, where there is no Enter and no double-click.
-                        if (pressedByTouch() && isTouchDevice()) onOpen?.(k);
+                        if (pressedByTouch() && isTouchDevice()) return onOpen?.(k);
+                        const onSubject = Boolean(lockedKey && (e.target as HTMLElement).closest(`.cell.c-${lockedKey}`)) && !isEditable(e.target);
+                        const plain = !(e.shiftKey || e.metaKey || e.ctrlKey || e.altKey);
+                        const prev = lastSubjectClick.current;
+                        const now = performance.now();
+                        // A second, separate click (not part of a double-click) on the same row's subject, before long.
+                        if (onSubject && plain && e.detail === 1 && prev?.key === k && now - prev.at < 1500) {
+                          lastSubjectClick.current = null;
+                          window.clearTimeout(renameTimer.current);
+                          renameTimer.current = window.setTimeout(() => {
+                            if (!canRename()) return;
+                            window.getSelection()?.removeAllRanges();
+                            runKey("f2");
+                          }, 350);
+                          return;
+                        }
+                        lastSubjectClick.current = onSubject && plain && e.detail === 1 ? { key: k, at: now } : null;
                       }}
-                      // Double-click the subject to rename it in place (the list's own F2), anywhere else to open
-                      // the row's details, as in a file list. Lists without a rename open.
+                      // A quick double-click anywhere on the row opens it, as in a file list.
                       onDoubleClick={(e) => {
-                        const onSubject = Boolean(lockedKey && (e.target as HTMLElement).closest(`.cell.c-${lockedKey}`));
-                        if (onSubject && !isEditable(e.target) && activeCommands().some((c) => c.keys?.includes("f2") && c.enabled !== false)) {
-                          window.getSelection()?.removeAllRanges();
-                          runKey("f2");
-                        } else onOpen?.(k);
+                        if (isEditable(e.target)) return;
+                        window.clearTimeout(renameTimer.current);
+                        lastSubjectClick.current = null;
+                        window.getSelection()?.removeAllRanges();
+                        onOpen?.(k);
                       }}
                       onPointerDown={(e) => swipe && e.pointerType !== "mouse" && startSwipe(e, k)}
                     >
                       {columns.map((c) => (
-                        <div key={c.key} role="gridcell" className={`cell c-${c.key} ${c.align === "end" ? "end" : ""}`}>
+                        <div key={c.key} role="gridcell" className={`cell c-${c.key} ${c.align === "end" ? "end" : ""} ${c.stack ? "is-stacked" : ""}`}>
                           {c.render(row)}
+                          {c.stack && (
+                            <span className="row-meta">
+                              {c.stack
+                                .filter((m) => !m.blank?.(row))
+                                .map((m) => (
+                                  <span key={m.key} className={`row-meta-item c-${m.key}`}>
+                                    {m.render(row)}
+                                  </span>
+                                ))}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
