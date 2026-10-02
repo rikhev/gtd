@@ -1,5 +1,5 @@
 import { NotesArea } from "../components/NotesArea.tsx";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { FileText, Mail, StickyNote } from "lucide-react";
 import { quote, getState, mutate, newAction, newProject, notify, plural, stamp, uid, useStore, bareArea } from "../store.ts";
 import { useUI } from "../ui.tsx";
@@ -61,6 +61,18 @@ export interface ClarifyHost {
 /** Sizes a one-line-of-meaning textarea to its wrapped lines. */
 /** The lines a checklist is made from: those under the title, or every line once the checklist is given a title of its own (as Reference keeps the whole capture). */
 const checklistLines = (st: Stuff, title: string | undefined) => (!title?.trim() || title.trim() === stuffTitle(st) ? splitStuff(st).rest : st.text);
+
+/**
+ * Enter in one of Clarify's naming fields keeps the name and leaves the field, as Esc does (owner's request): back to
+ * its action's row, or out of the field. What is typed is kept as it is typed; ⌘Enter still accepts the decision.
+ */
+const enterLeaves = (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.nativeEvent.isComposing) return;
+  e.preventDefault();
+  const row = e.currentTarget.closest<HTMLElement>("[data-row]");
+  if (row) row.focus();
+  else e.currentTarget.blur();
+};
 
 const fitHeight = (el: HTMLTextAreaElement | null) => {
   if (!el) return;
@@ -606,6 +618,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                     <input
                       className="field-text p-title"
                       value={draft.reference?.title ?? ""}
+                      onKeyDown={enterLeaves}
                       onChange={(e) => update((d) => (d.reference = { title: e.target.value, notes: d.reference?.notes ?? "", checklist: d.reference?.checklist }))}
                     />
                   </label>
@@ -635,6 +648,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                         className="field-text p-project-title"
                         value={draft.new_project.title}
                         aria-label="New project title"
+                        onKeyDown={enterLeaves}
                         onChange={(e) => update((d) => (d.new_project = { ...d.new_project!, title: e.target.value }))}
                       />
                       <button
@@ -677,7 +691,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                             aria-describedby={raw ? `p-raw-${i}` : undefined}
                             placeholder="What is the very next physical step?"
                             onFocus={(e) => raw && e.currentTarget.select()}
-                            onKeyDown={(e) => e.key === "Enter" && !e.metaKey && !e.ctrlKey && e.preventDefault()}
+                            onKeyDown={enterLeaves}
                             onChange={(e) => {
                               fitHeight(e.currentTarget);
                               updateRow(i, { title: e.target.value.replace(/\n/g, " ") });
