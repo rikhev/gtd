@@ -3,7 +3,9 @@ import { Named } from "./bits.tsx";
 import type { PickerSpec, ListItem } from "../ui.tsx";
 import { useCommands } from "../keys.ts";
 import { useUI } from "../ui.tsx";
-import { parseDate, formatLong, TIME_PRESETS, formatTime, parseTime, today, addDays, fromIso } from "../../shared/dates.ts";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { getMeta } from "../store.ts";
+import { parseDate, formatLong, TIME_PRESETS, formatTime, parseTime, today, addDays, addMonths, fromIso } from "../../shared/dates.ts";
 
 /*
  * How the last thing was asked for (owner's rule): a picker opened with the mouse opens at the pointer; one opened
@@ -25,10 +27,83 @@ interface Props {
 
 type Option = { id: string | null; label: string; hint?: string; color?: string; create?: string; section?: string };
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const WD = ["S", "M", "T", "W", "T", "F", "S"];
+const WD_NAME = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/**
+ * The date picker's month (owner's request): six weeks from the week's first day (Settings › Calendar), a click on a
+ * day picks it, ‹ › (and PageUp/PageDown) step the months. Today is inked as in the Calendar; the date already set has
+ * a ring; a typed date ("3 dec") is shown before it is chosen, with the pale cursor fill.
+ */
+function MonthGrid({ month, onMonth, current, preview, onPick }: { month: string; onMonth: (m: string) => void; current: string | null; preview: string | null; onPick: (d: string) => void }) {
+  const t = today();
+  const ws = getMeta().weekStart;
+  const first = `${month.slice(0, 7)}-01`;
+  const start = addDays(first, -((fromIso(first).getDay() - ws + 7) % 7));
+  const days = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+  const label = `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+  return (
+    <div className="dp-month" role="group" aria-label={label}>
+      <div className="dp-head">
+        <span className="dp-title" aria-live="polite">
+          {label}
+        </span>
+        <button type="button" className="icon-btn" aria-label="Previous month" title="Previous month (PageUp)" onMouseDown={(e) => e.preventDefault()} onClick={() => onMonth(addMonths(first, -1))}>
+          <ChevronLeft size={15} strokeWidth={2} />
+        </button>
+        <button type="button" className="icon-btn" aria-label="Next month" title="Next month (PageDown)" onMouseDown={(e) => e.preventDefault()} onClick={() => onMonth(addMonths(first, 1))}>
+          <ChevronRight size={15} strokeWidth={2} />
+        </button>
+      </div>
+      <div className="dp-grid">
+        {Array.from({ length: 7 }, (_, i) => (ws + i) % 7).map((d, i) => (
+          <abbr key={`h${i}`} className="dp-wd" title={WD_NAME[d]}>
+            {WD[d]}
+          </abbr>
+        ))}
+        {days.map((d) => {
+          const dow = fromIso(d).getDay();
+          return (
+            <button
+              key={d}
+              type="button"
+              tabIndex={-1}
+              // The typing stays in the field: a press picks without taking focus from it.
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPick(d)}
+              aria-label={formatLong(d)}
+              aria-current={d === t ? "date" : undefined}
+              aria-pressed={d === current}
+              className={[
+                "dp-day",
+                d.slice(0, 7) !== first.slice(0, 7) ? "is-outside" : "",
+                dow === 0 || dow === 6 ? "is-weekend" : "",
+                d === t ? "is-today" : "",
+                d === current ? "is-current" : "",
+                d === preview ? "is-preview" : "",
+                d < t ? "is-past" : "",
+              ].join(" ")}
+            >
+              <span>{Number(d.slice(8))}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function Picker({ spec, close }: Props) {
   const ui = useUI();
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
+  // The month the date picker shows: the date already set, else this month; a typed date brings its month into view.
+  const [month, setMonth] = useState(() => (spec.type === "date" && spec.current ? spec.current : today()));
+  const typed = spec.type === "date" && q.trim() ? parseDate(q) : undefined;
+  useEffect(() => {
+    if (typed) setMonth(typed);
+  }, [typed]);
   const input = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 120, left: 320 });
@@ -67,6 +142,7 @@ export function Picker({ spec, close }: Props) {
       ...(spec.type === "list" && spec.onPickMore ? [{ id: "picker.more", label: "Pick this and keep choosing", group: "Picker", displayKeys: ["shift+enter"], run: noop }] : []),
       ...(spec.type === "time" ? [{ id: "picker.digits", label: "Pick a length by number", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),
       ...(spec.type === "energy" ? [{ id: "picker.digits", label: "Pick a level by number", group: "Picker", displayKeys: ["1–3"], run: noop }] : []),
+      ...(spec.type === "date" ? [{ id: "picker.months", label: "Show the previous or next month", group: "Picker", displayKeys: ["pageup", "pagedown"], run: noop }] : []),
       // ⌘K works in a picker too, listing its keys (it holds every other key while it is open).
       { id: "picker.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     ],
@@ -224,6 +300,9 @@ export function Picker({ spec, close }: Props) {
         if (!pv || pv.ok) choose({ id: "__ok__", label: q });
       } else if (e.shiftKey && spec.type === "list" && spec.onPickMore && options[hi]?.id && !options[hi].create) more(options[hi]);
       else choose(options[hi]);
+    } else if (spec.type === "date" && (e.key === "PageUp" || e.key === "PageDown")) {
+      e.preventDefault();
+      setMonth((m) => addMonths(`${m.slice(0, 7)}-01`, e.key === "PageUp" ? -1 : 1));
     } else if ((spec.type === "time" || spec.type === "energy") && q === "" && /^[0-9]$/.test(e.key)) {
       e.preventDefault();
       const n = Number(e.key);
@@ -247,7 +326,7 @@ export function Picker({ spec, close }: Props) {
             : spec.placeholder;
 
   return (
-    <div className="picker" ref={box} style={{ top: pos.top, left: pos.left }} role="dialog" aria-label={title}>
+    <div className={`picker ${spec.type === "date" ? "is-date" : ""}`} ref={box} style={{ top: pos.top, left: pos.left }} role="dialog" aria-label={title}>
       <div className="picker-title">{title}</div>
       <input
         ref={input}
@@ -266,6 +345,7 @@ export function Picker({ spec, close }: Props) {
         spellCheck={false}
         autoComplete={spec.type === "text" && spec.secret ? (spec.secret === "new" ? "new-password" : "current-password") : "off"}
       />
+      <div className={spec.type === "date" ? "dp-body" : undefined}>
       <ul className="picker-list" id="picker-list" role="listbox" aria-label={title}>
         {options.map((o, i) => [
           i > 0 && o.section !== options[i - 1].section && <li key={`sep-${i}`} className="picker-sep" role="separator" aria-hidden="true" />,
@@ -301,6 +381,16 @@ export function Picker({ spec, close }: Props) {
           </li>,
         ])}
       </ul>
+        {spec.type === "date" && (
+          <MonthGrid
+            month={month}
+            onMonth={setMonth}
+            current={spec.current}
+            preview={typed ?? null}
+            onPick={(d) => choose({ id: d, label: formatLong(d) })}
+          />
+        )}
+      </div>
     </div>
   );
 }

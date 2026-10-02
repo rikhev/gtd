@@ -2600,6 +2600,118 @@ textarea.field-text {
   color: var(--select-ink);
   box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
+/* The date picker: its quick choices on the left, the month on the right, so a date is picked by name, by typing
+   ("3 dec") or by a click on the month. */
+.picker.is-date {
+  width: 500px;
+}
+.dp-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  margin-top: 6px;
+}
+.dp-body .picker-list {
+  margin-top: 0;
+}
+.dp-month {
+  padding-left: 14px;
+  border-left: 1px solid var(--rule);
+}
+.dp-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  margin-bottom: 2px;
+}
+.dp-title {
+  flex: 1;
+  padding-left: 4px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 30px);
+  gap: 1px;
+}
+.dp-wd {
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-label);
+  font-stretch: 75%;
+  font-weight: 600;
+  font-size: var(--fs-small);
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  text-decoration: none;
+  cursor: default;
+}
+.dp-day {
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.dp-day span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.dp-day:hover {
+  background: var(--rail);
+}
+.dp-day.is-weekend {
+  color: var(--ink-2);
+}
+.dp-day.is-outside {
+  color: var(--ink-3);
+}
+/* Today as in the Calendar: an ink circle with sheet figures, the one filled date. */
+.dp-day.is-today span {
+  background: var(--ink);
+  color: var(--sheet);
+  font-weight: 600;
+}
+/* The date already set: a ring round its number. */
+.dp-day.is-current span {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+.dp-day.is-today.is-current span {
+  box-shadow: 0 0 0 1.5px var(--sheet), 0 0 0 3px var(--ink);
+}
+/* A typed date, before Enter takes it: the picker's own cursor fill. */
+.dp-day.is-preview {
+  background: var(--select);
+  color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
+}
+@media (max-width: 540px) {
+  .picker.is-date {
+    width: calc(100vw - 24px);
+  }
+  .dp-body {
+    grid-template-columns: 1fr;
+  }
+  .dp-month {
+    padding: 10px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    justify-self: center;
+  }
+  .dp-grid {
+    grid-template-columns: repeat(7, 40px);
+  }
+  .dp-day {
+    height: 40px;
+  }
+}
 .picker-list li.picker-sep {
   height: 0;
   margin: 4px 0;
