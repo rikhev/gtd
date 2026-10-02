@@ -24,9 +24,12 @@ export interface Column<T> {
 /** On a phone the list keeps one column after the subject: the first of these it has. */
 const COMPACT_HIDE = ["done", "kind"];
 /** Columns a phone row's second line leaves out: wide records (a habit's strip) and counts that say little there. */
-const PHONE_SKIP = ["history", "files", "created"];
-/** A phone row's second line: what the wide list shows in columns, in their order, as a quiet line under the title. */
-type Stacked<T> = Column<T> & { stack?: Column<T>[] };
+const PHONE_SKIP = ["history", "files", "created", "open"];
+/**
+ * A phone row is one cell the whole width: the title, and under it a quiet line led by the row's marker (a project's
+ * lamp, a chase ring) and then what the wide list shows in columns, in their order.
+ */
+type Stacked<T> = Column<T> & { stack?: Column<T>[]; lead?: Column<T>[] };
 /** Names for the unlabelled lead columns, for screen readers. */
 const LEAD_NAME: Record<string, string> = { mark: "Status", done: "Done", kind: "Kind" };
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
@@ -842,14 +845,15 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
   const columns: Stacked<T>[] = useMemo(() => {
     const visible = sized;
     if (!width) return visible;
-    // A phone (owner's request: lists easier to work with there): two lines a row. The marker, then the subject with
-    // the room left, and under it, in small `ink-3`, what the other columns hold. Nothing is cut to fit one line.
+    // A phone (owner's request: lists easier to work with there): two lines a row, the title the whole width (no
+    // column kept for a marker, which is empty on most rows), and under it, in small type, the marker and then what
+    // the other columns hold. Nothing is cut to fit one line.
     if (phone) {
       const firstLabelled = visible.findIndex((c) => c.label);
       const lead = visible.slice(0, firstLabelled < 0 ? 0 : firstLabelled).filter((c) => !COMPACT_HIDE.includes(c.key));
       const subject = visible.find((c) => c.key === lockedKey);
       const stack = visible.filter((c) => c !== subject && !lead.includes(c) && !COMPACT_HIDE.includes(c.key) && !PHONE_SKIP.includes(c.key) && c.label);
-      return [...lead, ...(subject ? [{ ...subject, width: "minmax(0, 1fr)", stack }] : [])];
+      return subject ? [{ ...subject, width: "minmax(0, 1fr)", stack, lead }] : lead;
     }
     // On a phone-width list, keep what identifies a row: its marker (flag, lamp), the subject with all the remaining
     // room, and one date or value column. The done box and the kind icon go (owner's request: room for the text; a
@@ -1382,6 +1386,11 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                           {c.render(row)}
                           {c.stack && (
                             <span className="row-meta">
+                              {c.lead?.map((m) => (
+                                <span key={m.key} className={`row-meta-item row-lead c-${m.key}`}>
+                                  {m.render(row)}
+                                </span>
+                              ))}
                               {c.stack
                                 .filter((m) => !m.blank?.(row))
                                 .map((m) => (

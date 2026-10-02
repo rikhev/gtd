@@ -3702,6 +3702,23 @@ textarea.field-text {
   .row.is-focus .row-meta {
     color: inherit;
   }
+  /* The row's marker leads its second line, sized to it; a row with nothing to mark shows nothing (no gap). */
+  .row-meta-item.row-lead:has(> .marker:empty) {
+    display: none;
+  }
+  .row-lead {
+    margin-right: -4px;
+  }
+  .row-lead .marker,
+  .row-lead .marker svg {
+    width: 16px;
+    height: 16px;
+  }
+  .row-lead .lamp {
+    width: 11px;
+    height: 11px;
+    margin-left: 0;
+  }
   /* Adding, where a thumb is: an ink circle over the list's lower right, above the capture line and the tab bar. */
   .phone-add {
     position: fixed;
