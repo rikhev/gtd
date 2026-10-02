@@ -246,7 +246,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           context_id: ctxId(a.context),
           due: a.due,
           defer: a.defer,
-          bring_back: a.bring_back ?? null,
+          bring_back: a.kind === "someday" ? (a.bring_back ?? null) : null,
           time_min: a.time_min,
           energy: a.energy,
           waiting_who: a.kind === "waiting" ? a.waiting_who : null,
@@ -317,7 +317,8 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       });
     if (field === "due" || field === "defer")
       ui.openPicker({ type: "date", title: field === "due" ? "Due date" : "Start date", current: a[field], onPick: (d) => updateRow(i, { [field]: d }) });
-    if (field === "back") ui.openPicker({ type: "date", title: "Bring back on a day", current: a.bring_back ?? null, onPick: (d) => updateRow(i, { bring_back: d }) });
+    // Only a someday row has a bring back day: anything current is already decided.
+    if (field === "back" && a.kind === "someday") ui.openPicker({ type: "date", title: "Bring back on a day", current: a.bring_back ?? null, onPick: (d) => updateRow(i, { bring_back: d }) });
     if (field === "time") ui.openPicker({ type: "time", current: a.time_min, onPick: (m) => updateRow(i, { time_min: m }) });
     if (field === "energy") ui.openPicker({ type: "energy", current: a.energy, onPick: (e) => updateRow(i, { energy: e }) });
     if (field === "who") askWaitingOn(ui, a.waiting_who, (who) => updateRow(i, { kind: "waiting", waiting_who: who }));
@@ -479,7 +480,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     { id: "cl.makeproject", label: "Make it a project", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
     { id: "cl.due", label: "Set due date", group: "Fields", keys: ["d"], enabled: ready, run: () => pickFor(rowOfFocus(), "due") },
     { id: "cl.defer", label: "Set start date", group: "Fields", keys: ["s"], enabled: ready, run: () => pickFor(rowOfFocus(), "defer") },
-    { id: "cl.back", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: ready, run: () => pickFor(rowOfFocus(), "back") },
+    { id: "cl.back", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: ready && Boolean(draft?.actions.some((a) => a.kind === "someday")), run: () => pickFor(rowOfFocus(), "back") },
     { id: "cl.time", label: "Set time estimate", group: "Fields", keys: ["m"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
     { id: "cl.energy", label: "Set energy", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
     { id: "cl.kind", label: "File as", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
@@ -727,7 +728,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                             <span className="p-lbl">Start</span>
                             {a.defer ? formatLong(a.defer) : <span className="dash" aria-hidden="true">–</span>}
                           </button>
-                          {(a.kind === "someday" || a.bring_back) && (
+                          {a.kind === "someday" && (
                             <button type="button" className="p-field" onClick={() => pickFor(i, "back")}>
                               <span className="p-lbl">Bring back</span>
                               {a.bring_back ? formatLong(a.bring_back) : <span className="dash" aria-hidden="true">–</span>}

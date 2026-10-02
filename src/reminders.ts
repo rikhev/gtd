@@ -85,7 +85,8 @@ export function reminderChoices(ui: UI | null, st: Stuff, r: Reminder, finish: (
       ]);
     },
   });
-  if (ui) out.push({
+  // Only a someday item is brought back again: one that is current is already decided.
+  if (ui && r.item.status === "someday") out.push({
     k: "b",
     label: "Bring it back again later",
     run: () =>

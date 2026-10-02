@@ -493,7 +493,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
             {a.notes && <AlignLeft className="ind-notes" size={12} strokeWidth={2} aria-label="Has notes" />}
             {filesByOwner.has(a.id) && <Paperclip className="ind-files" size={12} strokeWidth={2} aria-label="Has files" />}
             {a.defer && a.defer > t && <Clock size={12} strokeWidth={2} aria-label={`Starts ${formatLong(a.defer)}`} />}
-            {a.bring_back && (
+            {a.status === "someday" && a.bring_back && (
               <span className="back-on" title={`Comes back to the Inbox on ${formatLong(a.bring_back)}`}>
                 <CalendarClock size={12} strokeWidth={2} aria-hidden /> {formatDate(a.bring_back)}
               </span>
@@ -583,7 +583,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       { key: "time", label: "Time", width: "52px", align: "end", drop: 3, render: (a) => <TimeCell min={a.time_min} /> },
       { key: "energy", label: "Energy", width: "62px", drop: 2, render: (a) => <Energy level={a.energy} /> },
       areaCol,
-      { ...backCol, optional: true },
       repeatCol,
       createdCol,
       updatedCol,

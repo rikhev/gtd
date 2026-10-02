@@ -693,7 +693,7 @@ function ProjectDetail({ p }: { p: Project }) {
         </PickField>
         {/* The same grid as an action's: when it comes up for you (start, or for a someday project when to look at it
             again) on the left, Due always on the right. Each status shows the dates it needs; any date already set
-            still shows, after them. */}
+            still shows, after them, except bring back, which only a someday project has. */}
         {(() => {
           const someday = p.status === "someday";
           const startF = (
@@ -713,7 +713,7 @@ function ProjectDetail({ p }: { p: Project }) {
           );
           const left = someday ? backF : p.status === "active" || p.start ? startF : null;
           const right = !someday || p.due ? dueF : null;
-          const extra = someday ? (p.start ? startF : null) : p.bring_back ? backF : null;
+          const extra = someday && p.start ? startF : null;
           return (
             <>
               {(left || right) && (left ?? <span key="gl" className="field-gap" aria-hidden="true" />)}

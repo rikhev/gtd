@@ -154,6 +154,10 @@ for (const [was, now] of [["#0f8a8a", "#0e8181"], ["#b7791f", "#9f691b"]]) {
   for (const t of ["contexts", "areas"]) db.prepare(`UPDATE ${t} SET color = ? WHERE lower(color) = ?`).run(now, was);
 }
 
+// Bring back is for Someday only (owner's decision): a current item is already decided. Dates left on current items
+// from before are cleared; runs every start and changes nothing once done.
+db.exec("UPDATE actions SET bring_back = NULL WHERE bring_back IS NOT NULL AND status IN ('next', 'waiting', 'later')");
+db.exec("UPDATE projects SET bring_back = NULL WHERE bring_back IS NOT NULL AND status = 'active'");
 // The tickler brings an item back by pointing at it from the Inbox, never by copying it (GTD critique, P0).
 if (!(db.prepare("PRAGMA table_info(stuff)").all() as { name: string }[]).some((c) => c.name === "back_id")) {
   db.exec("ALTER TABLE stuff ADD COLUMN back_kind TEXT");

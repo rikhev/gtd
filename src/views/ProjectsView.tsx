@@ -394,7 +394,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.goal", row: true, label: "Set the goal it serves", group: "Fields", keys: ["g"], enabled: has, run: () => pickGoal(ui, nav.targets()) },
     { id: "proj.due", row: true, label: "Set due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },
     { id: "proj.start", row: true, label: "Set start date", group: "Fields", keys: ["s"], enabled: has, run: () => ed.date(nav.targets(), "start") },
-    { id: "proj.back", row: true, label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: has, run: () => ed.date(nav.targets(), "bring_back") },
+    { id: "proj.back", row: true, label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: has && s.projects.find((p) => p.id === focusId)?.status === "someday", run: () => ed.date(nav.targets(), "bring_back") },
     { id: "proj.move", row: true, label: "Move or merge", group: "Projects", keys: ["v"], enabled: has, run: () => ed.move(nav.targets()) },
     { id: "proj.trash", row: true, label: "Trash project", group: "Projects", keys: ["backspace", "delete"], enabled: has, run: () => ed.trash(nav.targets(), false) },
     { id: "proj.delete", row: true, label: "Delete permanently", group: "Projects", keys: ["shift+backspace", "shift+delete"], enabled: has, run: () => ed.trash(nav.targets(), true) },

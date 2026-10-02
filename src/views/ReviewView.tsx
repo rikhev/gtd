@@ -333,13 +333,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ["Due", a.due],
             ["Starts", a.defer],
             ["Follow up", a.status === "waiting" ? a.followup : null],
-            ["Comes back", a.bring_back],
+            ["Comes back", a.status === "someday" ? a.bring_back : null],
           ];
           for (const [label, d] of pairs) if (within(d)) out.push({ key: `${a.id}:${label}`, kind: "action", id: a.id, title: a.title, info: label, date: d });
         }
         for (const p of s.projects.filter((p) => p.status === "active" || p.status === "someday")) {
           if (within(p.due)) out.push({ key: `${p.id}:due`, kind: "project", id: p.id, title: p.title, info: "Project due", date: p.due });
-          if (within(p.bring_back)) out.push({ key: `${p.id}:back`, kind: "project", id: p.id, title: p.title, info: "Comes back", date: p.bring_back });
+          if (p.status === "someday" && within(p.bring_back)) out.push({ key: `${p.id}:back`, kind: "project", id: p.id, title: p.title, info: "Comes back", date: p.bring_back });
         }
         for (const e of events.filter((e) => e.date >= t)) out.push(eventRow(e));
         return out.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
@@ -404,8 +404,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       case "upcoming": {
         // Anything whose date has already passed is open: a missed due date, follow-up, start or tickler.
         const past = (d: string | null) => Boolean(d && d < t);
-        const acts = s.actions.filter((a) => ["next", "waiting", "someday"].includes(a.status) && (past(a.due) || (a.status === "waiting" && past(a.followup)) || past(a.bring_back)));
-        const projs = s.projects.filter((p) => (p.status === "active" || p.status === "someday") && (past(p.due) || past(p.bring_back)));
+        const acts = s.actions.filter((a) => ["next", "waiting", "someday"].includes(a.status) && (past(a.due) || (a.status === "waiting" && past(a.followup)) || (a.status === "someday" && past(a.bring_back))));
+        const projs = s.projects.filter((p) => (p.status === "active" || p.status === "someday") && (past(p.due) || (p.status === "someday" && past(p.bring_back))));
         return acts.length + projs.length;
       }
       default:

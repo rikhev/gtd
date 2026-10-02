@@ -226,6 +226,21 @@ function dropStaleWaiting(ops: Op[]): Op[] {
   );
 }
 
+/**
+ * Bring back is for Someday only (owner's decision): it defers a decision, and an item on Next Actions, Waiting For or
+ * Projects is already decided, so it never goes back to the Inbox. Made current, an item drops its date (⌘Z restores it).
+ */
+const CURRENT: Record<string, string[]> = { actions: ["next", "waiting", "later"], projects: ["active"] };
+function dropBringBack(ops: Op[]): Op[] {
+  return ops.map((op) =>
+    op.type === "patch" && CURRENT[op.table]?.includes(op.data.status as string)
+      ? { ...op, data: { bring_back: null, ...op.data } }
+      : op.type === "create" && CURRENT[op.table]?.includes(op.row.status as string) && op.row.bring_back
+        ? { ...op, row: { ...op.row, bring_back: null } }
+        : op,
+  );
+}
+
 /** Any edit to an action or reference (except a pure reorder) marks it touched, as the server does; undo restores the old date. */
 function touchActions(ops: Op[]): Op[] {
   return ops.map((op) =>
@@ -260,7 +275,7 @@ function stampTrash(ops: Op[]): Op[] {
  */
 export function mutate(label: string, rawOps: Op[], opts: { silent?: boolean; key?: string; join?: string; undoable?: boolean } = {}) {
   if (!rawOps.length) return;
-  const ops = stampTrash(touchActions(dropStaleWaiting(rawOps)));
+  const ops = stampTrash(touchActions(dropBringBack(dropStaleWaiting(rawOps))));
   const inverse = invert(ops);
   applyLocal(ops);
   void send(ops);

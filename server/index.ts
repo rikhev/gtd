@@ -24,7 +24,8 @@ app.post("/api/auth/logout-all", (c) => logout(c, true));
  * Tickler: on its bring-back date an item comes back for a fresh decision, as GTD's tickler does. It stays exactly what
  * it was (its list, project, context, who it waits on, its dates and files); the Inbox gets an entry pointing at it,
  * "Due back: …", and clarifying that entry decides again (GTD critique: the old tickler copied the text and trashed the
- * original, losing everything else).
+ * original, losing everything else). Only Someday items come back (owner's decision): anything on Next Actions, Waiting
+ * For or Projects is already decided, and GTD never puts it back in the Inbox.
  */
 function runTickler() {
   const t = today();
@@ -37,13 +38,13 @@ function runTickler() {
       row: { id: randomUUID(), text: `Due back: ${title || "Untitled"}`, kind: "text", status: "inbox", created_at: now(), back_kind: kind, back_id: id },
     });
   for (const a of s.actions) {
-    if (a.bring_back && a.bring_back <= t && ["next", "waiting", "someday", "later"].includes(a.status)) {
+    if (a.bring_back && a.bring_back <= t && a.status === "someday") {
       back(a.title, "action", a.id);
       ops.push({ type: "patch", table: "actions", id: a.id, data: { bring_back: null } });
     }
   }
   for (const p of s.projects) {
-    if (p.bring_back && p.bring_back <= t && ["active", "someday"].includes(p.status)) {
+    if (p.bring_back && p.bring_back <= t && p.status === "someday") {
       back(p.title, "project", p.id);
       ops.push({ type: "patch", table: "projects", id: p.id, data: { bring_back: null } });
     }

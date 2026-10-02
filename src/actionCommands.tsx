@@ -538,7 +538,8 @@ export function actionRowCommands(
     { id: "row.time", label: "Set time estimate", group: "Fields", keys: ["m"], run: () => ed.time(ids()) },
     { id: "row.energy", label: "Set energy", group: "Fields", keys: ["g"], run: () => ed.energy(ids()) },
     { id: "row.repeat", label: "Set repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(ids()) },
-    { id: "row.bringback", label: "Bring back on a day", group: "Fields", keys: ["b"], run: () => ed.date(ids(), "bring_back") },
+    // Bring back defers a decision, so only a someday item has one; anything current is already decided.
+    { id: "row.bringback", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: focus?.status === "someday", run: () => ed.date(ids(), "bring_back") },
     { id: "row.person", label: "Set who it's with", group: "Fields", keys: ["h"], run: () => ed.person(ids()) },
     { id: "row.delegate", label: "Delegate → Waiting For", group: o.group, keys: ["shift+f"], run: () => ed.delegate(ids()) },
     { id: "row.trash", label: "Trash", group: o.group, keys: ["backspace", "delete"], run: () => trash(false) },

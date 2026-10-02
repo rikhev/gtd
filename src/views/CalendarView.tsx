@@ -102,7 +102,7 @@ function itemsOf(s: State, t: string, soft: boolean): Item[] {
       // A follow-up date is day-specific information (GTD), so it is on the hard landscape, not a soft date.
       if (a.status === "waiting" && a.followup) out.push({ ...base, key: `f:${a.id}`, start: a.followup, end: a.followup, role: "followup", startField: "followup", endField: "followup", overdue: a.followup < t });
     }
-    if (soft && (open || a.status === "someday") && a.bring_back)
+    if (soft && a.status === "someday" && a.bring_back)
       out.push({ key: `b:${a.id}`, kind: "action", id: a.id, title: a.title || "Untitled action", start: a.bring_back, end: a.bring_back, role: "tickler", startField: "bring_back", endField: "bring_back" });
   }
   for (const p of s.projects) {
@@ -112,7 +112,7 @@ function itemsOf(s: State, t: string, soft: boolean): Item[] {
       else if (p.due) out.push({ ...base, key: `p:${p.id}`, start: p.due, end: p.due, role: "due", startField: null, endField: "due", overdue: p.due < t });
       else if (soft && p.start) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.start, role: "start", startField: "start", endField: null });
     }
-    if (soft && (p.status === "active" || p.status === "someday") && p.bring_back)
+    if (soft && p.status === "someday" && p.bring_back)
       out.push({ key: `pb:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", start: p.bring_back, end: p.bring_back, role: "tickler", startField: "bring_back", endField: "bring_back" });
   }
   // Longer and earlier first, projects before their actions: the lanes read like a plan.
