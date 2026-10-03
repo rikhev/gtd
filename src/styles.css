@@ -3658,10 +3658,21 @@ textarea.field-text {
     padding-block: 9px;
     white-space: normal;
   }
+  /* The title wraps; a mark that belongs to it (repeats) follows its last word instead of standing on a line alone. */
   .grid.is-phone .is-stacked .subject {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px var(--sp-sm);
+  }
+  .grid.is-phone .is-stacked .chase-label,
+  .grid.is-phone .is-stacked .person-label {
+    flex: 0 0 100%;
+  }
+  .grid.is-phone .is-stacked .subject-icons {
+    align-self: baseline;
+  }
+  .grid.is-phone .is-stacked .subject-icons:empty {
+    display: none;
   }
   .grid.is-phone .is-stacked .subject-text {
     display: -webkit-box;
@@ -3676,34 +3687,83 @@ textarea.field-text {
     white-space: nowrap;
     font-size: 13px;
   }
+  /* The second line is one quiet voice (critique: dates in full ink beside grey names, values with no names, a meter
+     wrapping onto a third line): everything in 13px ink-2, a date led by what it is in ink-3 ("Due Tue"), red kept
+     for what is overdue; the project or context last, cut short on one line rather than pushing the rest down. */
   .row-meta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 2px 12px;
+    gap: 2px 14px;
     min-width: 0;
     font-size: 13px;
+    line-height: 18px;
     color: var(--ink-2);
   }
   .row-meta:empty,
   .row-meta-item:empty,
-  .row-meta-item:has(> .dash:only-child) {
+  .row-meta-item:has(> .dash) {
     display: none;
   }
   .row-meta-item {
     display: inline-flex;
     align-items: center;
+    gap: 5px;
+    flex: none;
     min-width: 0;
     max-width: 100%;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  .row-meta-label {
+    color: var(--ink-3);
+  }
+  .row-meta-item:has(.is-overdue) .row-meta-label {
+    color: inherit;
+  }
+  .row-meta .date:not(.is-overdue),
+  .row-meta .num {
+    color: inherit;
+  }
+  .row-meta .date.is-soon {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .row-meta .date.is-overdue {
+    font-weight: 600;
+  }
+  /* Where it belongs takes what is left of the line and is cut short there; under 7em it moves to a line of its own. */
+  .row-meta-item.c-proj,
+  .row-meta-item.c-project,
+  .row-meta-item.c-area,
+  .row-meta-item.c-from,
+  .row-meta-item.c-where,
+  .row-meta-item.c-next,
+  .row-meta-item.c-what {
+    flex: 1 1 0;
+    min-width: 7em;
+    display: block;
+  }
+  .row-meta-item.c-proj > *,
+  .row-meta-item.c-project > *,
+  .row-meta-item.c-next > * {
+    display: inline;
+  }
+  .row-meta .energy {
+    height: 10px;
+  }
+  .row-meta .energy i {
+    width: 4px;
+    height: 10px;
+  }
   .row.is-focus .row-meta {
     color: inherit;
   }
-  /* The row's marker leads its second line, sized to it; a row with nothing to mark shows nothing (no gap). */
-  .row-meta-item.row-lead:has(> .marker:empty) {
+  /* The row's marker leads its second line, sized to it; a row with nothing to mark shows nothing (no gap), and the
+     plain ring (an action that is only an action) is nothing to mark either. */
+  .row-meta-item.row-lead:has(> .marker:empty),
+  .row-meta-item.row-lead:has(> .marker:not(.is-chase, .is-done, .event-mark)) {
     display: none;
   }
   .row-lead {
@@ -5524,6 +5584,17 @@ body.is-cal-dragging {
     background: none;
     box-shadow: none;
     color: inherit;
+  }
+  /* The active list's cursor rule outweighed the one above, so a phone list opened with its first row boxed in blue. */
+  html:not(.engaged) .list-region.is-active .grid.is-phone .row.is-focus,
+  html:not(.engaged) .list-region.is-active .grid.is-phone .group-head.is-focus {
+    background: none;
+    box-shadow: none;
+    color: inherit;
+  }
+  html:not(.engaged) .grid.is-phone .row.is-focus .date.is-overdue {
+    color: var(--alert);
+    text-decoration: none;
   }
 }
 @media (max-width: 820px) {

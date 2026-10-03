@@ -30,6 +30,14 @@ const PHONE_SKIP = ["history", "files", "created", "open"];
  * lamp, a chase ring) and then what the wide list shows in columns, in their order.
  */
 type Stacked<T> = Column<T> & { stack?: Column<T>[]; lead?: Column<T>[] };
+/**
+ * A phone row's second line has no column heads, so a bare date says nothing ("Tue", "21 Sep 1 Oct"): the dates whose
+ * meaning the heading carried say it before the value ("Due Tue", "Since 21 Sep · Follow up 1 Oct").
+ */
+const PHONE_LABEL: Record<string, string> = { due: "Due", follow: "Follow up", since: "Since", back: "Comes back", start: "Starts", defer: "Starts", target: "By", updated: "Updated" };
+/** The order of a phone row's second line: when first, then how long and how hard, then where it belongs (cut short). */
+const PHONE_ORDER = ["due", "follow", "since", "back", "start", "defer", "target", "date", "when", "at", "left", "time", "energy", "ctx", "who"];
+const phoneRank = (key: string) => (PHONE_ORDER.includes(key) ? PHONE_ORDER.indexOf(key) : PHONE_ORDER.length);
 /** Names for the unlabelled lead columns, for screen readers. */
 const LEAD_NAME: Record<string, string> = { mark: "Status", done: "Done", kind: "Kind" };
 const COMPACT_TAIL = ["due", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
@@ -852,7 +860,9 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       const firstLabelled = visible.findIndex((c) => c.label);
       const lead = visible.slice(0, firstLabelled < 0 ? 0 : firstLabelled).filter((c) => !COMPACT_HIDE.includes(c.key));
       const subject = visible.find((c) => c.key === lockedKey);
-      const stack = visible.filter((c) => c !== subject && !lead.includes(c) && !COMPACT_HIDE.includes(c.key) && !PHONE_SKIP.includes(c.key) && c.label);
+      const stack = visible
+        .filter((c) => c !== subject && !lead.includes(c) && !COMPACT_HIDE.includes(c.key) && !PHONE_SKIP.includes(c.key) && c.label)
+        .sort((a, b) => phoneRank(a.key) - phoneRank(b.key));
       return subject ? [{ ...subject, width: "minmax(0, 1fr)", stack, lead }] : lead;
     }
     // On a phone-width list, keep what identifies a row: its marker (flag, lamp), the subject with all the remaining
@@ -1395,6 +1405,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                                 .filter((m) => !m.blank?.(row))
                                 .map((m) => (
                                   <span key={m.key} className={`row-meta-item c-${m.key}`}>
+                                    {PHONE_LABEL[m.key] && <span className="row-meta-label">{PHONE_LABEL[m.key]}</span>}
                                     {m.render(row)}
                                   </span>
                                 ))}
