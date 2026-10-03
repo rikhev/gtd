@@ -1081,7 +1081,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
       if (pressedByTouch()) return;
       if (document.querySelector(".list-region .grid") !== el) return; // one list owns the page: the first in the list region
       const t = e.target as HTMLElement;
-      if (!t.closest(".main") || t.closest(".detail, .picker, .overlay, .toast, .tabbar")) return;
+      if (!t.closest(".main") || t.closest(".detail, .picker, .overlay, .toast, .phone-sheet")) return;
       if (isEditable(t) || t.closest("button, a, input, textarea, select, label, [role=button], .chev")) return;
       const mod = IS_MAC ? e.metaKey : e.ctrlKey;
       const onRow = Boolean(t.closest(".row, .group-head"));

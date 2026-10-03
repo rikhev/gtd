@@ -1,5 +1,6 @@
-import { forwardRef, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { Search, Check, LogOut, Plus } from "lucide-react";
+import { forwardRef, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { flushSync } from "react-dom";
+import { Search, Check, LogOut, Plus, Menu, X, ArrowUp } from "lucide-react";
 import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { useCommands, keyLabel, keyAria, IS_MAC, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
@@ -54,12 +55,12 @@ const LISTS: ViewId[][] = [
 
 type Entry = { key: string; view: ViewId; label: string; name: string; start?: boolean };
 
-export function Rail({ active }: { active: boolean }) {
-  useHeldModifier();
-  const ui = useUI();
+/**
+ * The rail's signals, shared by the desktop rail and the phone's menu: numbers only where they ask for something.
+ */
+function useRailSignals() {
   const s = useTables("stuff", "actions", "projects", "reviews");
-  const { stallWeeks, authRequired } = useMeta(); // recount stalled projects when the threshold changes
-  const [cursor, setCursor] = useState(0);
+  const { stallWeeks } = useMeta(); // recount stalled projects when the threshold changes
   const t = today();
 
   // Signals, not inventory: a number shows only where it asks for something.
@@ -83,16 +84,6 @@ export function Rail({ active }: { active: boolean }) {
     return { inbox: inboxItems.length, overdue, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);
-  const reviewAge = daysSinceReview(s);
-  // The Inbox count is spoken only when it grows (something new landed), never as it is worked down.
-  const lastInbox = useRef(sig.inbox);
-  const [inboxNews, setInboxNews] = useState("");
-  useEffect(() => {
-    if (sig.inbox > lastInbox.current) setInboxNews(sig.inbox === 1 ? "1 item in the Inbox" : `${sig.inbox} items in the Inbox`);
-    lastInbox.current = sig.inbox;
-  }, [sig.inbox]);
-  const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
-
   const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
     if (id === "inbox") return sig.inbox ? { text: String(sig.inbox) } : null;
     if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : null;
@@ -104,6 +95,25 @@ export function Rail({ active }: { active: boolean }) {
     if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} due`, tone: "quiet" } : null;
     return null;
   };
+
+  return { s, sig, listMeta };
+}
+
+export function Rail({ active }: { active: boolean }) {
+  useHeldModifier();
+  const ui = useUI();
+  const { s, sig, listMeta } = useRailSignals();
+  const { authRequired } = useMeta();
+  const [cursor, setCursor] = useState(0);
+  const reviewAge = daysSinceReview(s);
+  // The Inbox count is spoken only when it grows (something new landed), never as it is worked down.
+  const lastInbox = useRef(sig.inbox);
+  const [inboxNews, setInboxNews] = useState("");
+  useEffect(() => {
+    if (sig.inbox > lastInbox.current) setInboxNews(sig.inbox === 1 ? "1 item in the Inbox" : `${sig.inbox} items in the Inbox`);
+    lastInbox.current = sig.inbox;
+  }, [sig.inbox]);
+  const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
 
   // Every stop the cursor can reach, in screen order.
   const health: Entry[] = [
@@ -369,103 +379,195 @@ function RailKey({ k }: { k?: string }) {
 }
 
 /**
- * On a phone the rail becomes a bottom bar (owner's request: the phone is slimmer, the Inbox, the Calendar and the
- * lists): Inbox, Calendar, Next, Waiting, and Lists for the rest of the lists. The Weekly Review, Settings and the
- * system check stay on the desktop.
+ * The phone (owner's request: content first, there is so little room): no bar across the foot and no standing capture
+ * field. Two round buttons float where a thumb rests. Bottom left, the menu: the rail as a sheet, with the pond, search,
+ * every list and its signal (the Inbox's count rides on the button), Done and the Trash. Bottom right, +: a sheet to
+ * capture into the Inbox, holding the list's own add (what N does there) as a quiet line under the field. The Weekly
+ * Review, Settings and the system check stay on the desktop (the phone is slimmer).
  */
-const PHONE_LISTS: ViewId[] = ["agendas", "projects", "checklists", "reference", "someday"];
-const PHONE_LOOK_BACK: ViewId[] = ["done", "trash"];
-export function TabBar() {
-  const ui = useUI();
-  const s = useTables("stuff");
-  const { authRequired } = useMeta();
-  const [open, setOpen] = useState(false);
-  const inbox = s.stuff.filter((x) => x.status === "inbox").length;
-  const rest = [...PHONE_LISTS, ...PHONE_LOOK_BACK];
-  // The Lists sheet closes on a tap anywhere outside it (the Lists tab itself toggles it).
-  const barRef = useRef<HTMLElement>(null);
+const PHONE_GROUPS: ViewId[][] = [
+  ["inbox", "calendar", "next", "waiting", "agendas", "projects"],
+  ["someday", "reference", "checklists"],
+  ["done", "trash"],
+];
+
+/** The keyboard's height over the page, so a sheet with a field in it sits on the keyboard rather than under it. */
+function useKeyboardInset(on: boolean) {
+  const [inset, setInset] = useState(0);
   useEffect(() => {
-    if (!open) return;
-    const outside = (e: PointerEvent) => {
-      if (!barRef.current?.contains(e.target as Node)) setOpen(false);
+    const vv = window.visualViewport;
+    if (!on || !vv) return setInset(0);
+    const measure = () => setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    measure();
+    vv.addEventListener("resize", measure);
+    vv.addEventListener("scroll", measure);
+    return () => {
+      vv.removeEventListener("resize", measure);
+      vv.removeEventListener("scroll", measure);
     };
-    window.addEventListener("pointerdown", outside, true);
-    return () => window.removeEventListener("pointerdown", outside, true);
-  }, [open]);
-  const go = (v: ViewId) => {
-    setOpen(false);
-    ui.go(v);
-  };
-  const tab = (v: ViewId, label: ReactNode) => (
-    <button type="button" className={`tab ${ui.view === v ? "is-current" : ""}`} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
-      {label}
-    </button>
-  );
-  const row = (v: ViewId) => (
-    <li key={v}>
-      <button type="button" className={ui.view === v ? "is-current" : ""} aria-current={ui.view === v ? "page" : undefined} onClick={() => go(v)}>
-        {VIEW_TITLES[v]}
-      </button>
-    </li>
-  );
-  return (
-    <nav ref={barRef} className="tabbar" aria-label="Lists">
-      {open && (
-        <div className="tabbar-more">
-          <ul className="more-list">{PHONE_LISTS.map(row)}</ul>
-          {/* Looking back: what is finished, and what was deleted. */}
-          <ul className="more-list more-back">{PHONE_LOOK_BACK.map(row)}</ul>
-          {authRequired && (
-            <ul className="more-signout">
-              <li>
-                <button type="button" onClick={() => void signOut()}>
-                  Sign out
-                  <LogOut size={15} strokeWidth={1.75} aria-hidden="true" />
-                </button>
-              </li>
-            </ul>
-          )}
-        </div>
-      )}
-      {tab(
-        "inbox",
-        <>
-          <span className="tab-name">Inbox</span>
-          {inbox > 0 && <span className="tab-count num">{inbox}</span>}
-        </>,
-      )}
-      {tab("calendar", <span className="tab-name">Calendar</span>)}
-      {tab("next", <span className="tab-name">Next</span>)}
-      {tab("waiting", <span className="tab-name">Waiting</span>)}
-      <button type="button" className={`tab ${open || rest.includes(ui.view) ? "is-current" : ""}`} aria-expanded={open} aria-haspopup="true" onClick={() => setOpen(!open)}>
-        {/* A tab is narrow: a list goes by its short name ("Someday"), and the tab says Lists while the sheet is open. */}
-        <span className="tab-name">{rest.includes(ui.view) && !open ? (ui.view === "someday" ? "Someday" : VIEW_TITLES[ui.view]) : "Lists"}</span>
-      </button>
-    </nav>
-  );
+  }, [on]);
+  return inset;
 }
 
-/**
- * The phone's way to add (owner's request: lists easier to work with on a phone): a round button over the list,
- * within a thumb's reach, doing what N does there (a new action, project, note, item; a capture in the Inbox). It
- * shows only where N does something, and steps aside while a details sheet, a picker or the viewer is open.
- */
-export function PhoneAdd() {
+export function PhoneChrome() {
   const ui = useUI();
   useSyncExternalStore(subscribeLayers, layersVersion);
-  if (ui.region !== "list" || ui.detail || ui.pickerOpen || ui.viewer) return null;
-  // The Inbox's N is the capture line, already at the foot of the phone: no second way to the same place.
-  const cmd = activeCommands().find((c) => c.keys?.includes("n") && c.enabled !== false && !c.row && c.id !== "inbox.new");
-  if (!cmd) return null;
+  const { sig, listMeta } = useRailSignals();
+  const { authRequired } = useMeta();
+  const [sheet, setSheet] = useState<"menu" | "capture" | null>(null);
+  // The list's own add, read as the capture sheet opens (what N does on the list beneath it), not on the Inbox, where
+  // N is capture itself.
+  const [listAdd, setListAdd] = useState<Command | null>(null);
+  const [draft, setDraft] = useState(false);
+  const captureRef = useRef<HTMLTextAreaElement>(null);
+  const menuBtn = useRef<HTMLButtonElement>(null);
+  const addBtn = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const keyboard = useKeyboardInset(sheet === "capture");
+
+  const close = (back = true) => {
+    const was = sheet;
+    setSheet(null);
+    if (back) (was === "menu" ? menuBtn : addBtn).current?.focus({ preventScroll: true });
+  };
+  useCommands("phonesheet", [{ id: "phone.close", label: sheet === "menu" ? "Close the menu" : "Close capture", group: "Move", keys: ["escape"], inInput: true, run: () => close() }], {
+    priority: 60,
+    active: sheet !== null,
+  });
+  // The menu takes focus as it opens, on where you are, so a screen reader starts there.
+  useEffect(() => {
+    if (sheet === "menu") menuRef.current?.querySelector<HTMLElement>('[aria-current="page"], button')?.focus({ preventScroll: true });
+  }, [sheet]);
+
+  const openMenu = () => setSheet("menu");
+  const openCapture = () => {
+    setListAdd(activeCommands().find((c) => c.keys?.includes("n") && c.enabled !== false && !c.row && c.id !== "inbox.new") ?? null);
+    // Rendered first, then focused within the tap itself: a phone raises its keyboard only for a focus the tap made.
+    flushSync(() => setSheet("capture"));
+    captureRef.current?.focus();
+  };
+  const go = (v: ViewId) => {
+    close(false);
+    ui.go(v);
+    ui.setRegion("list");
+  };
+
+  // The buttons step aside while a details sheet, a picker or the viewer has the screen.
+  const covered = ui.detail || ui.pickerOpen || ui.viewer;
+  const inboxLabel = sig.inbox ? `, ${sig.inbox} in the Inbox` : "";
+  // Something asks for attention elsewhere (overdue, to chase, stalled): a small red dot, when the Inbox has no count.
+  const asks = sig.overdue + sig.chase + sig.stalled > 0;
+
   return (
-    <button type="button" className="phone-add" aria-label={cmd.label} title={cmd.label} onClick={() => cmd.run()}>
-      <Plus size={22} strokeWidth={2.25} aria-hidden="true" />
-    </button>
+    <>
+      {!covered && sheet === null && (
+        <>
+          <button ref={menuBtn} type="button" className="phone-fab phone-menu-btn" aria-label={`Menu${inboxLabel}`} aria-haspopup="dialog" aria-expanded={false} onClick={openMenu}>
+            <Menu size={20} strokeWidth={2} aria-hidden="true" />
+            {sig.inbox > 0 ? (
+              <span className="phone-badge num" aria-hidden="true">
+                {sig.inbox > 99 ? "99+" : sig.inbox}
+              </span>
+            ) : (
+              asks && <span className="phone-dot" aria-hidden="true" />
+            )}
+          </button>
+          <button ref={addBtn} type="button" className={`phone-fab phone-add ${draft ? "has-draft" : ""}`} aria-label={draft ? "Capture (a draft is waiting)" : "Capture"} aria-haspopup="dialog" onClick={openCapture}>
+            <Plus size={22} strokeWidth={2.25} aria-hidden="true" />
+          </button>
+        </>
+      )}
+      {sheet !== null && <div className="phone-scrim" onClick={() => close()} aria-hidden="true" />}
+
+      {sheet === "menu" && (
+        <div ref={menuRef} className="phone-sheet phone-menu" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="phone-menu-head">
+            <Pond />
+            <button type="button" className="phone-close" aria-label="Close the menu" onClick={() => close()}>
+              <X size={20} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </div>
+          <button
+            type="button"
+            className="phone-search"
+            onClick={() => {
+              close(false);
+              ui.openSearch();
+            }}
+          >
+            <Search size={16} strokeWidth={2} aria-hidden="true" />
+            Search everything
+          </button>
+          <nav aria-label="Lists">
+            {PHONE_GROUPS.map((group, gi) => (
+              <ul key={gi} className="phone-menu-list">
+                {group.map((v) => {
+                  const m = listMeta(v);
+                  const here = ui.view === v;
+                  return (
+                    <li key={v}>
+                      <button type="button" className={here ? "is-current" : ""} aria-current={here ? "page" : undefined} onClick={() => go(v)}>
+                        <span className="phone-menu-name">{VIEW_TITLES[v]}</span>
+                        {m && <span className={`num phone-menu-meta ${m.tone === "due" ? "is-due" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ))}
+            {authRequired && (
+              <ul className="phone-menu-list">
+                <li>
+                  <button type="button" className="phone-signout" onClick={() => void signOut()}>
+                    <span className="phone-menu-name">Sign out</span>
+                    <LogOut size={16} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </li>
+              </ul>
+            )}
+          </nav>
+        </div>
+      )}
+
+      {/* Kept while closed (hidden), so a draft stays where it was typed until it is sent. */}
+      <div className="phone-sheet phone-capture" role="dialog" aria-modal="true" aria-label="Capture to the Inbox" hidden={sheet !== "capture"} style={{ bottom: keyboard }}>
+        <div className="phone-capture-head">
+          <h2 className="phone-capture-title">Capture to the Inbox</h2>
+          <button
+            type="button"
+            className="phone-close"
+            aria-label="Close capture"
+            onClick={() => {
+              if (draft) notify("Draft kept. It isn't in the Inbox until you send it.");
+              close();
+            }}
+          >
+            <X size={20} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+        <CaptureBar ref={captureRef} sheet onDraft={setDraft} onDone={() => close()} />
+        {listAdd && (
+          <button
+            type="button"
+            className="phone-list-add"
+            onClick={() => {
+              close(false);
+              listAdd.run();
+            }}
+          >
+            <Plus size={16} strokeWidth={2} aria-hidden="true" />
+            {listAdd.label}
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
-export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void }>(function CaptureBar({ onDone }, ref) {
+export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void; sheet?: boolean; onDraft?: (has: boolean) => void }>(function CaptureBar({ onDone, sheet, onDraft }, ref) {
   const [text, setText] = useState("");
+  const hasDraft = Boolean(text.trim());
+  useEffect(() => onDraft?.(hasDraft), [hasDraft]); // eslint-disable-line react-hooks/exhaustive-deps
   const [filed, setFiled] = useState<{ id: number; text: string }[]>([]);
   const [focused, setFocused] = useState(false);
   const seq = useRef(0);
@@ -482,7 +584,7 @@ export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void }
         run: () => {
           (document.activeElement as HTMLElement | null)?.blur?.();
           // An unsent draft stays in the bar; say so, rather than leave it silently behind.
-          if (text.trim()) notify("Draft kept in the capture bar. It isn't in the Inbox until you send it.");
+          if (text.trim()) notify(sheet ? "Draft kept. It isn't in the Inbox until you send it." : "Draft kept in the capture bar. It isn't in the Inbox until you send it.");
           onDone();
         },
       },
@@ -510,7 +612,8 @@ export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void }
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setFocused(false);
-          setFiled([]);
+          // In the phone's sheet the Send button takes the tap, not the focus: what was filed stays listed.
+          if (!sheet) setFiled([]);
         }}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
@@ -520,7 +623,20 @@ export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void }
           }
         }}
       />
-      {focused && filed.length > 0 && (
+      {sheet && (
+        <button
+          type="button"
+          className="capture-send"
+          aria-label="Send to the Inbox"
+          disabled={!hasDraft}
+          // The field keeps its focus (and the phone its keyboard) for the next thing to capture.
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={submit}
+        >
+          <ArrowUp size={18} strokeWidth={2.25} aria-hidden="true" />
+        </button>
+      )}
+      {(focused || sheet) && filed.length > 0 && (
         <ul className="capture-filed" aria-live="polite">
           {filed.map((f) => (
             <li key={f.id}>

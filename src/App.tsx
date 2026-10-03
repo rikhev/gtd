@@ -7,7 +7,7 @@ import { ChevronRight } from "lucide-react";
 import { quote, archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, notStarted, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
-import { Rail, RAIL, TabBar, PhoneAdd, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
+import { Rail, RAIL, PhoneChrome, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView } from "./views/TrashView.tsx";
@@ -682,10 +682,9 @@ export default function App() {
 
   return (
     <UIContext.Provider value={ui}>
-      <div className={`app ${detail || detailPinned ? "has-detail" : ""}`} data-region={region}>
+      <div className={`app ${detail || detailPinned ? "has-detail" : ""}`} data-region={region} data-searching={(phone && view === "search") || undefined}>
         <Rail active={region === "rail" && !picker && !palette} />
-        <TabBar />
-        {phone && <PhoneAdd />}
+        {phone && <PhoneChrome />}
         <main className="main">
           <header className="topbar">
             <CaptureBar ref={captureRef} onDone={() => ui.setRegion("list")} />
