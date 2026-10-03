@@ -4381,6 +4381,225 @@ textarea.field-text {
   color: var(--ink-3);
   font-size: var(--fs-head);
 }
+/* The calendar on a phone (it carries .is-phone only below 820px, so nothing here reaches the desktop). The toolbar is
+   three short lines instead of a wrapped row: the period with ‹ Today › at the thumb's side; the four views as equal
+   tabs across the width; what's shown (soft dates, each calendar, sync) as one line that scrolls sideways. */
+.calendar.is-phone .cal-bar-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title nav"
+    "modes modes"
+    "legend sync";
+  align-items: center;
+  gap: var(--sp-sm) var(--sp-md);
+  padding: 0 0 var(--sp-lg);
+}
+.calendar.is-phone .cal-title-period {
+  grid-area: title;
+  font-size: 17px;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.calendar.is-phone .cal-nav {
+  grid-area: nav;
+  margin-right: -10px;
+}
+.calendar.is-phone .cal-nav .icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  color: var(--ink);
+}
+.calendar.is-phone .cal-today {
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  font-size: var(--fs-small);
+}
+.calendar.is-phone .cal-modes {
+  grid-area: modes;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.calendar.is-phone .cal-modes button {
+  min-height: 44px;
+  height: auto;
+  border-radius: 0;
+  font-size: var(--fs-small);
+}
+/* The current view is underlined in ink, as the tab bar marks its place, rather than a chip in a strip of four. */
+.calendar.is-phone .cal-modes button.is-current {
+  background: none;
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+.calendar.is-phone .cal-legend {
+  grid-area: legend;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin: 0 0 0 -8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.calendar.is-phone .cal-legend::-webkit-scrollbar {
+  display: none;
+}
+.calendar.is-phone .cal-legend-item {
+  flex: none;
+  min-height: 36px;
+}
+/* With no calendars after it, Soft dates needs no hairline to set it apart. */
+.calendar.is-phone .cal-soft:last-child {
+  border-right: 0;
+}
+.calendar.is-phone .cal-sync {
+  grid-area: sync;
+  min-width: 44px;
+  min-height: 36px;
+}
+
+/* Agenda rows on a phone read as the lists' rows do: the whole title in 15px (up to two lines), and under it, in
+   13px, the mark and what the date is to the item. The Complete box keeps its 40px at the start. */
+.calendar.is-phone .cal-agenda .cal-agenda-row {
+  flex-wrap: wrap;
+  align-content: center;
+  gap: var(--sp-hair) var(--sp-sm);
+  min-height: 52px;
+  padding: 8px 8px 8px 40px;
+}
+.calendar.is-phone .cal-agenda-done {
+  left: 0;
+}
+.calendar.is-phone .cal-agenda-title {
+  order: -1;
+  flex: 1 0 100%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 1.3;
+}
+.calendar.is-phone .cal-agenda-mark {
+  width: auto;
+  height: 16px;
+  align-items: center;
+}
+.calendar.is-phone .cal-agenda-mark:has(> .marker:empty) {
+  display: none;
+}
+.calendar.is-phone .cal-agenda-mark .marker svg {
+  width: 18px;
+  height: 18px;
+}
+.calendar.is-phone .cal-agenda-when {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 16px;
+}
+.calendar.is-phone .cal-agenda-when:empty {
+  display: none;
+}
+.calendar.is-phone .cal-agenda-row.is-focus .cal-agenda-when {
+  color: inherit;
+}
+.calendar.is-phone .cal-agenda-none {
+  padding: 6px 0 10px 40px;
+  font-size: var(--fs-note);
+}
+
+/* The week agenda: each day a heading line (weekday, date, month), its items under it. A day with nothing on it is its
+   heading alone, quieter, so a week's free days don't push its busy ones off the screen. */
+.calendar.is-phone .cal-agenda-day {
+  padding: 6px 0 4px;
+}
+.calendar.is-phone .cal-agenda-head {
+  align-items: center;
+  min-height: 36px;
+  margin: 0;
+  font-size: var(--fs-note);
+}
+.calendar.is-phone .cal-agenda-day .cal-wd {
+  width: 32px;
+}
+.calendar.is-phone .cal-agenda-day .cal-num {
+  min-width: 28px;
+  height: 28px;
+  font-size: var(--fs-note);
+}
+.calendar.is-phone .cal-agenda-day.is-empty {
+  padding: 0;
+}
+.calendar.is-phone .cal-agenda-day.is-empty .cal-agenda-head {
+  min-height: 40px;
+  font-weight: 400;
+  color: var(--ink-3);
+}
+.calendar.is-phone .cal-agenda-day.is-empty .cal-wd,
+.calendar.is-phone .cal-agenda-day.is-empty .cal-agenda-month {
+  color: var(--ink-3);
+}
+.calendar.is-phone .cal-agenda-day.is-past {
+  opacity: 1;
+  color: var(--ink-2);
+}
+.calendar.is-phone .cal-agenda-day.is-today .cal-agenda-head {
+  color: var(--ink);
+}
+/* "N overdue" heads today on a phone (a cell has no room for it), at the line's end, a tap from the Day tab. */
+.calendar.is-phone .cal-agenda-head .cal-overdue {
+  position: static;
+  margin-left: auto;
+  min-height: 36px;
+  padding: 0 4px;
+  font-size: var(--fs-small);
+}
+
+/* The month on a phone: the chosen day's heading over its items, as in the week agenda. */
+.calendar.is-phone .cal-month + .cal-agenda-day {
+  margin-top: var(--sp-md);
+  border-bottom: 0;
+}
+.calendar.is-phone .cal-month + .cal-agenda-day .cal-agenda-head {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule-strong);
+  font-size: var(--fs-head);
+}
+.calendar.is-phone .cal-day .cal-num {
+  min-width: 28px;
+  height: 28px;
+}
+
+/* The year on a phone: two small months a row with no week numbers; a tap on a day opens its month there. */
+.calendar.is-phone .cal-year {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-page) var(--sp-gutter);
+}
+.calendar.is-phone .cal-mini-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.calendar.is-phone .cal-mini-wk {
+  display: none;
+}
+.calendar.is-phone .cal-mini-title {
+  min-height: 32px;
+  margin: 0;
+}
+.calendar.is-phone .cal-mini-day {
+  height: 26px;
+  margin: 0;
+}
+.calendar.is-phone .cal-mini-day:not(.is-cursor):hover {
+  box-shadow: none;
+}
+
 /* The month fits the window, and its weeks scroll inside it: the period title, navigation and weekday names stay put. */
 .calendar.is-month {
   height: 100%;

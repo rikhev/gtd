@@ -325,6 +325,9 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const title =
     mode === "day"
       ? `${cursor === t ? "Today · " : ""}${formatLong(cursor)}`
+      : mode === "week" && phone
+        ? // A phone's narrow title breaks between the dates, never inside one, and leaves out this year.
+          `Week ${isoWeek(weekDays[3])} · ${formatShort(weekDays[0]).replace(" ", "\u00a0")} – ${formatShort(weekDays[6]).replace(" ", "\u00a0")}${weekDays[6].slice(0, 4) === t.slice(0, 4) ? "" : `\u00a0${weekDays[6].slice(0, 4)}`}`
       : mode === "week"
       ? `Week ${isoWeek(weekDays[3])} · ${formatShort(weekDays[0])} – ${formatShort(weekDays[6])} ${weekDays[6].slice(0, 4)}`
       : mode === "month"
@@ -711,6 +714,22 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       setStriking((p) => new Set([...p].filter((k) => k !== i.key)));
     }, 380);
   };
+  /** Today's "N overdue", opening the Day tab: on a phone it sits on today's heading, since a cell has no room for it. */
+  const overdueLink = (d: string) =>
+    d === t && overdueCount > 0 ? (
+      <button
+        type="button"
+        className="cal-overdue"
+        onClick={() => {
+          setItemKey(null);
+          setCursor(t);
+          setMode("day");
+        }}
+        title="Open the Day tab: today, with what is overdue"
+      >
+        {overdueCount} overdue
+      </button>
+    ) : null;
   const agendaRow = (i: Item, d: string, label?: string) => {
     const what =
       label ??
@@ -739,7 +758,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
             {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} appt={i.projectAppt} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.kind === "event" ? (
               <EventMark color={i.color} />
             ) : (
-              <Marker />
+              <Marker quiet={phone} />
             )}
           </span>
           <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>
@@ -786,7 +805,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       )}
       {phone && !opts.head && dots(d)}
       {/* What should already have happened, on today's cell, so Week and Month don't hide it in the past. */}
-      {d === t && overdueCount > 0 && (
+      {d === t && overdueCount > 0 && !phone && (
         <button
           type="button"
           className="cal-overdue"
@@ -842,7 +861,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   useEffect(() => setBandOpen(false), [weekDays[0]]);
 
   let body;
-  if (mode === "year") body = <YearGrid year={year} ws={ws} items={all} cursor={cursor} t={t} onPick={(d) => (setCursor(d), setMode("month"))} onCursor={setCursor} />;
+  if (mode === "year") body = <YearGrid year={year} ws={ws} items={all} cursor={cursor} t={t} phone={phone} onPick={(d) => (setCursor(d), setMode("month"))} onCursor={setCursor} />;
   else if (mode === "month") {
     // Past weeks keep a compact three lanes ("+N more" for the rest); this week and later ones grow to hold what
     // is on them, and the month opens scrolled to this week (owner's decision: the calendar looks forward).
@@ -871,7 +890,10 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         {/* On a phone the chosen day's items are listed in full under the grid (tap a day to choose it). */}
         {phone && (
           <section className="cal-agenda-day" aria-label={formatLong(cursor)}>
-            <h3 className="cal-agenda-head">{formatLong(cursor)}</h3>
+            <h3 className="cal-agenda-head">
+              {formatLong(cursor)}
+              {overdueLink(cursor)}
+            </h3>
             {cursorItems.length ? <ul className="cal-agenda">{cursorItems.map((i) => agendaRow(i, cursor))}</ul> : <p className="cal-agenda-none">Nothing scheduled.</p>}
           </section>
         )}
@@ -929,13 +951,14 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         {weekDays.map((d) => {
           const list = onDay(d);
           return (
-            <section key={d} data-date={d} className={`cal-agenda-day ${d === t ? "is-today" : ""} ${d < t ? "is-past" : ""}`} aria-label={formatLong(d)}>
+            <section key={d} data-date={d} className={`cal-agenda-day ${d === t ? "is-today" : ""} ${d < t ? "is-past" : ""} ${list.length ? "" : "is-empty"}`} aria-label={`${formatLong(d)}${list.length ? "" : ", nothing scheduled"}`}>
               <h3 className="cal-agenda-head">
                 <span className="cal-wd">{WEEKDAY[dow(d)]}</span>
                 <span className="cal-num">{Number(d.slice(8))}</span>
                 <span className="cal-agenda-month">{MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}</span>
+                {overdueLink(d)}
               </h3>
-              {list.length ? <ul className="cal-agenda">{list.map((i) => agendaRow(i, d))}</ul> : <p className="cal-agenda-none">Nothing scheduled.</p>}
+              {list.length > 0 && <ul className="cal-agenda">{list.map((i) => agendaRow(i, d))}</ul>}
             </section>
           );
         })}
@@ -1141,7 +1164,7 @@ function formatShort(d: string) {
 }
 
 /** The year at a glance: twelve small months, each day shaded by how much it holds and dotted where something is due. */
-function YearGrid({ year, ws, items, cursor, t, onPick, onCursor }: { year: number; ws: 0 | 1; items: Item[]; cursor: string; t: string; onPick: (d: string) => void; onCursor: (d: string) => void }) {
+function YearGrid({ year, ws, items, cursor, t, phone, onPick, onCursor }: { year: number; ws: 0 | 1; items: Item[]; cursor: string; t: string; phone: boolean; onPick: (d: string) => void; onCursor: (d: string) => void }) {
   const { load, due, peak } = useMemo(() => {
     const load = new Map<string, number>();
     const due = new Map<string, "due" | "overdue">();
@@ -1193,7 +1216,7 @@ function YearGrid({ year, ws, items, cursor, t, onPick, onCursor }: { year: numb
                       aria-label={`${formatLong(d)}${n ? `, ${plural(n, "item")}` : ""}${due.get(d) === "overdue" ? ", overdue" : ""}`}
                       // The calendar's keys move through the days; 365 tab stops would bury everything after them.
                       tabIndex={-1}
-                      onClick={() => onCursor(d)}
+                      onClick={() => (phone ? onPick(d) : onCursor(d))}
                       onDoubleClick={() => onPick(d)}
                     >
                       {Number(d.slice(8))}
