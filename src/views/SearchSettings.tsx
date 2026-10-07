@@ -11,6 +11,7 @@ import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../actionCommands.tsx";
 import { isDark, setTheme, useTheme } from "../theme.ts";
+import { ALERT_LABEL, setAlertMode, useAlerts, type AlertMode } from "../alerts.ts";
 import type { ID } from "../../shared/types.ts";
 import { openChecklist } from "../checklists.ts";
 import { choosePassword, lockNow, useLock } from "../lock.ts";
@@ -141,7 +142,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: general, areas, contexts, export                          */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "context" | "area" | "stall" | "scheduled" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours" | "lock"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "context" | "area" | "stall" | "scheduled" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours" | "alerts" | "lock"; id: ID; text: string; status?: string; color?: string };
 
 /** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–4. */
 const TABS = [
@@ -169,6 +170,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   const [editing, setEditing] = useState<string | null>(null);
   const theme = useTheme();
   const lock = useLock();
+  const alerts = useAlerts();
   const [storedTab, setTab] = usePersisted<TabId>("settings:tab", "general");
   // A tab remembered from before that no longer exists falls back to General.
   const tab: TabId = TABS.some((t) => t.id === storedTab) ? storedTab : "general";
@@ -189,6 +191,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [
           { key: "week", kind: "week" as const, id: "week", text: "Week starts on" },
           { key: "hours", kind: "hours" as const, id: "hours", text: "Hours in the week" },
+          { key: "alerts", kind: "alerts" as const, id: "alerts", text: "Reminders" },
           // Subscribed calendars (the hard landscape), each named and coloured, then the way to add one.
           ...meta.calendars.map((f) => ({ key: `f:${f.id}`, kind: "feed" as const, id: f.id, text: f.name, color: f.color, status: f.error })),
           { key: "addfeed", kind: "addfeed" as const, id: "addfeed", text: "Add a calendar" },
@@ -373,6 +376,26 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
               }),
             );
           },
+        }),
+    },
+    {
+      id: "set.alerts",
+      row: true,
+      label: "Set appointment reminders",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "alerts",
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "Appointment reminders",
+          items: [
+            { id: "off", label: "Off" },
+            { id: "visual", label: "Visual only", hint: "A notification, silently" },
+            { id: "sound", label: "With sound", hint: "A notification and a soft chime" },
+          ],
+          current: alerts.mode,
+          onPick: (m) => m && void setAlertMode(m as AlertMode),
         }),
     },
     { id: "set.addfeed", label: "Add a calendar", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
@@ -620,6 +643,17 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Hours in the week</span>
             <span className="subject-more">The part of the day the Calendar's week shows, fitted to the window. A week with an appointment outside them stretches to show it.</span>
           </span>
+        ) : r.kind === "alerts" ? (
+          <span className="subject">
+            <span className="subject-text strong">Reminders</span>
+            {alerts.permission === "denied" ? (
+              <span className="subject-more error-text">The browser blocks notifications for this page. Allow them in its site settings, then choose again.</span>
+            ) : alerts.permission === "unsupported" ? (
+              <span className="subject-more">This browser can't show notifications.</span>
+            ) : (
+              <span className="subject-more">A notification 15 and again 5 minutes before each appointment with a time, while the app is open in a tab. Kept in this browser.</span>
+            )}
+          </span>
         ) : r.kind === "feed" ? (
           <span className="subject">
             <span className="subject-text strong">
@@ -675,6 +709,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           valueBtn(r, <span>{meta.weekStart === 0 ? "Sunday" : "Monday"}</span>)
         ) : r.kind === "hours" ? (
           valueBtn(r, <span className="num">{hh(meta.dayHours[0])}–{hh(meta.dayHours[1])}</span>)
+        ) : r.kind === "alerts" ? (
+          valueBtn(r, <span>{alerts.permission === "granted" || alerts.mode === "off" ? ALERT_LABEL[alerts.mode] : "Off"}</span>)
         ) : r.kind === "feed" ? (
           valueBtn(r, <span>{r.status ? "Can't read" : "Change link"}</span>)
         ) : r.kind === "addfeed" ? (

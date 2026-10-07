@@ -1,4 +1,5 @@
 import { syncCalendars } from "./calendarFeed.ts";
+import { startAlerts } from "./alerts.ts";
 import { fits, openFit, useFit } from "./fit.ts";
 import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
@@ -257,6 +258,15 @@ export default function App() {
     // Land on the new view's list, so the keyboard and screen readers start where the cursor is.
     requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
   }, []);
+  // Appointment reminders (Settings › General): a click on one goes to the appointment in the Calendar.
+  useEffect(
+    () =>
+      startAlerts((key) => {
+        go("calendar");
+        setRevealTarget({ kind: "event", id: key });
+      }),
+    [go],
+  );
   useEffect(() => {
     const onPop = () => {
       // A picker belongs to the list it was opened on: Back or Forward to another place closes it.

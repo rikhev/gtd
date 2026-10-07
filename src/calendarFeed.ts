@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
-import { load, notify, plural, updateMeta, useMeta } from "./store.ts";
+import { getMeta, load, notify, plural, updateMeta, useMeta } from "./store.ts";
 
 /** One appointment from a subscribed calendar, in local time (server/calendar.ts). Read-only. */
 export interface CalEvent {
@@ -81,6 +81,24 @@ function absorb(from: string, to: string, events: CalEvent[]) {
   saveKnown();
 }
 
+/** Ask the server for days from..to, unless that was done in the last few minutes or there are no calendars. */
+function ask(from: string, to: string) {
+  const ids = getMeta().calendars.map((c) => c.id).join(",");
+  if (!ids) return;
+  const key = `${ids}|${from}|${to}|${version_}`;
+  const at = askedAt.get(key);
+  if (at && Date.now() - at < FRESH_MS) return;
+  askedAt.set(key, Date.now());
+  // The server converts every appointment to this browser's time zone (it may itself run on UTC).
+  fetch(`/api/calendar/events?from=${from}&to=${to}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
+    .then((r) => r.json())
+    .then((j: { events?: CalEvent[]; linkNotes?: string[] }) => {
+      linksFollowed(j.linkNotes);
+      if (j.events) absorb(from, to, j.events);
+    })
+    .catch(() => askedAt.delete(key));
+}
+
 /** The appointments on days from..to from every subscribed calendar that isn't hidden here. */
 export function useEvents(from: string, to: string): { events: CalEvent[]; feeds: FeedInfo[] } {
   const { calendars } = useMeta();
@@ -90,20 +108,7 @@ export function useEvents(from: string, to: string): { events: CalEvent[]; feeds
   const known = useSyncExternalStore(subscribeKnown, () => knownVersion);
   const ids = calendars.map((c) => c.id).join(",");
   const key = `${ids}|${from}|${to}|${version}`;
-  useEffect(() => {
-    if (!ids) return;
-    const at = askedAt.get(key);
-    if (at && Date.now() - at < FRESH_MS) return;
-    askedAt.set(key, Date.now());
-    // The server converts every appointment to this browser's time zone (it may itself run on UTC).
-    fetch(`/api/calendar/events?from=${from}&to=${to}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`)
-      .then((r) => r.json())
-      .then((j: { events?: CalEvent[]; linkNotes?: string[] }) => {
-        linksFollowed(j.linkNotes);
-        if (j.events) absorb(from, to, j.events);
-      })
-      .catch(() => askedAt.delete(key));
-  }, [key, ids, from, to]);
+  useEffect(() => ask(from, to), [key, from, to]);
   const events = useMemo(
     () =>
       ids
@@ -116,6 +121,17 @@ export function useEvents(from: string, to: string): { events: CalEvent[]; feeds
   );
   return { events, feeds: ids ? calendars : [] };
 }
+
+/**
+ * The appointments on days from..to from every subscribed calendar, hidden ones too, for code outside the views (the
+ * reminders): what is known now, asked for again when it hasn't been for a few minutes. `onChange` hears fresh answers.
+ */
+export function eventsFor(from: string, to: string): CalEvent[] {
+  ask(from, to);
+  const ids = new Set(getMeta().calendars.map((c) => c.id));
+  return [...byKey.values()].filter((e) => overlaps(e, from, to) && ids.has(e.feed));
+}
+export const onEventsChange = subscribeKnown;
 
 /** One appointment, by key, for the details pane (appointments aren't kept in the store). */
 export function useEvent(key: string | null): CalEvent | undefined {
