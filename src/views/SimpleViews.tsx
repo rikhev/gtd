@@ -173,7 +173,6 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
         editing === r.key ? (
           <InlineEdit
             value={r.title}
-            placeholder={r.kind === "project" ? "Name the project" : "Describe something you might do"}
             onDone={(v) => {
               setEditing(null);
               const table = r.kind === "project" ? "projects" : "actions";
@@ -241,7 +240,6 @@ function findNote(ui: UI, current: ID | null, onPick: (id: ID) => void) {
     type: "list",
     title: "Find a note",
     wide: true,
-    placeholder: "Title or words in it",
     items: refs.map((r) => ({
       id: r.id,
       label: r.title || "Untitled",
@@ -431,7 +429,6 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
         editing === r.id ? (
           <InlineEdit
             value={r.title}
-            placeholder={r.form === "list" ? "Name the list" : "Title"}
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !r.title) mutate("Discarded", [{ type: "delete", table: "refs", id: r.id }], { silent: true });

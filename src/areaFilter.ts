@@ -66,7 +66,6 @@ export function openAreaFilter(ui: UI, chosen: string[] = read() ?? [], at: stri
   ui.openPicker({
     type: "list",
     title: "Which areas?",
-    placeholder: "Pick an area · ⇧↵ adds another",
     items: [
       { id: "off", label: "Every area", hint: chosen.length ? "Clear" : "No filter" },
       ...areas

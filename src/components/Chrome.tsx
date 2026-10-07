@@ -607,7 +607,7 @@ export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void; 
         className="capture-input"
         rows={Math.min(6, text.split("\n").length)}
         value={text}
-        placeholder="Capture anything"
+        placeholder="Capture"
         aria-label="Capture to the Inbox"
         onFocus={() => setFocused(true)}
         onBlur={() => {
@@ -848,7 +848,6 @@ export function Palette({ entries, where, rowName, close }: { entries: LayeredCo
           ref={input}
           className="palette-input"
           value={q}
-          placeholder="Find a command"
           role="combobox"
           aria-label="Command"
           aria-expanded="true"

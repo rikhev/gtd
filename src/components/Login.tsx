@@ -74,7 +74,6 @@ export function Login() {
                 className="field-text login-code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                placeholder="6 digits, or a recovery code"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />

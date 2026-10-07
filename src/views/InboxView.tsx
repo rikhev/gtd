@@ -163,7 +163,6 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
         editing === st.id ? (
           <InlineEdit
             value={st.text}
-            placeholder="Capture anything"
             onDone={(v) => {
               setEditing(null);
               if (v.trim() && v !== st.text) mutate(`Edited ${quote(v)}`, [{ type: "patch", table: "stuff", id: st.id, data: { text: v } }]);

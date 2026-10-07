@@ -690,7 +690,6 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                             value={a.title}
                             aria-label={`Action ${i + 1}`}
                             aria-describedby={raw ? `p-raw-${i}` : undefined}
-                            placeholder="What is the very next physical step?"
                             onFocus={(e) => raw && e.currentTarget.select()}
                             onKeyDown={enterLeaves}
                             onChange={(e) => {

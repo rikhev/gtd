@@ -58,7 +58,6 @@ export type PickerSpec =
       mustChoose?: boolean;
       /** Wider, for long titles and the lines a search finds (finding a note). */
       wide?: boolean;
-      placeholder?: string;
       /** Opened by the mouse (a right-click): the menu appears at this point instead of under the focused row. */
       at?: { x: number; y: number };
       onPick: (id: string | null) => void;
@@ -70,7 +69,6 @@ export type PickerSpec =
       type: "text";
       title: string;
       current: string;
-      placeholder?: string;
       preview?: (s: string) => { ok: boolean; text: string };
       /** A password: typed hidden, never offered by autofill. "new" asks the browser to suggest a strong one. */
       secret?: "current" | "new";

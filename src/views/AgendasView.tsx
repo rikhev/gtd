@@ -96,7 +96,6 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
       type: "text",
       title: `To take up with ${who}`,
       current: "",
-      placeholder: "What to raise, ask or give them",
       onPick: (v) => {
         const title = (v ?? "").trim();
         if (!title) return;
@@ -115,7 +114,6 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
       type: "text",
       title: `Waiting on ${who}`,
       current: "",
-      placeholder: "What are you waiting for from them?",
       onPick: (v) => {
         const title = (v ?? "").trim();
         if (!title) return;

@@ -14,13 +14,6 @@ import type { Action, ActionStatus, State, ID, Op } from "../../shared/types.ts"
 type Mode = "next" | "waiting" | "someday" | "done";
 type GroupBy = "project" | "who" | "context" | "due" | "none";
 
-const SUBJECT_HINT: Record<Mode, string> = {
-  next: "Describe the next action",
-  waiting: "Describe what you’re waiting for",
-  someday: "Describe something you might do",
-  done: "Describe the action",
-};
-
 const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", due: "Due date", none: "No grouping" };
 /** The View menu's sorts: the same state the column headings set (null is the list's own, manual order). */
 const SORTS: [string | null, string][] = [[null, "Manual order"], ["due", "Due date"], ["subject", "Subject"], ["ctx", "Context"], ["time", "Time estimate"], ["energy", "Energy"]];
@@ -32,13 +25,11 @@ const SORTS: [string | null, string][] = [[null, "Manual order"], ["due", "Due d
 export function InlineEdit({
   value,
   onDone,
-  placeholder,
   label = "Subject",
   onPasteLines,
 }: {
   value: string;
   onDone: (v: string, how: "enter" | "cancel" | "blur") => void;
-  placeholder: string;
   label?: string;
   onPasteLines?: (text: string, current: string) => boolean;
 }) {
@@ -64,7 +55,6 @@ export function InlineEdit({
       ref={ref}
       className="inline-edit"
       defaultValue={value}
-      placeholder={placeholder}
       aria-label={label}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === "Tab") {
@@ -478,7 +468,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     width: "minmax(180px, 2fr)",
     render: (a) =>
       act.editing === a.id ? (
-        <InlineEdit value={a.title} placeholder={SUBJECT_HINT[mode]} onDone={(v) => act.commitTitle(a.id, v)} />
+        <InlineEdit value={a.title} onDone={(v) => act.commitTitle(a.id, v)} />
       ) : (
         <span className="subject">
           {isChase(a) && mode === "next" && (

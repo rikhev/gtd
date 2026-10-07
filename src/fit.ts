@@ -93,7 +93,6 @@ export function openFit(ui: UI, chosen: string[] = read()?.where ?? [], at: stri
   ui.openPicker({
     type: "list",
     title: "Where are you?",
-    placeholder: "Pick a place · ⇧↵ adds another",
     items: [
       { id: "off", label: "Anywhere", hint: chosen.length ? "Clear" : "Every context" },
       ...(prev ? [{ id: "clear", label: "Show every next action", hint: "Clear the filter" }] : []),

@@ -319,16 +319,6 @@ export function Picker({ spec, close }: Props) {
 
   const title =
     spec.type === "time" ? "Time estimate" : spec.type === "energy" ? "Energy" : spec.title;
-  const placeholder =
-    spec.type === "list"
-      ? (spec.placeholder ?? "Type to filter")
-      : spec.type === "date"
-        ? "fri, +3d, next week, 3 oct"
-        : spec.type === "time"
-          ? "Press 1–6, or type 45m"
-          : spec.type === "energy"
-            ? "Press 1–3"
-            : spec.placeholder;
 
   return (
     <div className={`picker ${spec.type === "date" ? "is-date" : ""} ${spec.type === "list" && spec.wide ? "is-wide" : ""}`} ref={box} style={{ top: pos.top, left: pos.left }} role="dialog" aria-label={title}>
@@ -338,7 +328,6 @@ export function Picker({ spec, close }: Props) {
         className="picker-input"
         type={spec.type === "text" && spec.secret ? "password" : "text"}
         value={q}
-        placeholder={placeholder}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={onKey}
         role={spec.type === "text" ? undefined : "combobox"}

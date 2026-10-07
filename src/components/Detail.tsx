@@ -24,7 +24,6 @@ function TextField({
   label,
   value,
   onCommit,
-  placeholder,
   autoFocus,
   className,
   mark,
@@ -38,7 +37,6 @@ function TextField({
   value: string;
   /** Return false to refuse the edit; the field then snaps back to the saved value. */
   onCommit: (v: string) => void | boolean;
-  placeholder?: string;
   autoFocus?: boolean;
   className?: string;
 }) {
@@ -51,7 +49,8 @@ function TextField({
   };
   const common = {
     value: v,
-    placeholder,
+    // Marked when empty: the printout leaves an empty field out.
+    "data-empty": v.trim() === "" || undefined,
     "aria-label": label,
     onChange: (e: { target: { value: string } }) => setV(e.target.value),
     onBlur: commit,
@@ -110,7 +109,6 @@ function NotesField({
   saveKey,
   save,
   local = true,
-  placeholder,
   owner,
   onFollow,
   note,
@@ -120,7 +118,6 @@ function NotesField({
   saveKey: string;
   save: (text: string, opts: MutateOpts) => Promise<boolean> | void;
   local?: boolean;
-  placeholder?: string;
   owner?: { kind: FileRow["owner_kind"]; id: string };
   onFollow?: (f: Follow) => void;
   note?: Ref;
@@ -193,7 +190,6 @@ function NotesField({
           if (!linking.current) setWriting(false);
         }}
         onClickAt={(at) => (clickedAt.current = at)}
-        placeholder={placeholder}
         aria-label={label}
         ref={area}
         rows={4}
@@ -568,7 +564,7 @@ function ActionDetail({ a }: { a: Action }) {
       <div className="field-grid">
         {layout}
       </div>
-      <NotesField label="Notes" value={a.notes} saveKey={`actions:${a.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "actions", id: a.id, data: { notes: v } }], o)} owner={{ kind: "action", id: a.id }} placeholder="Details, links, phone numbers…" />
+      <NotesField label="Notes" value={a.notes} saveKey={`actions:${a.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "actions", id: a.id, data: { notes: v } }], o)} owner={{ kind: "action", id: a.id }} />
       <Files owner={{ kind: "action", id: a.id }} />
       <p className="detail-meta">
         Created {formatLong(a.created_at.slice(0, 10))}
@@ -762,7 +758,6 @@ function ProjectDetail({ p }: { p: Project }) {
       type: "text",
       title: `Plan a later step for “${p.title || "Untitled project"}”`,
       current: "",
-      placeholder: "A step that comes after the next one",
       onPick: (v) => {
         const title = (v ?? "").trim();
         if (title) mutate(`Planned for later: “${title}”`, [{ type: "create", table: "actions", row: { ...newAction({ title, project_id: p.id, status: "later" }) } }]);
@@ -778,7 +773,7 @@ function ProjectDetail({ p }: { p: Project }) {
       {/* Area and status live in their own fields below; the head only carries the project's health, beside its name. */}
       <TextField label="Project" mark={<Lamp health={projectHealth(s, p)} start={p.start} appt={nextAppt} />} value={p.title} onCommit={(v) => patch("projects", p.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
       {/* GTD's one planning question, optional and on one line (owner's rule: faithful, but no routine admin). */}
-      <TextField label="Done looks like" value={p.outcome ?? ""} onCommit={(v) => patch("projects", p.id, { outcome: v })} placeholder="Optional: what will be true when it's done" />
+      <TextField label="Done looks like" value={p.outcome ?? ""} onCommit={(v) => patch("projects", p.id, { outcome: v })} />
       <div className="field-grid">
         <PickField label="Area" k="A" onOpen={() => ed.area([p.id])}>
           {area ? <AreaName name={area.name} color={area.color} /> : none}
@@ -894,7 +889,6 @@ function ProjectDetail({ p }: { p: Project }) {
           ref={addInput}
           className="field-text add-action"
           value={draft}
-          placeholder="Add a next action"
           aria-label="Add a next action"
           aria-keyshortcuts="T"
           onChange={(e) => setDraft(e.target.value)}
@@ -907,7 +901,7 @@ function ProjectDetail({ p }: { p: Project }) {
         />
       </section>
       <SupportMaterial projectId={p.id} />
-      <NotesField label="Support notes" value={p.notes} saveKey={`projects:${p.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "projects", id: p.id, data: { notes: v } }], o)} owner={{ kind: "project", id: p.id }} placeholder="Plans, meeting notes, phone numbers, links…" />
+      <NotesField label="Support notes" value={p.notes} saveKey={`projects:${p.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "projects", id: p.id, data: { notes: v } }], o)} owner={{ kind: "project", id: p.id }} />
       <Files owner={{ kind: "project", id: p.id }} />
     </>
   );
@@ -990,7 +984,6 @@ function StuffDetail({ st }: { st: Stuff }) {
         saveKey={`stuff:${st.id}:notes`}
         save={(v, o) => mutate("Edited", [{ type: "patch", table: "stuff", id: st.id, data: { text: joinStuff(parts.title, v, parts.prefix) } }], o)}
         owner={{ kind: "stuff", id: st.id }}
-        placeholder="Details, links, phone numbers…"
       />
       <Files owner={{ kind: "stuff", id: st.id }} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
@@ -1081,7 +1074,6 @@ function ChecklistDetail({ c }: { c: Checklist }) {
           ref={addInput}
           className="field-text add-action"
           value={draft}
-          placeholder={c.repeats ? "Add a habit" : "Add an item"}
           aria-label={c.repeats ? "Add a habit" : "Add an item"}
           aria-keyshortcuts="N"
           onChange={(e) => setDraft(e.target.value)}
@@ -1368,7 +1360,6 @@ function RefListPane({ r }: { r: Ref }) {
         ref={addInput}
         className="field-text add-action"
         value={draft}
-        placeholder="Add an item"
         aria-label="Add an item"
         aria-keyshortcuts="N"
         onChange={(e) => setDraft(e.target.value)}
@@ -1468,7 +1459,6 @@ function RefDetail({ r }: { r: Ref }) {
               const ids = files.map((x) => x.id);
               ui.openViewer(ids, Math.max(0, ids.indexOf(f.id)));
             }}
-            placeholder="Write anything. # for a heading, - for a list, [[ to link a note"
           />
       )}
       {open && <Files owner={{ kind: "ref", id: r.id }} />}

@@ -193,7 +193,6 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
         editing?.id === c.id ? (
           <InlineEdit
             value={c.title}
-            placeholder="Name the checklist: Packing for a trip, Closing the month…"
             label="Checklist name"
             onDone={(v, how) => {
               const fresh = editing.fresh;
@@ -593,7 +592,6 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
         editing?.id === i.id ? (
           <InlineEdit
             value={i.title}
-            placeholder={i.section ? "Name the section: Clothes, Papers…" : "What to check or do"}
             label={i.section ? "Section heading" : "Item"}
             onPasteLines={(text, cur) => pasteLines(i, text, cur, editing.fresh)}
             onDone={(v, how) => {

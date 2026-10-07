@@ -275,7 +275,6 @@ export function NotesArea({
   value,
   onValue,
   onBlur,
-  placeholder,
   rows = 3,
   className,
   ref,
@@ -286,11 +285,10 @@ export function NotesArea({
   view = "live",
   onClickAt,
   ...rest
-}: Omit<HTMLAttributes<HTMLDivElement>, "onBlur" | "placeholder"> & {
+}: Omit<HTMLAttributes<HTMLDivElement>, "onBlur"> & {
   value: string;
   onValue: (v: string) => void;
   onBlur?: (e: FocusEvent<HTMLDivElement>) => void;
-  placeholder?: string;
   rows?: number;
   ref?: Ref<HTMLDivElement>;
   /** The item whose files a pasted or dropped file joins, and whose files ![[name]] shows. */
@@ -521,8 +519,6 @@ export function NotesArea({
       suppressContentEditableWarning
       role="textbox"
       aria-multiline="true"
-      aria-placeholder={placeholder}
-      data-placeholder={placeholder}
       data-empty={value === "" || undefined}
       spellCheck
       style={{ ["--rows" as string]: rows }}

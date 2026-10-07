@@ -60,7 +60,6 @@ export function askWaitingOn(ui: UI, current: string | null, apply: (who: string
     items: waitingNames().map((w) => ({ id: w, label: w })),
     current,
     mustChoose: true,
-    placeholder: "Who or what are you waiting on?",
     createLabel: (q) => `Waiting on “${q}”`,
     onCreate: (q) => apply(q.trim()),
     onPick: (who) => who && apply(who),
@@ -94,7 +93,6 @@ export function askPerson(ui: UI, current: string | null, apply: (who: string | 
     items: peopleNames().map((w) => ({ id: w, label: w })),
     current,
     noneLabel: "No one",
-    placeholder: "A person to raise it with, call or write to",
     createLabel: (q) => `For “${q}”`,
     onCreate: (q) => apply(q.trim()),
     onPick: (who) => apply(who ?? null),
@@ -111,7 +109,6 @@ export function askContext(ui: UI, title: string, apply: (contextId: ID, extra: 
     title,
     items: contextItems(),
     mustChoose: true,
-    placeholder: "Where can you do it? Pick or type a context",
     createLabel: (q) => `New context “${q.startsWith("@") ? q : "@" + q}”`,
     onCreate: (q) => {
       const { id, op } = createContextOp(q);
@@ -176,7 +173,6 @@ export function quickAddNextAction(ui: UI, words = "", project: ID | null = null
     type: "text",
     title: "New next action",
     current: words,
-    placeholder: "What's the next physical step, verb first",
     onPick: (v) => {
       const title = (v ?? "").trim();
       if (!title) return;
@@ -196,7 +192,6 @@ export function quickAddWaiting(ui: UI) {
     type: "text",
     title: "New waiting for",
     current: "",
-    placeholder: "What are you waiting for?",
     onPick: (v) => {
       const title = (v ?? "").trim();
       if (!title) return;
@@ -334,7 +329,6 @@ export function editors(ui: UI) {
         type: "text",
         title: "Repeat",
         current: one(ids)?.recurrence ?? "",
-        placeholder: "every mon, every 3 months, weekly",
         preview: (s) => {
           const r = parseRecurrence(s);
           if (r === null) return { ok: true, text: "Doesn’t repeat" };
@@ -395,7 +389,6 @@ export function editors(ui: UI) {
         type: "text",
         title: `First next action for “${proj.title}”`,
         current: "",
-        placeholder: "What's the very next step?",
         onPick: (title) => {
           if (!title.trim()) return;
           const add = (contextId: ID, extra: Op[] = []) => {
@@ -689,7 +682,6 @@ export function chaseAction(ui: UI, w: Action) {
     type: "text",
     title: "Chase it: the next action",
     current: `Chase ${w.waiting_who ?? "them"} about ${w.title}`,
-    placeholder: "Verb first: Call Anna about the NDA",
     onPick: (v) => {
       const title = (v ?? "").trim();
       if (!title) return;

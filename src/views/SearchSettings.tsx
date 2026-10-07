@@ -381,7 +381,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           type: "text",
           title: "Idle after (weeks)",
           current: String(meta.stallWeeks),
-          placeholder: "Number of weeks",
           preview: (v) => {
             const n = Number(v.trim());
             if (!v.trim()) return { ok: false, text: "Type a number of weeks" };
@@ -488,7 +487,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           type: "text",
           title: `${cur.text}: a new link`,
           current: "",
-          placeholder: "webcal://… or https://….ics",
           preview: linkPreview,
           onPick: (v) => void patchCalendar(cur.id, { url: v.trim() }, `“${cur.text}” now reads the new link`),
         }),
@@ -506,7 +504,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           type: "text",
           title: "Calendar name",
           current: cur.text,
-          placeholder: "Work, Private, Family…",
           onPick: (v) => v.trim() && void patchCalendar(cur.id, { name: v.trim() }, `Renamed “${v.trim()}”`),
         }),
     },
@@ -548,7 +545,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           type: "text",
           title: "Keep deleted items (days)",
           current: String(meta.trashDays),
-          placeholder: "Number of days",
           preview: (v) => {
             const n = Number(v.trim());
             if (!v.trim()) return { ok: false, text: "Type a number of days" };
@@ -683,7 +679,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         editing === r.key ? (
           <InlineEdit
             value={r.text}
-            placeholder={r.kind === "context" ? "Name the context" : "Name the area"}
             onDone={(v) => {
               setEditing(null);
               const table = r.kind === "area" ? "areas" : "contexts";
@@ -972,7 +967,6 @@ function addCalendar(ui: ReturnType<typeof useUI>) {
     type: "text",
     title: "Calendar link",
     current: "",
-    placeholder: "webcal://… or https://….ics",
     preview: linkPreview,
     onPick: async (v) => {
       const url = v.trim();
@@ -985,7 +979,6 @@ function addCalendar(ui: ReturnType<typeof useUI>) {
           type: "text",
           title: `Name it (${plural(probe.count ?? 0, "appointment")} found)`,
           current: guess,
-          placeholder: "Work, Private, Family…",
           onPick: (n) => {
             const name = n.trim() || guess;
             const used = new Set(getMeta().calendars.map((c) => c.color));

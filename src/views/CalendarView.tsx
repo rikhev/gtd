@@ -443,7 +443,6 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       type: "text",
       title: `New action for ${formatLong(day)}`,
       current: "",
-      placeholder: "What's the next action?",
       onPick: (title) => {
         if (!title.trim()) return;
         askContext(ui, "Context", (ctx, extra) => {
@@ -460,7 +459,6 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       type: "text",
       title: `New waiting for, follow up ${formatLong(day)}`,
       current: "",
-      placeholder: "What are you waiting for?",
       onPick: (title) => {
         if (!title.trim()) return;
         window.setTimeout(() =>

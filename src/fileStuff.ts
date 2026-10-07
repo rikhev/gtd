@@ -106,7 +106,6 @@ export function fileStuff(ui: UI, ids: ID[]) {
       { id: "__trash", label: "Trash", section: "now" },
       ...destinationItems().filter((it) => it.section === "projects"),
     ],
-    placeholder: "Filter, or name a new project",
     createLabel: (q) => `New project “${q}”, with this as its first action`,
     onCreate: (q) => {
       const p = newProject({ title: q });
@@ -141,7 +140,6 @@ export function fileStuff(ui: UI, ids: ID[]) {
         type: "text",
         title: `${count}${waiting ? "What are you waiting for?" : newProject ? `First next action of “${newProject}”` : "What's the very next physical step?"}`,
         current: stuffTitle(st),
-        placeholder: waiting ? "What you're waiting for" : "Verb first: Call Anna about the Q3 figures",
         onPick: (v) => {
           const words = (v ?? "").trim();
           if (!words) return;

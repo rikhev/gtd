@@ -31,7 +31,6 @@ export function linkSupport(ui: UI, projectId: ID) {
   ui.openPicker({
     type: "list",
     title: `Support material for “${project?.title || "Untitled project"}”`,
-    placeholder: "Find a reference or a checklist",
     items: [...refs, ...lists],
     mustChoose: true,
     onPick: (key) => {

@@ -477,7 +477,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       type: "text",
       title: `New project for “${goal?.title ?? "the goal"}”`,
       current: "",
-      placeholder: "The outcome, verb first",
       onPick: (v) => {
         const title = (v ?? "").trim();
         if (!title) return;
@@ -494,7 +493,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       type: "text",
       title: `New project in #${area?.name ?? "area"}`,
       current: "",
-      placeholder: "The outcome, verb first",
       onPick: (v) => {
         const title = (v ?? "").trim();
         if (!title) return;
@@ -706,7 +704,6 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         renaming === r.key ? (
           <InlineEdit
             value={r.title}
-            placeholder={r.kind === "project" ? "Name the project" : "Describe the next action"}
             onDone={(v) => {
               setRenaming(null);
               const title = v.trim();
@@ -895,7 +892,6 @@ function IdeaCapture({ captured, onCapture }: { captured: number; onCapture: (te
       <input
         className="field-text"
         value={text}
-        placeholder="Enter puts it in the Inbox"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.metaKey || e.ctrlKey || e.defaultPrevented) return;
@@ -934,7 +930,6 @@ function MindSweep({ captured, active, onDone, onCapture }: { captured: Stuff[];
             ref={input}
             className="field-text"
             value={text}
-            placeholder="One thought at a time"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               // ⌘↵ is "my head is empty" (the review's own key), not a capture.

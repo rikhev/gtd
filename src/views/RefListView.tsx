@@ -175,7 +175,6 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
         editing?.key === l.key ? (
           <InlineEdit
             value={l.text}
-            placeholder={l.section ? "Name the section: Shoes, Papers…" : "What to keep here"}
             label={l.section ? "Section heading" : "Item"}
             onPasteLines={(t, cur) => pasteLines(l, t, cur)}
             onDone={(v, how) => {

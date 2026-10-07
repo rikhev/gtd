@@ -2367,12 +2367,6 @@ textarea.field-text {
   cursor: text;
   caret-color: var(--ink);
 }
-.md-edit[data-empty]::before {
-  content: attr(data-placeholder);
-  color: var(--ink-3);
-  pointer-events: none;
-  position: absolute;
-}
 .md-edit b {
   font-weight: 650;
 }
@@ -6742,12 +6736,9 @@ body.is-cal-dragging {
   html[data-print] ::placeholder {
     color: transparent;
   }
-  html[data-print] .md-edit[data-empty]::before {
-    content: none;
-  }
-  /* Any field with nothing in it: an empty text field (its placeholder showing), empty notes, a picked field reading
+  /* Any field with nothing in it: an empty text field, empty notes, a picked field reading
      "–" (Start, Due, Project unset), no files. */
-  html[data-print="detail"] .field:has(.field-text:placeholder-shown),
+  html[data-print="detail"] .field:has(.field-text[data-empty]),
   html[data-print="detail"] .field:has(.md-edit[data-empty]),
   html[data-print="detail"] .field:has(.field-pick-value > .dash:first-child + .visually-hidden:last-child),
   html[data-print="detail"] .detail-files:not(:has(li)) {

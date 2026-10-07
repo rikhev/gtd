@@ -129,7 +129,6 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
         editing === h.id ? (
           <InlineEdit
             value={h.title}
-            placeholder={h.kind === "goal" ? "A goal for the next year or two: Run a marathon by next autumn" : h.kind === "vision" ? "What success looks like in 3–5 years" : "Why you do what you do, or a principle you hold to"}
             onDone={(v) => {
               setEditing(null);
               const title = v.trim();

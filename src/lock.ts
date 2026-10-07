@@ -355,7 +355,6 @@ export function askUnlock(ui: Ask, then?: () => void) {
     title: "Lock password",
     current: "",
     secret: "current",
-    placeholder: "Lock password",
     preview: (v) => (v ? { ok: true, text: "Unlock. It locks again after 5 minutes idle" } : { ok: false, text: "Type the lock password" }),
     onPick: (v) =>
       void unlock(v).then((ok) => {
@@ -375,7 +374,6 @@ export function choosePassword(ui: Ask, then?: () => void) {
     title: was ? "New lock password" : "Choose a lock password",
     current: "",
     secret: "new",
-    placeholder: "At least 8 characters",
     preview: (v) =>
       v.length < 8 ? { ok: false, text: "At least 8 characters" } : { ok: true, text: "Forgotten, it can't be reset: what it locks is lost" },
     onPick: (first) =>
@@ -385,7 +383,6 @@ export function choosePassword(ui: Ask, then?: () => void) {
           title: "Type it again",
           current: "",
           secret: "new",
-          placeholder: "The same password",
           preview: (v) => (v === first ? { ok: true, text: was ? "Change the lock password" : "Set the lock password" } : { ok: false, text: v ? "Not the same as the first" : "Type it once more" }),
           onPick: (v) => v === first && void setPassword(v).then((ok) => ok && then?.()),
         }),

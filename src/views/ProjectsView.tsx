@@ -28,7 +28,6 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         type: "text",
         title: "New project",
         current: "",
-        placeholder: "The outcome, verb first",
         onPick: (v) => {
           const title = (v ?? "").trim();
           if (!title) return;
@@ -67,7 +66,6 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         type: "text",
         title: `Waiting for, in “${name}”`,
         current: "",
-        placeholder: "What are you waiting for?",
         onPick: (v) => {
           const title = (v ?? "").trim();
           if (!title) return;
@@ -96,7 +94,6 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         type: "text",
         title: `Next action for “${name}”`,
         current: "",
-        placeholder: "Describe the next action",
         onPick: (v) => {
           const title = (v ?? "").trim();
           if (!title) return;
@@ -470,7 +467,6 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         editing === p.id ? (
           <InlineEdit
             value={p.title}
-            placeholder="Name the project"
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !p.title) mutate("Discarded empty project", [{ type: "delete", table: "projects", id: p.id }], { silent: true });
