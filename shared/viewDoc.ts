@@ -50,10 +50,46 @@ export function csvTable(text: string): string {
 /** Plain text (and Markdown, JSON) as it was typed, wrapped to the page. */
 export const textBlock = (text: string) => `<pre>${escapeHtml(text)}</pre>`;
 
+/**
+ * The people on an address line, as mail programs write them ('"Göran Mattsson" <goran@…>, Ernad <ernad@…>'): split at
+ * the commas between people (not those inside a quoted name), each into a name and an address.
+ */
+export function people(line: string): { name: string; address: string }[] {
+  const parts: string[] = [];
+  let cur = "";
+  let quoted = false;
+  let angled = false;
+  for (const ch of line) {
+    if (ch === '"') quoted = !quoted;
+    else if (ch === "<") angled = true;
+    else if (ch === ">") angled = false;
+    if ((ch === "," || ch === ";") && !quoted && !angled) {
+      parts.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  parts.push(cur);
+  return parts
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      const m = p.match(/^(.*?)\s*<([^>]*)>$/);
+      const name = (m ? m[1] : "").trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1").trim();
+      const address = (m ? m[2] : p).trim();
+      return { name: name === address ? "" : name, address };
+    });
+}
+
 /** An email: who, when and what, then its words. Cc shows only when it has someone on it. */
 export function emailBlock(head: { from?: string; to?: string; cc?: string; date?: string; subject?: string }, bodyHtml: string): string {
-  const row = (k: string, v?: string) => (v ? `<tr><th>${k}</th><td>${escapeHtml(v)}</td></tr>` : "");
-  return `<header class="mail"><h1>${escapeHtml(head.subject || "(No subject)")}</h1><table>${row("From", head.from)}${row("To", head.to)}${row("Cc", head.cc)}${row("Date", head.date)}</table></header>${bodyHtml}`;
+  // Each person is their name with the address after it in ink-2, kept whole; a long line wraps only between people.
+  const who = (line: string) =>
+    people(line)
+      .map((p, i, all) => `<span class="who">${p.name ? `${escapeHtml(p.name)} <span class="addr">${escapeHtml(p.address)}</span>` : escapeHtml(p.address)}${i < all.length - 1 ? "," : ""}</span>`)
+      .join(" ");
+  const row = (k: string, html?: string) => (html ? `<tr><th>${k}</th><td>${html}</td></tr>` : "");
+  const date = head.date ? escapeHtml(head.date) : "";
+  return `<header class="mail"><h1>${escapeHtml(head.subject || "(No subject)")}</h1><table>${row("From", head.from && who(head.from))}${row("To", head.to && who(head.to))}${row("Cc", head.cc && who(head.cc))}${row("Date", date)}</table></header>${bodyHtml}`;
 }
 
 /**
@@ -108,7 +144,10 @@ pre{white-space:pre-wrap;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monosp
 /* The page's own header for an email: held against the email's styles, which may restyle every table and cell. */
 .mail table{font-size:14px!important;margin:0!important;width:auto!important;border-collapse:collapse!important}
 .mail th,.mail td{border:0!important;padding:2px 12px 2px 0!important;text-align:left!important;vertical-align:top!important;background:none!important}
-.mail th{color:${c.ink2}!important;font-weight:500!important}.mail td{color:${c.ink}!important}
+.mail th{color:${c.ink2}!important;font-weight:500!important;white-space:nowrap!important;width:1%!important;padding-right:16px!important}
+.mail td{color:${c.ink}!important;overflow-wrap:normal!important}
+.mail .who{display:inline-block;max-width:100%;margin-right:.35em;overflow-wrap:anywhere}
+.mail .addr{color:${c.ink2};margin-left:.15em}
 .none{color:${c.ink2}}
 ::selection{background:#dce6f3}
 </style></head><body><div class="doc">${body}</div></body></html>`;
