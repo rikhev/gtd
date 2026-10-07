@@ -149,7 +149,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     { id: "cl.open", row: true, label: "Open checklist", group: "Checklists", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && openChecklist(focusId) },
     { id: "cl.rename", row: true, label: "Rename", group: "Checklists", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing({ id: focusId, fresh: false }) },
     { id: "cl.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: Boolean(focusId), run: () => setArea(ui, targets()) },
-    { id: "cl.jump", row: true, label: "Jump to its project", group: "Checklists", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
+    { id: "cl.jump", row: true, label: "Jump to its project", group: "Checklists", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
     { id: "cl.project", row: true, label: "Set project", group: "Fields", keys: ["p"], enabled: Boolean(focusId), run: () => setChecklistProject(ui, targets()) },
     { id: "cl.repeat", row: true, label: "Set repeat", group: "Fields", keys: ["r"], enabled: Boolean(focusId), run: () => pickRepeats(ui, targets()) },
     { id: "cl.over", row: true, label: "Start over", group: "Checklists", enabled: anyTicked(targets()), run: () => startOver(targets()) },
@@ -535,7 +535,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.repeat", label: repeats ? `Change repeat (now ${repeatsLabel(repeats).toLowerCase()})` : "Set repeat", group: "Fields", keys: ["r"], run: () => pickRepeats(ui, [list.id]) },
     { id: "ci.renamelist", label: "Rename checklist", group: "Checklist", run: rename },
     { id: "ci.area", label: "Set the checklist's area", group: "Fields", keys: ["a"], run: () => setArea(ui, [list.id]) },
-    { id: "ci.jump", label: "Jump to the project it supports", group: "Checklist", keys: ["j"], run: () => ui.jumpFromSupport("checklist", list.id) },
+    { id: "ci.jump", label: "Jump to the project it supports", group: "Checklist", keys: ["shift+j"], run: () => ui.jumpFromSupport("checklist", list.id) },
     { id: "ci.project", label: "Set the project it supports", group: "Fields", keys: ["p"], run: () => setChecklistProject(ui, [list.id]) },
     {
       id: "ci.trashlist",

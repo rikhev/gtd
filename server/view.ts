@@ -23,7 +23,8 @@ export async function renderPage(name: string, mime: string, buf: Buffer, dark: 
   if (mime.includes("wordprocessingml")) {
     // Word's own headings, lists, tables, emphasis and pictures (kept inside the page); its fonts and colours are left out.
     const { value } = await mammoth.convertToHtml({ buffer: buf });
-    return docPage(title, value || `<p class="none">This document is empty.</p>`, dark);
+    // Its tables are data, ruled as a CSV's are (an email's tables are layout and keep their own look).
+    return docPage(title, value.replaceAll("<table>", '<table class="grid">') || `<p class="none">This document is empty.</p>`, dark);
   }
   if (mime === "message/rfc822") {
     const mail = await simpleParser(buf);

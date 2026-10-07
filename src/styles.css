@@ -2514,29 +2514,6 @@ textarea.field-text {
   font-size: var(--fs-small);
   color: var(--ink-3);
 }
-.file-thumb {
-  grid-column: 1 / -1;
-  max-width: 100%;
-  max-height: 220px;
-  object-fit: contain;
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  background: var(--paper);
-}
-.file-preview {
-  grid-column: 1 / -1;
-  max-height: 240px;
-  overflow: auto;
-  margin: 4px 0 0;
-  padding: 8px 10px;
-  font: var(--fs-small)/1.5 var(--font-ui);
-  white-space: pre-wrap;
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 2px;
-  color: var(--ink-2);
-}
-
 .mini-row {
   width: 100%;
   display: grid;
@@ -2621,6 +2598,27 @@ textarea.field-text {
 /* The project timeline: each row ends with its date (added, or done), small and tabular so the dates line up. */
 .timeline .mini-row {
   grid-template-columns: 22px 1fr auto auto;
+}
+/* An action's Complete box sits over the row's marker column, so the cursor's fill and the rule run under it. */
+.timeline li:has(> .done-box) {
+  position: relative;
+}
+.timeline li > .done-box {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  transform: translateY(-50%);
+}
+/* On touch it keeps the wider target, centred on the column, but stays within its row. */
+@media (pointer: coarse) {
+  .timeline li > .done-box {
+    left: -7px;
+    height: 28px;
+  }
+}
+.app[data-region="detail"] .detail .mini-row[data-cursor]:not(:focus) + .done-box .check,
+.mini-row:focus-visible + .done-box .check {
+  stroke: var(--select-ink);
 }
 .mini-date {
   min-width: 46px;

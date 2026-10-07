@@ -13,6 +13,7 @@ import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { actionRowCommands, editors, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
+import { supportLabel } from "../support.ts";
 import { formatDate } from "../../shared/dates.ts";
 import type { FileRow, ID, Op, Ref } from "../../shared/types.ts";
 
@@ -131,6 +132,15 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       keys: ["j"],
       enabled: Boolean(focusRow),
       run: () => focusRow && (focusRow.kind === "project" ? ui.jumpToAction(focusRow.id) : ui.jumpToProject(focusRow.id)),
+    },
+    {
+      id: "some.support",
+      row: true,
+      label: supportLabel(ui, focusRow?.id),
+      group: "Someday",
+      keys: ["shift+j"],
+      enabled: focusRow?.kind === "project",
+      run: () => focusRow?.kind === "project" && ui.jumpToSupport(focusRow.id),
     },
     { id: "some.open", row: true, label: "Open details", group: "Someday", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     { id: "some.rename", row: true, label: "Rename", group: "Someday", keys: ["f2"], enabled: Boolean(focusRow), run: () => focusRow && setEditing(focusRow.key) },
@@ -332,7 +342,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     },
     { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusRef && (focusRef.form === "list" || kindOf(focusRef) === "document")), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", row: true, label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
-    { id: "ref.jump", row: true, label: "Jump to its project", group: "Reference", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
+    { id: "ref.jump", row: true, label: "Jump to its project", group: "Reference", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {
       id: "ref.project",
       row: true,
@@ -448,7 +458,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
         ),
     },
     // On a narrow screen, and on a phone, Created steps aside for Updated: when it last changed is what helps you find a thing.
-    { key: "created", label: "Created", width: "96px", drop: 1, render: (r) => <span className="date">{formatDate(r.created_at.slice(0, 10))}</span> },
+    { key: "created", label: "Created", width: "100px", drop: 1, render: (r) => <span className="date">{formatDate(r.created_at.slice(0, 10))}</span> },
     {
       key: "updated",
       label: "Updated",

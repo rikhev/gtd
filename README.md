@@ -41,7 +41,8 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | `Space` `⇧↑↓` `⌘A` | Tick a row / extend the range (`⇧Home`/`⇧End` to the ends) / select all. A plain arrow, Home/End or click clears the selection, as in Finder; `⇧`-click extends, `⌘`-click ticks, and dragging from anywhere beside the rail draws a selection rectangle (`⌘`-drag adds to the selection; a click on empty space clears it) |
 | `←` `→` | Collapse or expand a group. On Projects, a project's actions show in the details pane (pin it with `⌥P` to keep them beside the list), and `T` adds a next action to the project under the cursor (in a project's detail pane, `T` goes to its Add a next action field). Areas are managed in Settings › Areas (N adds, F2 renames, ⌥↑↓ reorders, Delete removes; projects keep going without one) |
 | `Enter` `F2` `N` | Open details / rename / new row |
-| `J` | Jump from an action to its project, and from the project back to that action |
+| `J` | Jump from an action to its project, and from the project back to that action (else its next action) |
+| `⇧J` | Jump from a reference or checklist to its project, and from the project back to it (else its first support material) |
 | `E` | Mark done. Recurring actions schedule their next occurrence |
 | `V` `C` `P` `A` | Move to a project or list / context / project / area |
 | `D` `S` `B` `R` | Due date / start date / bring back (tickler) / repeat |
@@ -57,7 +58,7 @@ Press `?` to see the keys for the current screen, and `⌘K` to search every com
 | Click a column heading | Sort the list by it (again: reverse, a third time: back to the list's own order). Works the same in every list |
 | Browser Back / Forward | Move between the views you visited. Every view has its own address (`#inbox`, `#next`, `#waiting`, `#projects`, `#someday`, `#reference`, `#done`, `#review`, `#settings`), so a reload or bookmark opens the same list |
 | Click the box | Mark an action done, as in classic Outlook: it stays on its list, greyed and struck through, at the bottom of its group. Click again (or `E`) to take it back |
-| `⇧E` | Archive every done item to Done, on every list at once: done actions (the Inbox's too). A completed project goes straight to Done. A list's View menu (`⌥V`) archives that list alone, and has Show/Hide done actions |
+| `⇧E` | Archive every done item to Done, on every list at once: done actions (the Inbox's too). Completed projects too: they stay on Projects, struck through, until then. A list's View menu (`⌥V`) archives that list alone, and has Show/Hide done actions |
 | `I` | On Waiting For (list or details pane): when the waiting began. New items start today; set the real day when you file one later ("20 sep" means the last 20 September; a future date is refused) |
 | `⇧P` | Turn a next action (or a someday one) into a project: its title becomes the outcome, and its notes, files, dates and area go with it. You're asked for the project's first next action straight away (Esc to add it later). Also in the Move picker (`V`) and ⌘K; `⌘Z` undoes it |
 | Column order | Drag a column heading sideways, or ⌘K › Arrange columns… (then Reset column order to undo). Remembered per list |

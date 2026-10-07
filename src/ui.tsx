@@ -115,12 +115,16 @@ export interface UI {
   reveal: (t: Target) => void;
   /** J on an action: go to its project, remembering where you came from. */
   jumpToProject: (actionId: ID) => void;
-  /** J on a reference or a checklist: go to the project it supports, remembering it, so J on the project comes back. */
+  /** ⇧J on a reference or a checklist: go to the project it supports, remembering it, so ⇧J on the project comes back. */
   jumpFromSupport: (kind: "ref" | "checklist", id: ID) => void;
-  /** J on a project: back to the action, appointment, reference or checklist you jumped from, else its first next action. */
+  /** J on a project: back to the action or appointment you jumped from, else its first next action (else its next appointment). */
   jumpToAction: (projectId: ID) => void;
-  /** What J on this project would go back to ("reference", "checklist", "appointment"), or null: its next action. */
-  jumpBackTo: (projectId: ID) => "reference" | "checklist" | "appointment" | null;
+  /** Whether J on this project would go back to an appointment ("appointment"), or null: its next action. */
+  jumpBackTo: (projectId: ID) => "appointment" | null;
+  /** ⇧J on a project: back to the reference or checklist you jumped from, else its first support material. */
+  jumpToSupport: (projectId: ID) => void;
+  /** Where ⇧J on this project would go (back: the one it came from), or null: it has no support material. */
+  supportTarget: (projectId: ID) => { kind: "ref" | "checklist"; id: ID; back: boolean } | null;
   /** J on an appointment linked to a project: go to the project, remembering the appointment, so J comes back. */
   jumpFromAppointment: (key: string) => void;
   revealTarget: Target | null;

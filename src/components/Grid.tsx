@@ -31,8 +31,8 @@ const PHONE_SKIP = ["history", "files", "created", "open"];
  */
 type Stacked<T> = Column<T> & { stack?: Column<T>[]; lead?: Column<T>[] };
 /**
- * A phone row's second line has no column heads, so a bare date says nothing ("Tue", "21 Sep 1 Oct"): the dates whose
- * meaning the heading carried say it before the value ("Due Tue", "Since 21 Sep · Follow up 1 Oct").
+ * A phone row's second line has no column heads, so a bare date says nothing ("2026-09-21 2026-10-01"): the dates whose
+ * meaning the heading carried say it before the value ("Due 2026-09-29", "Since 2026-09-21 · Follow up 2026-10-01").
  */
 const PHONE_LABEL: Record<string, string> = { due: "Due", follow: "Follow up", since: "Since", back: "Comes back", start: "Starts", defer: "Starts", target: "By", updated: "Updated" };
 /** The order of a phone row's second line: when first, then how long and how hard, then where it belongs (cut short). */

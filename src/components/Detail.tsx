@@ -2,8 +2,8 @@ import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock } from "lucide-react";
 import { linesOf, noteAsList, openRefList, setForm, textOf, useRefText } from "../refList.ts";
-import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes, useSealedThumb } from "../lock.ts";
-import { quote, plural, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, stallReason, stamp, startsToday, uid, upload, useMeta, useStore } from "../store.ts";
+import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes } from "../lock.ts";
+import { quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, startsToday, uid, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
@@ -13,7 +13,7 @@ import { linkSupport } from "../support.ts";
 import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea } from "./NotesArea.tsx";
-import { AreaName, ContextCode, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
+import { AreaName, ContextCode, DoneBox, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, Checklist, ChecklistItem, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
@@ -198,6 +198,7 @@ function removeFile(f: FileRow) {
 function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }) {
   const ui = useUI();
   const files = useStore((s) => s.files).filter((f) => f.owner_kind === owner.kind && f.owner_id === owner.id);
+  // Only a list of files, no thumbnails or text previews (owner's request: several files made the pane too busy).
   // A click (or Enter under the pane's cursor) opens a file in the viewer, with the item's other files a step away.
   const view = (id: string) => ui.openViewer(files.map((f) => f.id), files.findIndex((f) => f.id === id));
   const input = useRef<HTMLInputElement>(null);
@@ -260,8 +261,6 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
             >
               <X size={13} strokeWidth={2} />
             </button>
-            {f.mime.startsWith("image/") && <img className="file-thumb" src={`/api/files/${f.id}`} alt={f.name} />}
-            {f.preview && !f.mime.startsWith("image/") && (owner.kind === "stuff" || owner.kind === "ref") && <pre className="file-preview">{f.preview.slice(0, 1600)}</pre>}
           </li>
           ),
         )}
@@ -637,9 +636,18 @@ function ProjectDetail({ p }: { p: Project }) {
       { id: "detail.addwaiting", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => ed.addWaiting(p.id) },
       { id: "detail.support", label: "Link support material", group: "Details", run: () => linkSupport(ui, p.id) },
       { id: "detail.plan", label: "Plan a later step", group: "Details", run: () => planLater() },
+      // E, as on every list: the action under the pane's cursor is done (or, already done, not done after all).
+      { id: "detail.actdone", label: "Mark the action done", group: "Details", keys: ["e"], run: () => toggleDone(cursorAction()) },
     ],
     { priority: 21, active },
   );
+  const cursorAction = () => addInput.current?.closest(".detail")?.querySelector<HTMLElement>("[data-cursor][data-action]")?.dataset.action;
+  const toggleDone = (id: string | undefined) => {
+    const a = id && s.actions.find((x) => x.id === id);
+    if (!a) return notify("Put the cursor on an action (↑↓), then E marks it done.");
+    if (a.status === "done") reopenActions([a.id]);
+    else completeActions([a.id]);
+  };
   // A next action needs a context, as everywhere else: Enter asks for it, then adds the action.
   const addNext = () => {
     const title = draft.trim();
@@ -774,14 +782,17 @@ function ProjectDetail({ p }: { p: Project }) {
                 <button
                   type="button"
                   className={`mini-row ${done ? "is-done" : ""}`}
+                  data-action={a.id}
                   title={done ? `Done ${when ? formatLong(when.slice(0, 10)) : ""}` : `Added ${formatLong(a.created_at.slice(0, 10))}`}
                   onClick={() => ui.drillDetail({ kind: "action", id: a.id })}
                 >
-                  <Marker done={done} />
+                  <Marker quiet />
                   <span className="mini-title">{a.title || "Untitled action"}</span>
                   <span className="mini-meta">{a.status === "waiting" ? `Waiting · ${a.waiting_who ?? ""}` : done && a.done_from === "waiting" && a.waiting_who ? `Waited · ${a.waiting_who}` : a.status === "someday" ? "Someday" : a.status === "later" ? "Later" : ""}</span>
                   <span className="mini-date">{when ? formatDate(when.slice(0, 10)) : ""}</span>
                 </button>
+                {/* The Complete box, as on the lists, over the row's marker column: a sibling, so the row stays one button. */}
+                <DoneBox done={done} title={a.title || "Untitled action"} onToggle={() => toggleDone(a.id)} />
               </li>
             );
           })}
@@ -918,7 +929,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
     [
       { id: "detail.cl.full", label: "Open in Checklists", group: "Details", run: openFull },
       { id: "detail.cl.add", label: "Add an item", group: "Details", keys: ["n"], run: () => addInput.current?.focus() },
-      ...(proj ? [{ id: "detail.cl.jump", label: "Jump to the project it supports", group: "Details", keys: ["j"], run: () => ui.jumpFromSupport("checklist", c.id) }] : []),
+      ...(proj ? [{ id: "detail.cl.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+j"], run: () => ui.jumpFromSupport("checklist", c.id) }] : []),
       ...(!c.repeats && p.ticked > 0 ? [{ id: "detail.cl.over", label: "Start over", group: "Details", run: () => startOver([c.id]) }] : []),
     ],
     { priority: 21, active },
@@ -1097,13 +1108,9 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
   );
 }
 
-/**
- * A locked reference's file, while unlocked: its real name (kept encrypted in its row), opened by decrypting it here.
- * An image shows its thumbnail the same way; nothing is read out of other files, so there is no text preview.
- */
+/** A locked reference's file, while unlocked: its real name (kept encrypted in its row), opened by decrypting it here. */
 function SealedFile({ f, onOpen }: { f: FileRow; onOpen: () => void }) {
   const m = useOpenedFile(f);
-  const thumb = useSealedThumb(f, m?.mime);
   const name = m?.name ?? "Opening…";
   return (
     <li className="file-row">
@@ -1123,7 +1130,6 @@ function SealedFile({ f, onOpen }: { f: FileRow; onOpen: () => void }) {
       <button type="button" className="icon-btn" aria-label={`Remove ${name}`} onClick={() => mutate(`“${name}” removed`, [{ type: "delete", table: "files", id: f.id }])}>
         <X size={13} strokeWidth={2} />
       </button>
-      {thumb && <img className="file-thumb" src={thumb} alt={name} />}
     </li>
   );
 }
@@ -1295,12 +1301,12 @@ function RefDetail({ r }: { r: Ref }) {
   const s = useStore((x) => x);
   const lock = useLock();
   const notes = useOpenedNotes(r);
-  // J, as on the Reference list: to the project it supports, and J there comes back.
+  // ⇧J, as on the Reference list: to the project it supports, and ⇧J there comes back.
   const active = useContext(DetailActive);
   useCommands(
     "detail-ref",
     [
-      { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["j"], run: () => ui.jumpFromSupport("ref", r.id) },
+      { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+j"], run: () => ui.jumpFromSupport("ref", r.id) },
       ...(!r.sealed || lock.unlocked ? [{ id: "detail.r.form", label: r.form === "list" ? "Show as a note" : "Show as a list", group: "Details", run: () => void setForm([r.id], r.form === "list" ? null : "list") }] : []),
       r.sealed
         ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", run: () => removeLock(ui, [r.id]) }

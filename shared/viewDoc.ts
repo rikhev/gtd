@@ -44,7 +44,7 @@ export function csvTable(text: string): string {
   const cap = 2000;
   const [head, ...body] = rows;
   const cells = (r: string[], tag: string) => `<tr>${r.map((c) => `<${tag}>${escapeHtml(c)}</${tag}>`).join("")}</tr>`;
-  return `<table><thead>${cells(head, "th")}</thead><tbody>${body.slice(0, cap).map((r) => cells(r, "td")).join("")}</tbody></table>${body.length > cap ? `<p class="none">The first ${cap} of ${body.length} rows.</p>` : ""}`;
+  return `<table class="grid"><thead>${cells(head, "th")}</thead><tbody>${body.slice(0, cap).map((r) => cells(r, "td")).join("")}</tbody></table>${body.length > cap ? `<p class="none">The first ${cap} of ${body.length} rows.</p>` : ""}`;
 }
 
 /** Plain text (and Markdown, JSON) as it was typed, wrapped to the page. */
@@ -72,9 +72,11 @@ p{margin:0 0 .9em}
 a{color:inherit;text-underline-offset:3px}
 img{max-width:100%;height:auto}
 ul,ol{padding-left:1.4em}
-table{border-collapse:collapse;margin:0 0 1em;font-size:14px;font-variant-numeric:tabular-nums}
-th,td{border:1px solid ${c.rule};padding:5px 9px;text-align:left;vertical-align:top}
-thead th{background:${c.wash};position:sticky;top:0}
+/* Ruled cells only for tables the app lays out (a CSV, a Word document): an email's tables are its layout, drawn
+   with exactly the borders it gives them, so one without borders shows none (owner's request). */
+.grid{border-collapse:collapse;margin:0 0 1em;font-size:14px;font-variant-numeric:tabular-nums}
+.grid th,.grid td{border:1px solid ${c.rule};padding:5px 9px;text-align:left;vertical-align:top}
+.grid thead th{background:${c.wash};position:sticky;top:0}
 pre{white-space:pre-wrap;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0}
 .mail{margin:0 0 28px;padding-bottom:16px;border-bottom:1px solid ${c.rule}}
 .mail h1{margin-top:0}

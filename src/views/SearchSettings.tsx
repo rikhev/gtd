@@ -1,6 +1,6 @@
 import { clearEvents, type FeedInfo } from "../calendarFeed.ts";
 import { useEffect, useMemo, useState } from "react";
-import { LIST_NAMES, quote, getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
+import { LIST_NAMES, quote, getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea, HORIZON_LABEL, type Horizon } from "../store.ts";
 import { today } from "../../shared/dates.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { runKey, useCommands, type Command } from "../keys.ts";
@@ -141,7 +141,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: general, areas, contexts, export                          */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "context" | "area" | "stall" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours" | "lock"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "context" | "area" | "stall" | "scheduled" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours" | "lock"; id: ID; text: string; status?: string; color?: string };
 
 /** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–4. */
 const TABS = [
@@ -195,6 +195,12 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ],
       },
       {
+        key: "projects",
+        label: "Projects",
+        hideCount: true,
+        rows: [{ key: "scheduled", kind: "scheduled" as const, id: "scheduled", text: "Hide scheduled starting after" }],
+      },
+      {
         key: "review",
         label: "Weekly Review",
         hideCount: true,
@@ -234,7 +240,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.contexts, s.areas, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.calendars, meta.dayHours],
+    [s.contexts, s.areas, meta.stallWeeks, meta.scheduledHide, meta.trashDays, meta.weekStart, meta.calendars, meta.dayHours],
   );
   const shown = useMemo(() => groups.filter((g) => TAB_OF[g.key] === tab), [groups, tab]);
   // No group headings: the tab already says what the list is (owner's decision); each tab is one plain list.
@@ -304,6 +310,22 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             return { ok: true, text: `Idle after ${plural(n, "week")} untouched` };
           },
           onPick: (v) => void saveStallWeeks(Number(v.trim())),
+        }),
+    },
+    {
+      id: "set.scheduled",
+      row: true,
+      label: "Choose which scheduled projects to hide",
+      group: "Settings",
+      keys: ["enter", "f2"],
+      enabled: cur?.kind === "scheduled",
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "Hide scheduled projects starting after",
+          items: (Object.keys(HORIZON_LABEL) as Horizon[]).map((h) => ({ id: h, label: HORIZON_LABEL[h] })),
+          current: meta.scheduledHide,
+          onPick: (v) => v && void saveScheduledHide(v as Horizon),
         }),
     },
     {
@@ -618,6 +640,11 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Keep deleted items</span>
             <span className="subject-more">Anything deleted stays in the Trash this long, so it can be put back. Then it is gone for good.</span>
           </span>
+        ) : r.kind === "scheduled" ? (
+          <span className="subject">
+            <span className="subject-text strong">Hide scheduled starting after</span>
+            <span className="subject-more">With Hide scheduled projects on (Projects' View menu), a project starting after this is hidden until its start comes this close. One starting sooner stays in sight, with its clock.</span>
+          </span>
         ) : r.kind === "stall" ? (
           <span className="subject">
             <span className="subject-text strong">Idle after</span>
@@ -640,6 +667,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           valueBtn(r, <span>{theme.pref === "system" ? `System (${theme.dark ? "dark" : "light"})` : theme.pref === "dark" ? "Dark" : "Light"}</span>)
         ) : r.kind === "stall" ? (
           valueBtn(r, <span className="num">{plural(meta.stallWeeks, "week")}</span>)
+        ) : r.kind === "scheduled" ? (
+          valueBtn(r, <span>{HORIZON_LABEL[meta.scheduledHide]}</span>)
         ) : r.kind === "trash" ? (
           valueBtn(r, <span className="num">{plural(meta.trashDays, "day")}</span>)
         ) : r.kind === "week" ? (
@@ -733,6 +762,15 @@ async function saveTrashDays(days: number) {
   if (j.trashDays) {
     updateMeta({ trashDays: j.trashDays });
     notify(`Deleted items are now kept ${plural(j.trashDays, "day")}.`);
+  } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
+}
+
+async function saveScheduledHide(after: Horizon) {
+  const res = await fetch("/api/settings/scheduled", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ after }) });
+  const j = (await res.json()) as { scheduledHide?: Horizon; error?: string };
+  if (j.scheduledHide) {
+    updateMeta({ scheduledHide: j.scheduledHide });
+    notify(`Hide scheduled projects now hides those starting after ${HORIZON_LABEL[j.scheduledHide].toLowerCase()}.`);
   } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }
 

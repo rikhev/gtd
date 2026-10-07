@@ -9,7 +9,7 @@ import { syncCalendars, toggleFeed, useEvents, useHiddenFeeds, useSyncing } from
 import { DoneBox, EventMark, Lamp, Marker } from "../components/bits.tsx";
 import { actionRowCommands, askContext, askWaitingOn, editors, linkAppointment, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
-import { addDays, addMonths, daysBetween, formatLong, fromIso, today } from "../../shared/dates.ts";
+import { addDays, addMonths, daysBetween, formatDate, formatLong, fromIso, today } from "../../shared/dates.ts";
 import type { Appointment, ID, State } from "../../shared/types.ts";
 
 /*
@@ -327,9 +327,9 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       ? `${cursor === t ? "Today · " : ""}${formatLong(cursor)}`
       : mode === "week" && phone
         ? // A phone's narrow title breaks between the dates, never inside one, and leaves out this year.
-          `Week ${isoWeek(weekDays[3])} · ${formatShort(weekDays[0]).replace(" ", "\u00a0")} – ${formatShort(weekDays[6]).replace(" ", "\u00a0")}${weekDays[6].slice(0, 4) === t.slice(0, 4) ? "" : `\u00a0${weekDays[6].slice(0, 4)}`}`
+          `Week ${isoWeek(weekDays[3])} · ${weekDays[0]} – ${weekDays[6]}`
       : mode === "week"
-      ? `Week ${isoWeek(weekDays[3])} · ${formatShort(weekDays[0])} – ${formatShort(weekDays[6])} ${weekDays[6].slice(0, 4)}`
+      ? `Week ${isoWeek(weekDays[3])} · ${weekDays[0]} – ${weekDays[6]}`
       : mode === "month"
         ? `${MONTH[Number(shown.slice(5, 7)) - 1]} ${year}`
         : String(year);
@@ -1159,9 +1159,7 @@ function describe(i: Item): string {
   }
 }
 
-function formatShort(d: string) {
-  return `${Number(d.slice(8))} ${MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}`;
-}
+const formatShort = (d: string) => formatDate(d);
 
 /** The year at a glance: twelve small months, each day shaded by how much it holds and dotted where something is due. */
 function YearGrid({ year, ws, items, cursor, t, phone, onPick, onCursor }: { year: number; ws: 0 | 1; items: Item[]; cursor: string; t: string; phone: boolean; onPick: (d: string) => void; onCursor: (d: string) => void }) {

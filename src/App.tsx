@@ -80,8 +80,8 @@ function homeOf(t: Target): ViewId {
   if (t.kind === "area") return "settings"; // areas are managed in Settings; Projects groups by them
   if (t.kind === "project") {
     const p = s.projects.find((x) => x.id === t.id);
-    // A completed project is in Done, with everything else that is finished.
-    return p?.status === "someday" ? "someday" : p?.status === "done" ? "done" : "projects";
+    // A completed project is on Projects, struck through, until archived to Done.
+    return p?.status === "someday" ? "someday" : p?.status === "done" && p.archived_at ? "done" : "projects";
   }
   const a = s.actions.find((x) => x.id === t.id);
   if (!a) return "next";
@@ -139,6 +139,8 @@ export default function App() {
   }, []);
   const [picker, setPicker] = useState<PickerSpec | null>(null);
   const [viewer, setViewer] = useState<{ ids: string[]; at: number } | null>(null);
+  // Where the viewer was opened from (the list or the details pane), so closing it goes back there.
+  const viewerFrom = useRef<Region>("list");
   const [pickerSeq, setPickerSeq] = useState(0);
   // The palette, ⌘K: what it lists is taken as it opens, before it takes the keys, with where the focus is.
   const [palette, setPalette] = useState<{ entries: LayeredCommand[]; where: string; rowName: string } | null>(null);
@@ -172,7 +174,10 @@ export default function App() {
   const clarifyReturn = useRef<ViewId>("inbox");
   const prevView = useRef<ViewId>("next");
   // Where J came from (an action, or an appointment in the Calendar), so J on the project goes back there.
-  const jumpOrigin = useRef<{ actionId?: string; eventKey?: string; refId?: string; checklistId?: string; projectId: string } | null>(null);
+  const jumpOrigin = useRef<{ actionId?: string; eventKey?: string; projectId: string } | null>(null);
+  // Where ⇧J came from (a reference or a checklist), so ⇧J on the project goes back there. Kept apart from J's,
+  // so going out along one axis never changes where the other one comes back to.
+  const supportOrigin = useRef<{ refId?: string; checklistId?: string; projectId: string } | null>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -326,6 +331,7 @@ export default function App() {
       pickerOpen: Boolean(picker),
       viewer,
       openViewer: (ids, at) => {
+        if (!viewer) viewerFrom.current = region;
         setViewer({ ids, at });
         // The viewer's keys (←→, Esc) belong to the list region it covers; on a phone the details sheet steps aside for it.
         setRegion("list");
@@ -333,6 +339,8 @@ export default function App() {
       },
       closeViewer: () => {
         setViewer(null);
+        // Back to where it was opened from: the details pane, if it is still there, or the list.
+        if (viewerFrom.current === "detail" && detail) return setRegion("detail");
         requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
       },
       focusCapture: () => captureRef.current?.focus(),
@@ -403,36 +411,47 @@ export default function App() {
           notify(`This ${kind === "ref" ? "reference" : "checklist"} doesn't support a project. P links one.`);
           return;
         }
-        jumpOrigin.current = kind === "ref" ? { refId: id, projectId: p.id } : { checklistId: id, projectId: p.id };
+        supportOrigin.current = kind === "ref" ? { refId: id, projectId: p.id } : { checklistId: id, projectId: p.id };
         go(p.status === "someday" ? "someday" : "projects");
         setRevealTarget({ kind: "project", id: p.id });
         notify(`Project: ${p.title}`);
       },
-      // Where J on a project goes back to, if it came from somewhere still linked (else it goes to its next action).
+      // Whether J on a project goes back to an appointment it came from, still linked (else it goes to its next action).
       jumpBackTo: (projectId) => {
-        const s = getState();
         const o = jumpOrigin.current;
-        if (o?.projectId !== projectId) return null;
-        if (o.refId && s.refs.some((x) => x.id === o.refId && x.status === "active" && x.project_id === projectId)) return "reference";
-        if (o.checklistId && s.checklists.some((x) => x.id === o.checklistId && x.status === "active" && x.project_id === projectId)) return "checklist";
-        if (o.eventKey && s.appointments.some((x) => x.id === o.eventKey && x.project_id === projectId)) return "appointment";
+        if (o?.projectId !== projectId || !o.eventKey) return null;
+        return getState().appointments.some((x) => x.id === o.eventKey && x.project_id === projectId) ? "appointment" : null;
+      },
+      // Where ⇧J on a project goes: back to the reference or checklist it came from while still linked, else the
+      // first of its support material in the pane's order (references first, A–Z).
+      supportTarget: (projectId) => {
+        const s = getState();
+        const o = supportOrigin.current?.projectId === projectId ? supportOrigin.current : null;
+        const linked = <T extends { id: string; status: string; project_id?: string | null; title: string }>(rows: T[]) =>
+          rows.filter((x) => x.status === "active" && x.project_id === projectId).sort((a, b) => a.title.localeCompare(b.title));
+        const refs = linked(s.refs);
+        const lists = linked(s.checklists);
+        if (o?.refId && refs.some((x) => x.id === o.refId)) return { kind: "ref", id: o.refId, back: true };
+        if (o?.checklistId && lists.some((x) => x.id === o.checklistId)) return { kind: "checklist", id: o.checklistId, back: true };
+        if (refs[0]) return { kind: "ref", id: refs[0].id, back: false };
+        if (lists[0]) return { kind: "checklist", id: lists[0].id, back: false };
         return null;
+      },
+      jumpToSupport: (projectId) => {
+        const t = ui.supportTarget(projectId);
+        if (!t) return notify("This project has no support material. P on a reference or a checklist links one.");
+        if (t.kind === "ref") {
+          go("reference");
+          setRevealTarget({ kind: "ref", id: t.id });
+        } else {
+          go("checklists");
+          openChecklist(t.id);
+        }
       },
       jumpToAction: (projectId) => {
         const s = getState();
         const open = (id: string) => s.actions.some((x) => x.id === id && ["next", "waiting", "someday"].includes(x.status));
         const origin = jumpOrigin.current;
-        // Jumped here from its support material, still linked: back to that reference or checklist.
-        if (origin?.projectId === projectId && origin.refId && s.refs.some((x) => x.id === origin.refId && x.status === "active" && x.project_id === projectId)) {
-          go("reference");
-          setRevealTarget({ kind: "ref", id: origin.refId });
-          return;
-        }
-        if (origin?.projectId === projectId && origin.checklistId && s.checklists.some((x) => x.id === origin.checklistId && x.status === "active" && x.project_id === projectId)) {
-          go("checklists");
-          openChecklist(origin.checklistId);
-          return;
-        }
         const toCalendar = (key: string) => {
           go("calendar");
           setRevealTarget({ kind: "event", id: key });
@@ -469,7 +488,7 @@ export default function App() {
   };
 
   const inboxCount = s.stuff.filter((x) => x.status === "inbox").length;
-  const archivable = s.actions.filter((a) => a.status === "done" && !a.archived_at).length;
+  const archivable = s.actions.filter((a) => a.status === "done" && !a.archived_at).length + s.projects.filter((p) => p.status === "done" && !p.archived_at).length;
 
   const theme = useTheme();
   const themeTo = (pref: "system" | "light" | "dark") => {
@@ -546,7 +565,11 @@ export default function App() {
   // Paste anywhere outside a text field: files and text land in the Inbox.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
-      if (isEditable(e.target) || !e.clipboardData) return;
+      // A field that took the paste itself (the notes editor does) has it. In the notes editor the target can be a
+      // bare text node, not an element, so look at its element, and at what has focus, before calling it outside a field.
+      if (e.defaultPrevented || !e.clipboardData) return;
+      const at = e.target instanceof Node && !(e.target instanceof Element) ? e.target.parentElement : e.target;
+      if (isEditable(at) || isEditable(document.activeElement) || (at instanceof Element && at.closest("[contenteditable]"))) return;
       const files = Array.from(e.clipboardData.files);
       if (files.length) {
         e.preventDefault();

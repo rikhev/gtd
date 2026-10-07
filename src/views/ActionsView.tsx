@@ -527,8 +527,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       return area ? <AreaName name={area.name} color={area.color} /> : <span className="dash" aria-hidden="true">–</span>;
     },
   };
-  const createdCol: Column<Action> = { key: "created", label: "Created", width: "84px", optional: true, render: (a) => <DateCell date={a.created_at.slice(0, 10)} kind="plain" /> };
-  const updatedCol: Column<Action> = { key: "updated", label: "Updated", width: "84px", optional: true, render: (a) => <DateCell date={(a.updated_at ?? a.created_at).slice(0, 10)} kind="plain" /> };
+  const createdCol: Column<Action> = { key: "created", label: "Created", width: "100px", optional: true, render: (a) => <DateCell date={a.created_at.slice(0, 10)} kind="plain" /> };
+  const updatedCol: Column<Action> = { key: "updated", label: "Updated", width: "100px", optional: true, render: (a) => <DateCell date={(a.updated_at ?? a.created_at).slice(0, 10)} kind="plain" /> };
   const repeatCol: Column<Action> = {
     key: "repeat",
     label: "Repeat",
@@ -539,8 +539,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       return r ? <span className="muted-text">{recurrenceLabel(r)}</span> : <span className="dash" aria-hidden="true">–</span>;
     },
   };
-  const backCol: Column<Action> = { key: "back", label: "Bring back", width: "96px", blank: (a) => !a.bring_back, render: (a) => <DateCell date={a.bring_back} kind="plain" /> };
-  const dueCol: Column<Action> = { key: "due", label: "Due", width: "84px", render: (a) => <DateCell date={a.due} /> };
+  const backCol: Column<Action> = { key: "back", label: "Bring back", width: "100px", blank: (a) => !a.bring_back, render: (a) => <DateCell date={a.bring_back} kind="plain" /> };
+  const dueCol: Column<Action> = { key: "due", label: "Due", width: "100px", render: (a) => <DateCell date={a.due} /> };
   let columns: Column<Action>[];
   if (mode === "waiting") {
     columns = [
@@ -548,8 +548,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       doneCol,
       subject,
       ...(groupBy === "who" ? [] : [{ key: "who", label: "Waiting on", width: "132px", render: (a: Action) => a.waiting_who || <span className="dash" aria-hidden="true">–</span> }]),
-      { key: "since", label: "Since", width: "84px", drop: 1, render: (a) => <DateCell date={a.waiting_since} kind="plain" /> },
-      { key: "follow", label: "Follow up", width: "88px", blank: (a) => !a.followup, render: (a) => <DateCell date={a.followup} /> },
+      { key: "since", label: "Since", width: "100px", drop: 1, render: (a) => <DateCell date={a.waiting_since} kind="plain" /> },
+      { key: "follow", label: "Follow up", width: "100px", blank: (a) => !a.followup, render: (a) => <DateCell date={a.followup} /> },
       projCol,
       { ...ctxCol, optional: true },
       { ...dueCol, optional: true },
@@ -567,7 +567,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       projCol,
       ctxCol,
       // Grouped by day, the group heading already carries the date.
-      ...(groupBy === "none" ? [] : [{ key: "when", label: "Done", width: "96px", render: (a: Action) => <DateCell date={a.completed_at?.slice(0, 10) ?? null} kind="plain" /> }]),
+      ...(groupBy === "none" ? [] : [{ key: "when", label: "Done", width: "100px", render: (a: Action) => <DateCell date={a.completed_at?.slice(0, 10) ?? null} kind="plain" /> }]),
       areaCol,
       createdCol,
     ];
@@ -579,7 +579,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       ...(groupBy === "context" ? [] : [ctxCol]),
       ...(groupBy === "project" ? [] : [projCol]),
       dueCol,
-      { key: "defer", label: "Start", width: "80px", drop: 1, blank: (a) => !a.defer, render: (a) => <DateCell date={a.defer} kind="defer" /> },
+      { key: "defer", label: "Start", width: "100px", drop: 1, blank: (a) => !a.defer, render: (a) => <DateCell date={a.defer} kind="defer" /> },
       { key: "time", label: "Time", width: "52px", align: "end", drop: 3, render: (a) => <TimeCell min={a.time_min} /> },
       { key: "energy", label: "Energy", width: "62px", drop: 2, render: (a) => <Energy level={a.energy} /> },
       areaCol,

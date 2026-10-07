@@ -1,7 +1,7 @@
 import type { FeedInfo } from "./calendarFeed.ts";
 import { useMemo, useSyncExternalStore } from "react";
 import type { Action, Appointment, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
-import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
+import { addDays, addMonths, fromIso, nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
 import { uploadSealed } from "./lock.ts";
 
 const empty: State = {
@@ -29,6 +29,8 @@ let meta: {
   authConfigured: boolean;
   /** Weeks without progress before a project counts as stalled (Settings). */
   stallWeeks: number;
+  /** How far ahead a start date must be before "Hide scheduled projects" hides the project (Settings). */
+  scheduledHide: Horizon;
   trashDays: number;
   /** The calendar's first day of the week: 1 Monday, 0 Sunday. */
   weekStart: 0 | 1;
@@ -38,7 +40,7 @@ let meta: {
   dayHours: [number, number];
   /** The lock for references: the random key, wrapped with the lock password (see lock.ts); null until a password is set. */
   lock: { v: 1; salt: string; iter: number; wrapped: string } | null;
-} = { today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, calendars: [], dayHours: [7, 19], lock: null };
+} = { today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, scheduledHide: "week", trashDays: 7, weekStart: 1, calendars: [], dayHours: [7, 19], lock: null };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -503,15 +505,24 @@ export function archiveDone(ids: ID[], where = "") {
   );
 }
 
-/** Everything done but still on its list, everywhere: done actions (Inbox ones included). A completed project is in Done already. */
-function doneEverywhere() {
-  return { actions: getState().actions.filter((a) => a.status === "done" && !a.archived_at) };
+/** Everything done but still on its list, everywhere: done actions (Inbox ones included) and completed projects. */
+export function doneEverywhere() {
+  const s = getState();
+  return { actions: s.actions.filter((a) => a.status === "done" && !a.archived_at), projects: s.projects.filter((p) => p.status === "done" && !p.archived_at) };
+}
+
+/** Completed projects off Projects into Done. */
+export function archiveProjects(ids: ID[]) {
+  const done = getState().projects.filter((p) => ids.includes(p.id) && p.status === "done" && !p.archived_at);
+  if (!done.length) return;
+  const at = stamp();
+  mutate(`${plural(done.length, "completed project")} archived to Done`, done.map((p): Op => ({ type: "patch", table: "projects", id: p.id, data: { archived_at: at } })));
 }
 
 /** ⇧E: every done item on every list goes to Done in one step (owner's request), one ⌘Z to undo. */
 export function archiveAllDone() {
-  const { actions } = doneEverywhere();
-  const n = actions.length;
+  const { actions, projects } = doneEverywhere();
+  const n = actions.length + projects.length;
   if (!n) return notify("Nothing done to archive");
   const at = stamp();
   mutate(`${plural(n, "done item")} archived to Done`, [
@@ -520,6 +531,7 @@ export function archiveAllDone() {
       // Ticked-off Inbox stuff leaves the Inbox with its action.
       ...(a.done_from === "inbox" && find("stuff", a.id)?.status === "done" ? [{ type: "patch" as const, table: "stuff" as const, id: a.id, data: { status: "processed" } }] : []),
     ]),
+    ...projects.map((p): Op => ({ type: "patch", table: "projects", id: p.id, data: { archived_at: at } })),
   ]);
 }
 
@@ -544,6 +556,22 @@ export function patchMany(table: TableName, ids: ID[], data: Record<string, unkn
 export function notStarted(p: Project, t = today()): boolean {
   return Boolean(p.start && p.start > t);
 }
+export type Horizon = "day" | "week" | "nextweek" | "month";
+export const HORIZON_LABEL: Record<Horizon, string> = { day: "Today", week: "This week", nextweek: "Next week", month: "This month" };
+
+/** The last day a horizon reaches: today, the end of this week or next (by the week's first day), or the end of this month. */
+export function horizonEnd(h: Horizon, t = today(), weekStart: 0 | 1 = meta.weekStart): string {
+  if (h === "day") return t;
+  if (h === "month") return addDays(addMonths(`${t.slice(0, 8)}01`, 1), -1);
+  const endOfWeek = addDays(t, 6 - ((fromIso(t).getDay() - weekStart + 7) % 7));
+  return h === "week" ? endOfWeek : addDays(endOfWeek, 7);
+}
+
+/** Hidden by "Hide scheduled projects": it starts after the horizon set in Settings (this week by default), so nothing is due from it soon. */
+export function scheduledBeyond(p: Project, t = today()): boolean {
+  return Boolean(p.start && p.start > horizonEnd(meta.scheduledHide, t));
+}
+
 export function startsToday(p: Project, t = today()): boolean {
   return p.start === t;
 }

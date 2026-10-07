@@ -43,3 +43,9 @@ export function linkSupport(ui: UI, projectId: ID) {
     },
   });
 }
+
+/** ⇧J on a project names the one place it will go, as J does: back to what it came from, else its support material. */
+export function supportLabel(ui: UI, projectId: ID | null | undefined) {
+  const t = projectId ? ui.supportTarget(projectId) : null;
+  return t?.back ? `Jump back to the ${t.kind === "ref" ? "reference" : "checklist"}` : "Jump to its support material";
+}

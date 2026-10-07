@@ -190,7 +190,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
           <span className="dash" aria-hidden="true">–</span>
         ),
     },
-    { key: "when", label: "Captured", width: "96px", render: (st) => <span className="date">{formatDate(st.created_at.slice(0, 10))}</span> },
+    { key: "when", label: "Captured", width: "100px", render: (st) => <span className="date">{formatDate(st.created_at.slice(0, 10))}</span> },
   ];
 
   return (

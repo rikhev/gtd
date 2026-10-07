@@ -722,7 +722,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects", checklists: "Progress" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
-    { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date", checklists: "Last finished" } as Record<string, string>)[step.id] ?? "Date", width: "96px", render: (r) => <DateCell date={r.date} kind={["someday", "clear", "lookback", "checklists"].includes(step.id) ? "plain" : "due"} /> },
+    { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date", checklists: "Last finished" } as Record<string, string>)[step.id] ?? "Date", width: "100px", render: (r) => <DateCell date={r.date} kind={["someday", "clear", "lookback", "checklists"].includes(step.id) ? "plain" : "due"} /> },
   ];
   /** A project's next linked appointment, which its lamp names. */
   function apptOf(id: ID) {

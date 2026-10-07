@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { quote, getState, isCurrentStep, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
+import { quote, archiveProjects, getState, isCurrentStep, scheduledBeyond, useMeta, HORIZON_LABEL, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -9,6 +9,7 @@ import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, areaName, askContext, askWaitingOn, createAreaOp } from "../actionCommands.tsx";
 import { formatLong, today } from "../../shared/dates.ts";
 import { pickGoal } from "../horizons.ts";
+import { supportLabel } from "../support.ts";
 import { areaFilterLabel, inAreas, openAreaFilter, setAreaFilter, useAreaFilter } from "../areaFilter.ts";
 import type { Appointment, ID, Op, Project } from "../../shared/types.ts";
 
@@ -184,8 +185,8 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
       let closed = 0;
       for (const id of ids) {
         if (s.projects.find((p) => p.id === id)?.status === "done") continue;
-        // A completed project leaves Projects for Done at once (owner's request): Done is the only place it is shown.
-        ops.push({ type: "patch", table: "projects", id, data: { status: "done", completed_at: at, archived_at: at } });
+        // A completed project stays on Projects, struck through, until archived to Done (⇧E), as a done action stays on its list (owner's request).
+        ops.push({ type: "patch", table: "projects", id, data: { status: "done", completed_at: at, archived_at: null } });
         // A finished project's open actions and planned (later) steps are marked done, struck through on their lists until
         // archived like any done action (owner's request). They share the project's completion stamp, so unticking the
         // project brings them back with it.
@@ -241,20 +242,24 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   // F narrows the list to one or more areas of focus; the rest step aside until the filter is cleared.
   const areas = useAreaFilter();
 
-  // A completed project strikes through, folds away and is in Done; it is never shown here.
-  // Scheduled projects (a start date after today: nothing to act on yet) can be hidden (owner's request). On its start
-  // day a project is back, since it then wants a next action.
+  // A completed project stays here, struck through at the bottom of its area, until archived to Done (⇧E), as on every list.
+  const [showDone, setShowDone] = usePersisted("showdone:projects", true);
+  const doneHere = useMemo(() => s.projects.filter((p) => p.status === "done" && !p.archived_at).map((p) => p.id), [s.projects]);
+  // Scheduled projects can be hidden (owner's request): those starting after the horizon set in Settings (this week by
+  // default; owner's decision: one starting this week should stay in sight). Once its start comes within it, it is back.
   const [showScheduled, setShowScheduled] = usePersisted("projects:scheduled", true);
-  const scheduledCount = useMemo(() => s.projects.filter((p) => (p.status === "active" || (filter !== "active" && p.status === "someday")) && notStarted(p)).length, [s.projects, filter]);
+  // Only projects starting beyond the horizon set in Settings (this week by default) count: one starting soon stays in sight.
+  const { scheduledHide } = useMeta();
+  const scheduledCount = useMemo(() => s.projects.filter((p) => (p.status === "active" || (filter !== "active" && p.status === "someday")) && scheduledBeyond(p)).length, [s.projects, filter, scheduledHide]);
   const [striking, setStriking] = useState<Set<ID>>(new Set());
   const rows = useMemo(
     () =>
       s.projects
-        .filter((p) => (filter === "active" ? p.status === "active" : p.status === "active" || p.status === "someday"))
-        .filter((p) => showScheduled || !notStarted(p))
+        .filter((p) => (filter === "active" ? p.status === "active" : p.status === "active" || p.status === "someday") || (showDone && p.status === "done" && !p.archived_at))
+        .filter((p) => showScheduled || !scheduledBeyond(p))
         .filter((p) => !areas || inAreas(p.area_id, areas))
         .sort((a, b) => a.sort - b.sort),
-    [s.projects, filter, showScheduled, areas],
+    [s.projects, filter, showScheduled, showDone, areas, scheduledHide],
   );
   const openCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -310,8 +315,9 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       .map(([k, r]) => ({ key: k, label: areaName(areaById.get(k)?.name) ?? "No area", areaColor: areaById.get(k) ? (areaById.get(k)!.color ?? "") : undefined, rows: r }));
   }, [rows, groupByArea, areaById]);
   // Areas keep their order; a heading click sorts the projects inside each one.
+  // Completed projects sink to the bottom of their area, whatever the sort.
   const groups = useMemo(
-    () => sortGroups(baseGroups, sorters, sort),
+    () => sortGroups(baseGroups, sorters, sort).map((g) => ({ ...g, rows: [...g.rows.filter((p) => p.status !== "done"), ...g.rows.filter((p) => p.status === "done")] })),
     [baseGroups, sorters, sort],
   );
 
@@ -388,6 +394,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.new", label: "New project", group: "Projects", keys: ["n"], run: create },
     { id: "proj.open", row: true, label: "Open project", group: "Projects", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "project", id: focusId }, true) },
     { id: "proj.jump", row: true, label: focusId && ui.jumpBackTo(focusId) ? `Jump back to the ${ui.jumpBackTo(focusId)}` : "Jump to its next action", group: "Projects", keys: ["j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToAction(focusId) },
+    { id: "proj.support", row: true, label: supportLabel(ui, focusId), group: "Projects", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpToSupport(focusId) },
     { id: "proj.rename", row: true, label: "Rename", group: "Projects", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "proj.done", row: true, label: "Complete project", group: "Projects", keys: ["e"], enabled: has, run: () => toggleDone(nav.targets()) },
     { id: "proj.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
@@ -417,16 +424,22 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             { id: "areas", label: areas ? `Areas: ${areaFilterLabel(areas)}` : "Filter by area…", hint: areas ? "On" : "", section: "show" },
             { id: "filter", label: filter === "active" ? "Show someday projects too" : "Show active projects only", section: "show" },
             { id: "scheduled", label: showScheduled ? `Hide scheduled projects${scheduledCount ? ` (${scheduledCount})` : ""}` : `Show scheduled projects${scheduledCount ? ` (${scheduledCount})` : ""}`, section: "show" },
+            { id: "showdone", label: `${showDone ? "Hide" : "Show"} completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, section: "done" },
+            ...(doneHere.length ? [{ id: "archive", label: `Archive completed projects to Done (${doneHere.length})`, section: "done" }] : []),
           ],
           onPick: (id) => {
             if (id === "area") setGroupByArea(!groupByArea);
             if (id?.startsWith("s:")) setSort(id === "s:" ? null : { key: id.slice(2), dir: 1 });
             if (id === "filter") setFilter(filter === "active" ? "all" : "active");
             if (id === "scheduled") setShowScheduled(!showScheduled);
+            if (id === "showdone") setShowDone(!showDone);
+            if (id === "archive") archiveProjects(doneHere);
             if (id === "areas") window.setTimeout(() => openAreaFilter(ui));
           },
         }),
     },
+    { id: "proj.archive", label: `Archive completed projects to Done${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", enabled: doneHere.length > 0, run: () => archiveProjects(doneHere) },
+    { id: "proj.showdone", label: showDone ? "Hide completed projects" : "Show completed projects", group: "View", run: () => setShowDone(!showDone) },
     { id: "proj.scheduled", label: showScheduled ? "Hide scheduled projects" : "Show scheduled projects", group: "View", run: () => setShowScheduled(!showScheduled) },
     { id: "proj.areas", label: areas ? "Filter by area (change or clear)" : "Filter by area", group: "View", keys: ["f"], run: () => openAreaFilter(ui) },
     ...(areas ? [{ id: "proj.areasoff", label: "Show every area", group: "View", run: () => setAreaFilter([]) }] : []),
@@ -507,11 +520,11 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         ),
     },
     { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
-    { key: "due", label: "Due", width: "84px", render: (p) => <DateCell date={p.due} /> },
+    { key: "due", label: "Due", width: "100px", render: (p) => <DateCell date={p.due} /> },
     // Offered but hidden until shown (right-click a heading, or ⌘K › Show or hide columns…).
-    { key: "start", label: "Start", width: "84px", optional: true, render: (p) => <DateCell date={p.start ?? null} kind="plain" /> },
-    { key: "back", label: "Bring back", width: "96px", optional: true, render: (p) => <DateCell date={p.bring_back} kind="plain" /> },
-    { key: "created", label: "Created", width: "84px", optional: true, render: (p) => <DateCell date={p.created_at.slice(0, 10)} kind="plain" /> },
+    { key: "start", label: "Start", width: "100px", optional: true, render: (p) => <DateCell date={p.start ?? null} kind="plain" /> },
+    { key: "back", label: "Bring back", width: "100px", optional: true, render: (p) => <DateCell date={p.bring_back} kind="plain" /> },
+    { key: "created", label: "Created", width: "100px", optional: true, render: (p) => <DateCell date={p.created_at.slice(0, 10)} kind="plain" /> },
   ];
 
   const grid = (
@@ -562,7 +575,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       active={regionActive}
       showHeaders={multi}
       rowClass={(p) =>
-        [isStalled(s, p) ? "is-stalled" : "", striking.has(p.id) ? "is-striking is-leaving" : ""].join(" ")
+        [isStalled(s, p) ? "is-stalled" : "", striking.has(p.id) ? `is-striking ${showDone ? "" : "is-leaving"}` : "", p.status === "done" ? "is-done" : ""].join(" ")
       }
       onOpen={(k) => ui.openDetail({ kind: "project", id: k }, true)}
       // Touch: swipe right to complete the project (or reopen it), left to trash it with its actions.
@@ -571,7 +584,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         areas ? (
           <EmptyState title={`No projects in ${areaFilterLabel(areas)}`} lines={["Choose other areas, or show every area."]} action={{ label: "Show every area", run: () => setAreaFilter([]) }} />
         ) : !showScheduled && scheduledCount ? (
-          <EmptyState title="Nothing to act on yet" lines={[`${plural(scheduledCount, "scheduled project")} hidden until ${scheduledCount === 1 ? "it starts" : "they start"}.`]} action={{ label: "Show scheduled projects", run: () => setShowScheduled(true) }} />
+          <EmptyState title="Nothing to act on yet" lines={[`${plural(scheduledCount, "scheduled project")} hidden: ${scheduledCount === 1 ? "it starts" : "they start"} after ${HORIZON_LABEL[scheduledHide].toLowerCase()}.`]} action={{ label: "Show scheduled projects", run: () => setShowScheduled(true) }} />
         ) : (
           <EmptyState title="No projects yet" lines={["Start one here, or make one when you clarify your Inbox."]} action={{ label: "New project", run: create }} />
         )

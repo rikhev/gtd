@@ -40,8 +40,8 @@ function rowsOf(s: State): Row[] {
     out.push({ key: `a:${a.id}`, kind: "action", id: a.id, title: a.title || "Untitled action", from: p ? `${place} · ${p.title || "Untitled project"}` : place, place, project: a.project_id, at: a.completed_at ?? a.archived_at });
   }
   for (const p of s.projects) {
-    // Every completed project: Done is the only place one is shown, archived or not (completed before that rule).
-    if (p.status !== "done") continue;
+    // A completed project once archived off Projects (⇧E), as an action is off its list.
+    if (p.status !== "done" || !p.archived_at) continue;
     const area = s.areas.find((x) => x.id === p.area_id);
     out.push({ key: `p:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", from: area ? `Projects · #${area.name}` : "Projects", place: "Projects", project: p.id, at: p.completed_at ?? p.archived_at ?? p.created_at });
   }
@@ -178,7 +178,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
     {
       key: "at",
       label: "Done",
-      width: "96px",
+      width: "100px",
       align: "end",
       drop: 1,
       // Grouped by day the heading has the date, so the row gives the time; by project, the date.

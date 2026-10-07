@@ -25,9 +25,8 @@ let key: CryptoKey | null = null;
 let idleTimer: number | undefined;
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
-/** Opened notes and image previews, kept while unlocked and dropped with the key. */
+/** Opened notes, kept while unlocked and dropped with the key. */
 const opened = new Map<string, string>();
-const thumbs = new Map<string, string>();
 
 function b64(bytes: Uint8Array): string {
   let s = "";
@@ -84,8 +83,6 @@ export function lockNow(idle = false) {
   window.removeEventListener("keydown", activity, true);
   window.removeEventListener("pointerdown", activity, true);
   opened.clear();
-  thumbs.forEach((u) => URL.revokeObjectURL(u));
-  thumbs.clear();
   emit();
   notify(idle ? "Locked again after 5 minutes idle" : "Locked references locked");
 }
@@ -305,9 +302,6 @@ export async function uploadSealed(files: File[], refId: ID) {
   }
 }
 
-/** What opens in a tab, as on the server: raster images, PDFs and plain text. Anything else downloads. */
-const INLINE = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "text/plain"]);
-
 /** A locked file opened here for the viewer: its real name and type, and its bytes. */
 export async function openSealedData(f: FileRow): Promise<{ name: string; mime: string; bytes: Bytes }> {
   const { name, mime } = JSON.parse(await openText(f.id, f.preview)) as { name: string; mime: string };
@@ -324,30 +318,6 @@ export async function downloadSealed(f: FileRow) {
   } catch (e) {
     notify(`Couldn't open it: ${(e as Error).message}`, { tone: "error" });
   }
-}
-
-/** A locked image's thumbnail, decrypted while unlocked. */
-export function useSealedThumb(f: FileRow, mime: string | undefined): string | null {
-  const { unlocked } = useLock();
-  const [url, setUrl] = useState<string | null>(() => thumbs.get(f.id) ?? null);
-  useEffect(() => {
-    if (!unlocked || !mime?.startsWith("image/") || !INLINE.has(mime)) return setUrl(null);
-    const hit = thumbs.get(f.id);
-    if (hit) return setUrl(hit);
-    let live = true;
-    fileBytes(f.id)
-      .then((b) => openBytes(f.id, b))
-      .then((b) => {
-        const u = URL.createObjectURL(new Blob([b as BlobPart], { type: mime }));
-        thumbs.set(f.id, u);
-        if (live) setUrl(u);
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [f.id, mime, unlocked]);
-  return url;
 }
 
 /* ---------------- asking for the password ---------------- */

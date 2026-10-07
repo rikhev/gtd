@@ -64,7 +64,10 @@ export function PdfView({ url, data, name, onControls, onFail }: { url: string; 
     pdfjs()
       .then(async (m) => {
         // Bytes are handed to the worker, which takes them over: it gets a copy, so stepping back to this file works.
-        opened = await m.getDocument(data ? { data: data.slice() } : { url }).promise;
+        // The decoders a scan needs (JBIG2, JPEG 2000, colour profiles) and the CMaps and fonts for text are fetched
+        // from /pdfjs/ (see vite.config.ts); without them a scanned page draws only its faint background.
+        const assets = { wasmUrl: "/pdfjs/wasm/", iccUrl: "/pdfjs/iccs/", cMapUrl: "/pdfjs/cmaps/", standardFontDataUrl: "/pdfjs/standard_fonts/" };
+        opened = await m.getDocument(data ? { data: data.slice(), ...assets } : { url, ...assets }).promise;
         const all: Size[] = [];
         for (let i = 1; i <= opened.numPages; i++) {
           const vp = (await opened.getPage(i)).getViewport({ scale: 1 });

@@ -139,7 +139,7 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
     { id: "rl.up", row: true, label: "Move row up", group: "List", keys: ["alt+arrowup"], enabled: Boolean(focus && !focus.draft), run: () => move(-1) },
     { id: "rl.down", row: true, label: "Move row down", group: "List", keys: ["alt+arrowdown"], enabled: Boolean(focus && !focus.draft), run: () => move(1) },
     { id: "rl.project", label: "Set the project it supports", group: "Fields", keys: ["p"], run: () => setProject(ui, "refs", [r.id]) },
-    { id: "rl.jump", label: "Jump to the project it supports", group: "List", keys: ["j"], run: () => ui.jumpFromSupport("ref", r.id) },
+    { id: "rl.jump", label: "Jump to the project it supports", group: "List", keys: ["shift+j"], run: () => ui.jumpFromSupport("ref", r.id) },
     { id: "rl.details", label: "Open its details", group: "List", run: () => ui.openDetail({ kind: "ref", id: r.id }, true) },
     {
       id: "rl.note",
