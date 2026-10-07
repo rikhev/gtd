@@ -405,15 +405,19 @@ a:hover {
   flex-direction: column;
   background: var(--paper);
 }
+/* The viewer's bar is a head line of the column it covers (owner's request: a white strip with a bold name fitted
+   nothing else), drawn as a list's column heads are: on the paper, inside the list's 20px edges, 30px tall over a
+   `rule-strong` line; the name in the row's own face, its kind and size in ink-3, the tools at the right. */
 .viewer-bar {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--sp-md);
-  min-height: 40px;
-  padding: 0 12px 0 20px;
+  min-height: var(--row);
+  margin: 0 20px;
+  padding: 0 0 0 8px;
   border-bottom: 1px solid var(--rule-strong);
-  background: var(--sheet);
+  background: none;
 }
 .viewer-name {
   display: inline-flex;
@@ -422,7 +426,7 @@ a:hover {
   min-width: 0;
 }
 .viewer-name strong {
-  font-weight: 600;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -455,13 +459,15 @@ a:hover {
   flex: 1;
   min-height: 0;
   display: flex;
+  /* In the column under its head line, inside the same 20px edges as the list (16px on a phone). */
+  margin: 0 20px;
 }
 .viewer-stage iframe {
   flex: 1;
   width: 100%;
   height: 100%;
   border: 0;
-  background: var(--sheet);
+  background: var(--paper);
 }
 /* A picture sits on the paper with room around it, as large as fits, never larger than it is. */
 .viewer-stage.is-image {
@@ -469,6 +475,16 @@ a:hover {
   justify-content: center;
   padding: 24px;
   overflow: auto;
+}
+/* Zoomed past the stage, a picture scrolls from its corner (centring would cut its far edges off); smaller, it stays
+   centred by its auto margins. */
+.viewer-stage.is-image.is-zoomed {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.viewer-stage.is-image.is-zoomed img {
+  margin: auto;
+  flex: none;
 }
 .viewer-stage.is-image img {
   max-width: 100%;
@@ -642,7 +658,11 @@ a:hover {
 }
 @media screen and (max-width: 820px) {
   .viewer-bar {
-    padding-left: 12px;
+    margin: 0 16px;
+    padding-left: 0;
+  }
+  .viewer-stage {
+    margin: 0 16px;
   }
   .viewer-meta {
     display: none;
@@ -3298,74 +3318,6 @@ textarea.field-text {
 /* Clarify                                                              */
 /* ------------------------------------------------------------------ */
 
-/* Clarify sits in a measure under the view title, the decision the heaviest thing on it, the queue waiting quietly below. */
-.clarify {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-lg);
-  width: 100%;
-  max-width: 1040px;
-}
-.clarify-next {
-  margin-top: 18px;
-  max-width: 68ch;
-}
-.clarify-next ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.clarify-next li {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-lg);
-  height: 28px;
-  padding: 0 2px;
-  border-top: 1px solid var(--rule);
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.clarify-next li span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* Further off, quieter: stepped by ink tone rather than opacity, so the last row still meets AA. */
-.clarify-next li:nth-child(n + 2) {
-  color: var(--ink-3);
-}
-.clarify-next li:nth-child(3) svg {
-  opacity: 0.6;
-}
-.clarify-progress {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-lg);
-  height: 22px;
-}
-.clarify-track {
-  display: flex;
-  gap: var(--sp-xs);
-  flex-wrap: wrap;
-}
-.clarify-track i {
-  width: 14px;
-  height: 5px;
-  border-radius: 1px;
-  background: var(--rule);
-  transition: background 200ms;
-}
-.clarify-track i.is-ready {
-  background: var(--rule-strong);
-}
-.clarify-track i.is-done {
-  background: var(--ink-2);
-}
-.clarify-track i.is-current {
-  background: var(--accent);
-  box-shadow: 0 0 0 1px var(--select-ink);
-}
-
 .text-btn {
   color: var(--ink-2);
   text-decoration: underline;
@@ -3388,38 +3340,41 @@ textarea.field-text {
   color: var(--ink);
   text-decoration-color: var(--ink);
 }
-.clarify-card {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
-  gap: 24px;
-  align-items: start;
-}
-.pane-h {
+/* Clarify is the Inbox being decided (owner's choice after the Clarify redesign): the column keeps the Inbox's own
+   rows, the item on top under the cursor and opened to read, the rest waiting under it; the decision stands where
+   the details pane does, the same 380px pane with the same fields. Nothing on it is drawn only for Clarify. */
+.clarify {
   display: flex;
-  align-items: center;
-  gap: var(--sp-md);
-  margin: 0 0 10px;
-  font-family: var(--font-label);
-  font-stretch: 75%;
+  flex-direction: column;
+}
+.clarify-cols {
+  --cols: 30px minmax(0, 1fr) 100px;
+}
+/* The item being clarified: its row under the cursor, as the focused row of the active list, and its words opened
+   under it, set from the subject column for reading (Body Sheet, a 68ch measure) on the sheet. */
+.clarify-item {
+  border-bottom: 1px solid var(--rule);
+}
+.clarify-item > .row {
+  border-bottom: 0;
+  background: var(--select);
+  color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
+}
+.clarify-item > .row:hover {
+  background: var(--select);
+}
+.clarify-item > .row .subject-text {
   font-weight: 600;
-  font-size: var(--fs-head);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-2);
 }
-.pane-h .muted-text {
-  font-family: var(--font-ui);
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 400;
+.clarify-item > .row .subject-more,
+.clarify-item > .row .date {
+  color: inherit;
 }
-.sheet {
+.clarify-body {
+  padding: 14px 16px 18px 38px;
   background: var(--sheet);
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  padding: 18px 20px;
-  box-shadow: var(--shadow-soft);
-  max-height: calc(100dvh - 260px);
+  max-height: calc(100dvh - 300px);
   overflow: auto;
 }
 .sheet-text {
@@ -3429,50 +3384,143 @@ textarea.field-text {
   line-height: 1.55;
   max-width: 68ch;
 }
-.sheet-file {
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--rule-strong);
+/* The whole first line, when its row had to cut it, leads the opened words in the row's weight. */
+.clarify-whole {
+  font-weight: 600;
 }
-.sheet-file img {
-  display: block;
-  margin-top: 8px;
-  max-width: 100%;
-  max-height: 360px;
-  border: 1px solid var(--rule);
-}
-.sheet-file pre {
-  white-space: pre-wrap;
-  font: var(--fs-note)/1.55 var(--font-ui);
-  color: var(--ink-2);
-  margin: 8px 0 0;
-}
-
-.clarify-proposal .field + .field {
+.clarify-whole + .sheet-text {
   margin-top: 10px;
 }
-.p-project {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--sp-xs) var(--sp-lg);
+/* The item's files in the document viewer, set into the column under its words: the viewer's own bar and stage,
+   as tall as the window allows, so a page reads as it does anywhere else. */
+.viewer.is-embedded {
+  position: relative;
+  inset: auto;
+  height: max(360px, calc(100dvh - 230px));
+  border-top: 1px solid var(--rule);
+}
+/* Embedded, its bar is a quiet line of tools on the sheet (no name, which the row above gives). */
+.viewer.is-embedded .viewer-stage {
+  margin: 0;
+}
+.viewer.is-embedded .viewer-bar {
+  margin: 0;
+  padding-left: 38px;
+  border-bottom-color: var(--rule);
+}
+.viewer.is-embedded .viewer-tools > :last-child {
+  margin-right: 0;
+  padding-right: 0;
+  border-right: 0;
+}
+.viewer.is-embedded .viewer-name strong {
+  font-weight: 400;
+  color: var(--ink-2);
+}
+/* What waits: a plain group under its Label Caps head, the Inbox's rows in ink-2, not walked (Clarify takes one
+   item at a time). */
+.clarify-queue {
+  margin-top: 18px;
+}
+.clarify-queue .group-head {
+  margin: 0;
+}
+.clarify-queue ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.clarify-queue .row {
+  color: var(--ink-2);
+}
+.clarify-queue .row:hover {
+  background: none;
+}
+
+/* The decision pane: the details pane's surface, bar and body (one pane width, owner's rule), with the key line at
+   its foot. A pinned details pane steps aside while it is open. */
+.clarify-pane {
+  width: 380px;
+  flex: none;
+  border-left: 1px solid var(--rule);
+  background: var(--sheet);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.work > .clarify-pane {
+  grid-column: 2;
+  grid-row: 1 / -1;
+}
+.work:has(> .clarify-pane) > .detail {
+  display: none;
+}
+.clarify-pane-bar {
+  display: flex;
   align-items: center;
-  padding: 10px 12px 12px;
-  margin-bottom: 12px;
-  background: var(--wash);
-  border-top: 1px solid var(--rule-strong);
-  border-radius: 0 3px 3px 3px;
+  gap: var(--sp-md);
+  height: 44px;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--rule);
 }
-.p-project .field-label {
-  grid-column: 1 / -1;
-  color: var(--wash-ink);
+.clarify-pane-body {
+  flex: 1;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding: 14px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xl);
 }
-.p-project-title {
+.clarify-pane-foot {
+  padding: 0 16px 14px;
+}
+.clarify-pane-foot .key-hints {
+  margin-top: 0;
+}
+/* GTD's question, at the size of a view title, one quiet line under it, and its answers as key choices. */
+.clarify-ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-sm);
+  padding-top: 6px;
+}
+.clarify-q {
+  margin: 0;
+  font-size: var(--fs-headline);
   font-weight: 650;
-  font-size: var(--fs-sheet);
-  background: var(--sheet);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-wrap: balance;
 }
-.p-project .field-pick {
-  background: var(--sheet);
+.clarify-sub {
+  margin: 0 0 6px;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+/* Answered, a question stays: the answer marked as a picker marks its current option (650, ink), the others
+   quieter in ink-2, each still a way to change it. The decision's fields follow under a rule. */
+.key-choices.is-answered button {
+  color: var(--ink-2);
+}
+.key-choices.is-answered .is-current button {
+  color: var(--ink);
+  font-weight: 650;
+}
+.clarify-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-xl);
+  padding-top: var(--sp-xl);
+  border-top: 1px solid var(--rule);
+}
+/* A new project leads its actions, as a project leads the actions filed under it, a rule between them. */
+.p-project {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-lg);
+  padding-bottom: var(--sp-xl);
+  border-bottom: 1px solid var(--rule);
 }
 .p-actions {
   list-style: none;
@@ -3480,121 +3528,66 @@ textarea.field-text {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--sp-md);
 }
+/* One action is one block of the pane's fields; more than one are walked with ↑↓, a rule between them. The block
+   you are on takes the cursor as a pane field does: Selection Blue inside the accent hairline. */
 .p-row {
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  background: var(--sheet);
-  padding: 8px 10px 10px;
-  transition: border-color 150ms, box-shadow 150ms;
-}
-/*
- * Clarify's action rows are walked with ↑↓ like a list, so the row you are on takes the cursor (the edge and a pale
- * wash of the fill: the card holds its own field chips, which a full fill would drown). Only typing in its title turns
- * the row to the editing ring, as a text field does everywhere (focus audit: the ring had meant both).
- */
-.p-row:focus,
-.p-row:focus-within:not(:has(.p-title:focus)) {
-  outline: none;
-  border-color: var(--cursor-edge);
-  background: color-mix(in srgb, var(--select) 55%, var(--sheet));
-}
-.p-row:has(.p-title:focus) {
-  border-color: var(--ink);
-  box-shadow: 0 0 0 2px var(--accent);
-}
-.p-row.is-done {
-  background: color-mix(in srgb, var(--sheet) 70%, var(--rail));
-}
-.p-row.is-done .p-title {
-  text-decoration: line-through;
-}
-.p-row-top {
   display: flex;
-  align-items: flex-start;
-  gap: var(--sp-md);
+  flex-direction: column;
+  gap: var(--sp-lg);
+  margin: 0 -8px;
+  padding: 8px;
+  border-radius: 3px;
 }
-.p-row-top .p-kind {
-  padding-top: 5px;
+.p-row + .p-row {
+  margin-top: 6px;
+  box-shadow: 0 -7px 0 -6px var(--rule);
 }
-.p-kind {
-  font-family: var(--font-label);
-  font-stretch: 75%;
-  font-weight: 700;
-  font-size: var(--fs-tag);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-  width: 58px;
-  flex: none;
+.p-row:focus {
+  outline: none;
+  background: var(--select);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
+}
+.p-row:focus .field-label {
+  color: var(--select-ink);
 }
 .p-title {
-  flex: 1;
-  min-width: 0;
-  resize: none;
+  display: block;
   overflow: hidden;
-  line-height: 1.3;
+  resize: none;
   font-family: inherit;
-  border: 0;
-  border-bottom: 1px solid transparent;
-  background: none;
-  font-size: var(--fs-proposal);
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  padding: 3px 0;
-  outline: none;
+  line-height: 1.35;
+  padding-block: 4px;
 }
-.p-title:focus {
-  border-bottom-color: var(--ink);
-}
-/* The capture's own words, not yet rewritten as an action: drawn as raw material, not as a finished title. */
+/* The capture's own words, not yet rewritten as an action: raw material, not a finished title. */
 .p-title.is-raw {
   color: var(--ink-2);
   font-weight: 500;
 }
-.p-raw-note {
-  margin: 6px 0 0 66px;
-  font-size: var(--fs-small);
+.p-row.is-done .p-title {
   color: var(--ink-2);
+  text-decoration: line-through;
 }
-.p-fields {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-xs) var(--sp-sm);
-  margin: 6px 0 0 66px;
-}
-.p-field {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  height: 24px;
-  padding: 0 7px;
-  border: 1px solid var(--rule);
-  border-radius: 3px;
-  font-size: var(--fs-note);
-  white-space: nowrap;
-  max-width: 260px;
-  overflow: hidden;
-}
-.p-field:focus-visible {
-  outline: none;
-  border-color: var(--cursor-edge);
-  background: var(--select);
-  color: var(--select-ink);
-}
-.p-field:focus-visible .p-lbl {
-  color: inherit;
-}
+.p-raw-note,
 .p-done-note,
 .p-note {
-  margin: 6px 0 0 66px;
+  margin: -4px 0 0;
   font-size: var(--fs-small);
   color: var(--ink-2);
+  text-wrap: pretty;
 }
 .p-note {
-  margin-left: 0;
+  margin: 0;
 }
+/* A next action without a context can't be accepted: its Context field says so in alert red. */
+.field-pick.is-needed {
+  border-color: var(--alert);
+}
+.p-needed {
+  color: var(--alert);
+  font-weight: 600;
+}
+
 @keyframes shimmer {
   from {
     background-position: 100% 0;
@@ -3676,50 +3669,76 @@ textarea.field-text {
   flex-direction: column;
   gap: var(--sp-md);
 }
-.review-steps {
+/* Tabs (Settings), steps (Weekly Review) and views (Calendar) are drawn in the middle column's own voice (owner's
+   request: tabs, not buttons, and nothing borrowed from the rail): a head line like a list's column heads, Label Caps
+   over a `rule-strong` line. The one you are on is `ink` with a 2px `ink` underline on that line, as the phone's
+   Calendar marks its view; the others are `ink-3`, turning `ink` on hover. The keyboard's cursor on a tab is Selection
+   Blue with its hairline, as on every row; Selection Blue never marks the current tab. */
+.review-steps,
+.cal-modes {
   list-style: none;
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-hair);
+  align-items: stretch;
+  gap: 0;
   margin: 0;
-  padding: 0 0 10px;
-  border-bottom: 1px solid var(--rule);
+  padding: 0;
+  border-bottom: 1px solid var(--rule-strong);
 }
-/* Allen's three phases name themselves where each begins: plain ink-3 text, quieter than the steps, with a hairline
-   before every phase but the first. */
+.review-steps {
+  margin-bottom: 10px;
+}
+/* Allen's three phases group by space alone (owner's request: no phase names): the steps of a phase sit close, and a
+   phase ends in a 24px gap holding a short `rule-strong` hairline. */
 .review-phase {
-  display: flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 4px 0 10px;
-  font-size: var(--fs-small);
-  color: var(--ink-3);
-  white-space: nowrap;
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 12px;
+  margin: 0 12px;
+  background: var(--rule-strong);
 }
-.review-phase:not(:first-child) {
-  margin-left: 8px;
-  border-left: 1px solid var(--rule);
-}
-.review-steps button {
+.review-steps button,
+.cal-modes button {
   display: flex;
   align-items: center;
   gap: var(--sp-sm);
-  height: 26px;
-  /* Tight enough that the eleven steps and three phase names fit one line beside the rail at 1440. */
+  height: 28px;
   padding: 0 var(--sp-md);
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
   font-size: var(--fs-head);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-3);
-  border-radius: 2px;
+  background: none;
+  border-radius: 0;
+  white-space: nowrap;
+}
+.review-steps button:hover,
+.cal-modes button:hover {
+  color: var(--ink);
+}
+.review-steps .is-current button,
+.cal-modes button.is-current {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+.review-steps button:focus-visible,
+.cal-modes button:focus-visible {
+  outline: none;
+  background: var(--select);
+  color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
+}
+.review-steps .is-current button:focus-visible,
+.cal-modes button.is-current:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--cursor-edge), inset 0 -2px 0 var(--select-ink);
 }
 .review-steps .is-done:not(.is-current) button {
-  color: var(--ink-2);
+  color: var(--ink-3);
   text-decoration: line-through;
-  text-decoration-color: var(--ink-3);
+  text-decoration-color: var(--rule-strong);
 }
 .step-count {
   font-family: var(--font-ui);
@@ -3729,13 +3748,8 @@ textarea.field-text {
   color: var(--alert);
   font-variant-numeric: tabular-nums;
 }
-.review-steps .is-current .step-count {
+.review-steps button:focus-visible .step-count {
   color: inherit;
-}
-/* The current step is where you are: the selection fill, as for the focused row. */
-.review-steps .is-current button {
-  background: var(--select);
-  color: var(--select-ink);
 }
 .review-tally {
   margin: 0;
@@ -4041,20 +4055,29 @@ textarea.field-text {
     border-top: 1px solid var(--rule-strong);
     box-shadow: var(--shadow);
   }
-  .clarify-card {
-    grid-template-columns: 1fr;
-  }
-  /* The kind above, the title across the whole card, wrapping as long as it needs. */
-  .p-row-top {
-    flex-wrap: wrap;
-    gap: var(--sp-hair) var(--sp-md);
-  }
-  .p-row-top .p-kind {
+  /* On a phone the decision follows the item in the column (no pane beside it), its keys as the screen's buttons. */
+  .clarify .clarify-pane {
     width: auto;
-    padding-top: 0;
+    margin-top: 14px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
   }
-  .p-row-top .p-title {
-    flex-basis: 100%;
+  .clarify .clarify-pane-bar {
+    height: 40px;
+  }
+  .clarify .clarify-pane-body {
+    overflow: visible;
+  }
+  .clarify-body {
+    padding-left: 16px;
+    max-height: none;
+  }
+  /* Half the screen, so the question still starts in view under it. */
+  .viewer.is-embedded {
+    height: 52dvh;
+  }
+  .viewer.is-embedded .viewer-bar {
+    padding-left: 16px;
   }
   /* Step and tab strips: one line that scrolls sideways, the current one kept in view. */
   .review-steps {
@@ -4068,11 +4091,6 @@ textarea.field-text {
   }
   .review-steps li {
     flex: none;
-  }
-  .p-fields,
-  .p-done-note,
-  .p-raw-note {
-    margin-left: 0;
   }
 }
 
@@ -4232,19 +4250,12 @@ textarea.field-text {
 
 /* On a 1024-ish screen the detail pane gives up 40px, so the list beside it keeps its project column. */
 @media screen and (max-width: 1100px) and (min-width: 821px) {
-  .detail {
+  .detail,
+  .clarify-pane {
     width: 340px;
   }
 }
 
-/* A next action without a context can't be accepted: its Context chip says so in alert red. */
-.p-field.is-needed {
-  border-color: var(--alert);
-}
-.p-needed {
-  color: var(--alert);
-  font-weight: 600;
-}
 
 
 
@@ -4683,21 +4694,13 @@ textarea.field-text {
   grid-area: modes;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
   margin: 0;
-  border-bottom: 1px solid var(--rule-strong);
 }
 .calendar.is-phone .cal-modes button {
+  justify-content: center;
   min-height: 44px;
   height: auto;
-  border-radius: 0;
   font-size: var(--fs-small);
-}
-/* The current view is underlined in ink, as the tab bar marks its place, rather than a chip in a strip of four. */
-.calendar.is-phone .cal-modes button.is-current {
-  background: none;
-  color: var(--ink);
-  box-shadow: inset 0 -2px 0 var(--ink);
 }
 .calendar.is-phone .cal-legend {
   grid-area: legend;
@@ -4909,28 +4912,7 @@ textarea.field-text {
   color: var(--ink);
 }
 .cal-modes {
-  display: flex;
-  gap: var(--sp-hair);
   margin-left: auto;
-}
-.cal-modes button {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 3px;
-  font-family: var(--font-label);
-  font-stretch: 75%;
-  font-weight: 600;
-  font-size: var(--fs-small);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.cal-modes button:hover {
-  color: var(--ink);
-}
-.cal-modes button.is-current {
-  background: var(--select);
-  color: var(--select-ink);
 }
 
 .cal-weekdays {
@@ -5825,22 +5807,6 @@ body.is-cal-dragging {
   }
 }
 
-
-/* Clarify by hand opens on GTD's question, before anything is written: the question at the size of a view title,
-   one quiet line under it, and the answers in the key line (buttons on touch). */
-.clarify-ask {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-sm);
-  padding: 28px 4px;
-}
-.clarify-q {
-  margin: 0;
-  font-size: var(--fs-headline);
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
 
 /* Get creative: one capture line above the areas, as wide as a reading line. */
 .idea-capture {

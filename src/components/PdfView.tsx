@@ -21,7 +21,7 @@ function pdfjs() {
 /** CSS pixels per PDF point at 100%: a page shown at its printed size, as Preview and Acrobat count it. */
 const ACTUAL = 96 / 72;
 /** The zoom steps, as shares of the printed size. */
-const STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
+export const STEPS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
 /** Fitted to the width, a page is never wider than a comfortable reading measure. */
 const FIT_MAX = 920;
 const GAP = 16;

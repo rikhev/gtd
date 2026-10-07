@@ -645,6 +645,8 @@ export default function App() {
   const some = (n: number, noun: string) => (n ? plural(n, noun) : "");
   const counts: Partial<Record<ViewId, string>> = {
     inbox: some(inboxCount, "item"),
+    // Clarifying, what is still to decide: it counts down as the list under the item empties.
+    clarify: inboxCount ? `${inboxCount} left` : "",
     // Deferred actions stay out of the count; the suffix says how many wait for their start date (⌥V shows them).
     next: [
       // While What fits now is on, the count says how many of them fit.

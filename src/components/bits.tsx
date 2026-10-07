@@ -205,7 +205,7 @@ export function Kbd({ k }: { k: string }) {
 }
 
 /** The ways forward from a stopped or finished state, each with its key. The keys themselves are bound by the view. */
-export function KeyChoices({ choices, autoFocus = true }: { choices: { k: string; label: string; run: () => void }[]; autoFocus?: boolean }) {
+export function KeyChoices({ choices, autoFocus = true, current }: { choices: { k: string; label: string; run: () => void }[]; autoFocus?: boolean; current?: string | null }) {
   // The first way forward takes focus, so a screen reader lands on the choices rather than on nothing.
   const first = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -213,10 +213,12 @@ export function KeyChoices({ choices, autoFocus = true }: { choices: { k: string
     if (autoFocus && (!el || el === document.body)) first.current?.focus({ preventScroll: true });
   }, [autoFocus]);
   return (
-    <ul className="key-choices">
+    // A choice already made stays in sight, marked as a picker marks the current option (its label in 650), so it can
+    // be changed by choosing another.
+    <ul className={`key-choices ${current ? "is-answered" : ""}`}>
       {choices.map((c, i) => (
-        <li key={c.k}>
-          <button type="button" ref={i === 0 ? first : undefined} onClick={c.run}>
+        <li key={c.k} className={current === c.k ? "is-current" : undefined}>
+          <button type="button" ref={i === 0 ? first : undefined} onClick={c.run} aria-pressed={current === undefined ? undefined : current === c.k}>
             <Kbd k={c.k} />
             <span>{c.label}</span>
           </button>

@@ -1,5 +1,6 @@
 import { NotesArea } from "../components/NotesArea.tsx";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { FileText, Mail, StickyNote } from "lucide-react";
 import { quote, getState, mutate, newAction, newProject, notify, plural, stamp, uid, useStore, bareArea } from "../store.ts";
 import { useUI } from "../ui.tsx";
@@ -10,7 +11,9 @@ import { splitStuff, stuffTitle } from "./InboxView.tsx";
 import { itemsFromText, newChecklist } from "../checklists.ts";
 import { reminderChoices, reminderOf, reminderWhere } from "../reminders.ts";
 import { areaItems, askWaitingOn, contextItems, nextAreaColor, projectItems, CONTEXT_COLORS } from "../actionCommands.tsx";
-import { formatLong, formatTime } from "../../shared/dates.ts";
+import { formatDate, formatLong, formatTime } from "../../shared/dates.ts";
+import { usePhone } from "../phone.ts";
+import { Viewer } from "../components/Viewer.tsx";
 import type { ID, Op, Proposal, ProposedAction, Stuff } from "../../shared/types.ts";
 
 type Draft = Omit<Proposal, "actions"> & { actions: (ProposedAction & { done?: boolean })[] };
@@ -42,13 +45,6 @@ function blankDecision(stuffId: string, text: string): Proposal {
     actions: [{ title: first.slice(0, 120), kind: "next", project: null, context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false }],
   };
 }
-
-const DISPOSITIONS: Record<Draft["disposition"], string> = {
-  actionable: "Actionable",
-  someday: "Someday / Maybe",
-  reference: "Reference",
-  trash: "Trash",
-};
 
 /** Where a Clarify run lives: its own screen by default, or inside another view (the Weekly Review) that stays put. */
 export interface ClarifyHost {
@@ -95,8 +91,22 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   // Each item is first asked GTD's question, "is it actionable?", before any action is written (owner's decision
   // after the GTD critique: the capture used to pass straight through as the next action).
   const [answered, setAnswered] = useState<Set<string>>(new Set());
+  // Answered no (owner's request: the question is yes or no): then what it is, among the things that aren't actions.
+  const [declined, setDeclined] = useState<Set<string>>(new Set());
+  // Items answered at least once: answering one the same way again keeps what was written.
+  const touched = useRef<Set<string>>(new Set());
   const [row, setRow] = useState(0);
-  const card = useRef<HTMLDivElement>(null);
+  // The decision pane: every proposed action, its fields and the naming fields live here.
+  const card = useRef<HTMLElement>(null);
+  const phone = usePhone();
+  // A long first line is cut in its row (rows are one line): then the opened item starts with it whole.
+  const subjectRef = useRef<HTMLSpanElement>(null);
+  const [cut, setCut] = useState(false);
+  // Which of the item's files the viewer shows (← → step through them).
+  const [fileAt, setFileAt] = useState(0);
+  // The pane stands where the details pane does, beside the column (not on a phone, where it follows the item).
+  const [work, setWork] = useState<Element | null>(null);
+  useEffect(() => setWork(document.querySelector(".work")), []);
 
   // Every Inbox item gets a blank decision, its first line as the first action, in the order it was captured.
   useEffect(() => {
@@ -120,6 +130,16 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   const current = s.stuff.find((x) => x.id === currentId);
   const draft = currentId ? drafts[currentId] : undefined;
   const files = s.files.filter((f) => f.owner_kind === "stuff" && f.owner_id === currentId);
+  useEffect(() => setFileAt(0), [currentId]);
+  useEffect(() => {
+    const el = subjectRef.current;
+    if (!el) return setCut(false);
+    const measure = () => setCut(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [currentId]);
 
   useEffect(() => {
     setRow(0);
@@ -409,39 +429,77 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   );
   const gating = Boolean(current && draft) && !answered.has(current!.id) && !reminder && !orphan;
   const ready = Boolean(current && draft) && !gating && !reminder && !orphan;
+  const asking = gating && !declined.has(current!.id);
+  const notActionable = gating && declined.has(current!.id);
+  const decline = (no: boolean) => current && setDeclined((prev) => {
+    const next = new Set(prev);
+    if (no) next.add(current.id);
+    else next.delete(current.id);
+    return next;
+  });
+  /** One answer back (Esc, or choosing another): the answered question is open again, what was written kept. */
+  const stepBack = () => {
+    if (!current) return;
+    setAnswered((prev) => {
+      const next = new Set(prev);
+      next.delete(current.id);
+      return next;
+    });
+    window.setTimeout(() => card.current?.querySelector<HTMLElement>(".key-choices:not(.is-answered) button, .key-choices .is-current button")?.focus(), 0);
+  };
+  // No, after yes: back to the second question, the fields still beneath until it is answered.
+  const answerNo = () => {
+    if (!current) return;
+    if (answered.has(current.id)) stepBack();
+    decline(true);
+  };
   /** The answer to "is it actionable?": Yes starts an empty next action to put into words; the rest file the item. */
   const answer = (a: "yes" | "someday" | "reference" | "trash") => {
     if (!current || !draft) return;
     if (a === "trash") return trashItem();
     const title = stuffTitle(current);
+    // Answered again after stepping back: the same answer keeps what was written under it; another starts afresh.
+    const again = touched.current.has(current.id);
+    touched.current.add(current.id);
     update((d) => {
       if (a === "yes") {
+        if (again && d.disposition === "actionable" && d.actions.length) return;
         d.disposition = "actionable";
-        d.actions = [{ ...d.actions[0], title: "", kind: "next" }];
+        d.new_project = null;
+        d.actions = [{ ...d.actions[0], title: "", kind: "next", bring_back: null, done: false }];
       } else if (a === "someday") {
+        if (again && d.disposition === "someday" && !d.actions.some((x) => x.bring_back)) return;
         d.disposition = "someday";
-        d.actions = [{ ...d.actions[0], title, kind: "someday" }];
+        d.actions = [{ ...d.actions[0], title, kind: "someday", bring_back: null, done: false }];
       } else {
+        if (again && d.disposition === "reference" && !d.reference?.checklist) return;
         d.disposition = "reference";
         d.reference = { title, notes: "" };
       }
     });
     setAnswered((prev) => new Set(prev).add(current.id));
+    setDeclined((prev) => {
+      const next = new Set(prev);
+      if (a === "yes") next.delete(current.id);
+      else next.add(current.id);
+      return next;
+    });
     // Yes: the cursor waits in the empty action, the capture beside it as the source.
     if (a === "yes") window.setTimeout(() => card.current?.querySelector<HTMLElement>("[data-row='0'] .p-title")?.focus(), 0);
   };
   const backLabel = host.backLabel;
   const commands: Command[] = [
-    { id: "cl.yes", label: "Actionable: decide the next action", group: "Clarify", keys: ["y"], enabled: gating, run: () => answer("yes") },
-    { id: "cl.someday", label: "Not now: Someday / Maybe", group: "Clarify", keys: ["s"], enabled: gating, run: () => answer("someday") },
-    { id: "cl.reference", label: "Not actionable: keep as Reference", group: "Clarify", keys: ["r"], enabled: gating, run: () => answer("reference") },
+    { id: "cl.yes", label: "Yes, actionable: decide the next action", group: "Clarify", keys: ["y"], enabled: asking || notActionable, run: () => answer("yes") },
+    { id: "cl.no", label: "No, not actionable", group: "Clarify", keys: ["n"], enabled: asking, run: answerNo },
+    { id: "cl.someday", label: "Someday / Maybe", group: "Clarify", keys: ["s"], enabled: notActionable, run: () => answer("someday") },
+    { id: "cl.reference", label: "Keep as Reference", group: "Clarify", keys: ["r"], enabled: notActionable, run: () => answer("reference") },
     // GTD's incubate has two homes: Someday/Maybe, and the tickler. B is the tickler: on Someday until the day it comes back.
     {
       id: "cl.tickler",
       label: "Bring it back on a day",
       group: "Clarify",
       keys: ["b"],
-      enabled: gating,
+      enabled: notActionable,
       run: () => {
         if (!current) return;
         // The day first, then one update: Someday/Maybe until then, decided again when it comes back.
@@ -457,6 +515,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
               d.actions = [{ ...d.actions[0], title, kind: "someday", bring_back: day }];
             });
             setAnswered((prev) => new Set(prev).add(current.id));
+            setDeclined((prev) => new Set(prev).add(current.id));
           },
         });
       },
@@ -465,8 +524,9 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       (document.activeElement as HTMLElement | null)?.blur?.();
       window.setTimeout(accept, 0);
     } },
-    { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current) && !reminder && !orphan, run: trashItem },
-    { id: "cl.done", label: "Done it now (two-minute rule)", group: "Clarify", keys: ["e"], enabled: ready, run: () => {
+    // Trash is one of the answers to "no", so the question is answered first (owner's request).
+    { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current) && !reminder && !orphan && !asking, run: trashItem },
+    { id: "cl.done", label: "Done it now (two-minute rule)", group: "Clarify", keys: ["e"], enabled: ready && draft?.disposition === "actionable", run: () => {
       const i = rowOfFocus();
       if (draft?.actions[i]) updateRow(i, { done: !draft.actions[i].done });
     } },
@@ -497,6 +557,8 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         const rowEl = el?.closest<HTMLElement>("[data-row]");
         if (el && rowEl && el !== rowEl) rowEl.focus();
         else if (el && card.current?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) el.blur();
+        else if (ready && answered.has(current!.id)) stepBack();
+        else if (notActionable) decline(false);
         else host.leave();
       },
     },
@@ -543,255 +605,311 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     );
   }
 
-  const done = handled.size;
-  const total = queue.length;
-  // The queue, felt: the next few items wait below, dimmer the further off they are.
+  // The queue, felt: everything still to clarify waits under the item, in the order it will come.
   const ahead = [...queue.slice(index + 1), ...queue.slice(0, index)].filter((id) => !handled.has(id));
-  const upNext = ahead.slice(0, 3).map((id) => s.stuff.find((x) => x.id === id)).filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const waiting = ahead.map((id) => s.stuff.find((x) => x.id === id)).filter((x): x is NonNullable<typeof x> => Boolean(x));
+  const kindIcon = (st: Stuff, size = 14) => (st.kind === "email" ? <Mail size={size} strokeWidth={1.75} aria-hidden /> : st.kind === "file" ? <FileText size={size} strokeWidth={1.75} aria-hidden /> : <StickyNote size={size} strokeWidth={1.75} aria-hidden />);
+  const from = (st: Stuff) => (st.kind === "email" ? (st.text.match(/^(?:from|från):\s*(.+)$/im)?.[1] ?? "") : "");
+  // An email's From line is shown beside its subject, so its body starts after the header lines.
+  const body = current ? (current.kind === "email" ? splitStuff(current).rest.replace(/^(?:from|från|to|till|date|datum|cc):.*\n?/gim, "").trim() : splitStuff(current).rest) : "";
+  const none = (
+    <>
+      <span className="dash" aria-hidden="true">
+        –
+      </span>
+      <span className="visually-hidden">not set</span>
+    </>
+  );
+  /** A field of the decision, drawn and spoken as the details pane draws its fields. */
+  const pick = (label: string, value: ReactNode, onOpen: () => void, needed = false) => (
+    <div className="field" key={label}>
+      <span className="field-head">
+        <span className="field-label">{label}</span>
+      </span>
+      <button type="button" className={`field-pick ${needed ? "is-needed" : ""}`} onClick={onOpen}>
+        <span className="visually-hidden">{label}: </span>
+        <span className="field-pick-value">{value}</span>
+      </button>
+    </div>
+  );
+  const kindName = (a: Draft["actions"][number]) => (a.done ? "Done now" : a.kind === "next" ? "Next action" : a.kind === "waiting" ? "Waiting for" : "Someday / Maybe");
 
-  return (
-    <div className="clarify" ref={card}>
-      <div className="clarify-progress" aria-label={`${done} of ${total} clarified`}>
-        <span className="num">
-          {Math.min(done + 1, total)} / {total}
-        </span>
-        <span className="clarify-track">
-          {queue.map((id, i) => (
-            <i key={id} className={`${handled.has(id) ? "is-done" : ""} ${i === index ? "is-current" : ""} ${drafts[id] ? "is-ready" : ""}`} />
-          ))}
-        </span>
-      </div>
-
-      <div className="clarify-card">
-        <section className="clarify-stuff" aria-label="Captured stuff">
-          <h2 className="pane-h">
-            {current?.kind === "email" ? <Mail size={14} strokeWidth={1.75} aria-hidden /> : current?.kind === "file" ? <FileText size={14} strokeWidth={1.75} aria-hidden /> : <StickyNote size={14} strokeWidth={1.75} aria-hidden />}
-            Stuff
-            <span className="muted-text small">captured {current ? formatLong(current.created_at.slice(0, 10)) : ""}</span>
-          </h2>
-          <div className="sheet">
-            <p className="sheet-text">{current?.text}</p>
-            {files.map((f) => (
-              <div key={f.id} className="sheet-file">
-                <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer">
-                  {f.name}
-                </a>
-                {f.mime.startsWith("image/") ? <img src={`/api/files/${f.id}`} alt={f.name} /> : f.preview ? <pre>{f.preview.slice(0, 2400)}</pre> : null}
-              </div>
-            ))}
+  // The answers shown as made: from the decision itself once answered (File as can change it), else from the steps.
+  // Stepped back, the earlier answer stays marked until another is chosen.
+  const made = ready || (Boolean(current) && touched.current.has(current!.id));
+  const first: string | null = !draft || reminder || orphan ? null : notActionable ? "n" : made ? (draft.disposition === "actionable" ? "y" : "n") : null;
+  const second: string | null =
+    !made || !draft || first !== "n" || draft.disposition === "actionable" ? null : draft.disposition === "reference" ? "r" : draft.disposition === "trash" ? "backspace" : draft.actions.some((a) => a.bring_back) ? "b" : "s";
+  const decision = (
+    <>
+      {orphan ? (
+        <div className="clarify-ask">
+          <p className="clarify-q">It was due back, but it's gone.</p>
+          <p className="clarify-sub">The item it brought back has been deleted since. Clarify this entry as new stuff, or trash it.</p>
+          <KeyChoices choices={reminderPicks} />
+        </div>
+      ) : reminder ? (
+        <div className="clarify-ask">
+          <p className="clarify-q">It's back. Is it still right?</p>
+          <p className="clarify-sub">
+            {reminder.item.title || "Untitled"}, on {reminderWhere(s, reminder)}. It stays as it is unless you change it here.
+          </p>
+          <KeyChoices choices={reminderPicks} />
+        </div>
+      ) : !draft ? null : (
+        <>
+          {/* GTD's questions stay in the pane once answered, each answer marked, the decision's fields under them;
+              choosing another answer (or Esc) changes it (owner's request). */}
+          <div className="clarify-ask">
+            <p className="clarify-q">Is it actionable?</p>
+            <p className="clarify-sub">Is there anything you, or someone, should do about it?</p>
+            <KeyChoices
+              key="ask"
+              autoFocus={asking}
+              current={first}
+              choices={[
+                { k: "y", label: "Yes: decide the next action", run: () => answer("yes") },
+                { k: "n", label: "No", run: answerNo },
+              ]}
+            />
           </div>
-        </section>
-
-        <section className="clarify-proposal" aria-label="Your decision">
-          <h2 className="pane-h">
-            Your decision
-            {draft && !gating && !reminder && !orphan && <Tag>{draft.disposition === "reference" && draft.reference?.checklist ? "Checklist" : DISPOSITIONS[draft.disposition]}</Tag>}
-          </h2>
-          {orphan ? (
-            <>
-              <div className="clarify-ask">
-                <p className="clarify-q">It was due back, but it's gone.</p>
-                <p className="muted-text">The item it brought back has been deleted since. Clarify this entry as new stuff, or trash it.</p>
-              </div>
-              <KeyChoices choices={reminderPicks} />
-            </>
-          ) : reminder ? (
-            <>
-              <div className="clarify-ask">
-                <p className="clarify-q">It's back. Is it still right?</p>
-                <p className="muted-text">
-                  {reminder.item.title || "Untitled"}, on {reminderWhere(s, reminder)}. It stays as it is unless you change it here.
-                </p>
-              </div>
-              <KeyChoices choices={reminderPicks} />
-            </>
-          ) : gating ? (
+          {first === "n" && !asking && (
             <div className="clarify-ask">
-              <p className="clarify-q">Is it actionable?</p>
-              <p className="muted-text">Is there anything you, or someone, should do about it? Decide that before writing any action.</p>
+              <p className="clarify-q">What is it, then?</p>
+              <p className="clarify-sub">Something for later, something to keep, or something to let go.</p>
+              <KeyChoices
+                key="no"
+                autoFocus={false}
+                current={second}
+                choices={[
+                  { k: "s", label: "Someday / Maybe", run: () => answer("someday") },
+                  { k: "b", label: "Bring it back on a day…", run: () => commands.find((c) => c.id === "cl.tickler")?.run() },
+                  { k: "r", label: "Reference", run: () => answer("reference") },
+                  { k: "backspace", label: "Trash", run: trashItem },
+                ]}
+              />
             </div>
-          ) : !draft ? null : (
+          )}
+          {ready && (
+            <div className="clarify-fields">
+          {draft.disposition === "reference" && (
             <>
-              {draft.disposition === "reference" && (
-                <div className="p-block">
-                  <label className="field">
-                    <span className="field-label">{draft.reference?.checklist ? "Checklist title" : "Reference title"}</span>
-                    <input
-                      className="field-text p-title"
-                      value={draft.reference?.title ?? ""}
-                      onKeyDown={enterLeaves}
-                      onChange={(e) => update((d) => (d.reference = { title: e.target.value, notes: d.reference?.notes ?? "", checklist: d.reference?.checklist }))}
-                    />
-                  </label>
-                  {draft.reference?.checklist ? (
-                    <ChecklistPreview text={current ? checklistLines(current, draft.reference?.title) : ""} />
-                  ) : (
-                  <label className="field">
+              <label className="field field-title">
+                <span className="field-head">
+                  <span className="field-label">{draft.reference?.checklist ? "Checklist" : "Reference"}</span>
+                </span>
+                <input
+                  className="field-text"
+                  value={draft.reference?.title ?? ""}
+                  onKeyDown={enterLeaves}
+                  onChange={(e) => update((d) => (d.reference = { title: e.target.value, notes: d.reference?.notes ?? "", checklist: d.reference?.checklist }))}
+                />
+              </label>
+              {draft.reference?.checklist ? (
+                <ChecklistPreview text={current ? checklistLines(current, draft.reference?.title) : ""} />
+              ) : (
+                <label className="field">
+                  <span className="field-head">
                     <span className="field-label">Notes</span>
-                    <NotesArea
-                      className="field-text"
-                      rows={3}
-                      aria-label="Reference notes"
-                      value={draft.reference?.notes ?? ""}
-                      onValue={(notes) => update((d) => (d.reference = { title: d.reference?.title ?? "", notes }))}
-                    />
-                  </label>
-                  )}
-                </div>
+                  </span>
+                  <NotesArea
+                    className="field-text"
+                    rows={3}
+                    aria-label="Reference notes"
+                    value={draft.reference?.notes ?? ""}
+                    onValue={(notes) => update((d) => (d.reference = { title: d.reference?.title ?? "", notes }))}
+                  />
+                </label>
               )}
-              {draft.disposition === "trash" && <p className="p-note">Accept to trash it, or file it as something else.</p>}
-              {(draft.disposition === "actionable" || draft.disposition === "someday") && (
-                <>
-                  {draft.new_project && (
-                    <div className="p-project">
-                      <span className="field-label">{matchingProject(draft.new_project.title) ? "Existing project (same title)" : "New project"}</span>
-                      <input
-                        className="field-text p-project-title"
-                        value={draft.new_project.title}
-                        aria-label="New project title"
-                        onKeyDown={enterLeaves}
-                        onChange={(e) => update((d) => (d.new_project = { ...d.new_project!, title: e.target.value }))}
-                      />
-                      <button
-                        type="button"
-                        className="field-pick"
-                        onClick={() =>
-                          ui.openPicker({
-                            type: "list",
-                            title: "Area",
-                            items: areaItems().map((a) => ({ ...a, id: bareArea(a.label) })),
-                            current: draft.new_project?.area ?? null,
-                            noneLabel: "No area",
-                            createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
-                            onCreate: (q) => update((d) => (d.new_project = { ...d.new_project!, area: bareArea(q) })),
-                            onPick: (a) => update((d) => (d.new_project = { ...d.new_project!, area: a })),
-                          })
-                        }
-                      >
-                        {draft.new_project.area ? <AreaName name={draft.new_project.area} color={s.areas.find((x) => x.name.toLowerCase() === bareArea(draft.new_project!.area!).toLowerCase())?.color} /> : <span className="dash">No area</span>}
-                      </button>
-                    </div>
-                  )}
-                  <ol className="p-actions">
-                    {draft.actions.map((a, i) => {
-                      // By hand, the first action starts as the capture's own words: until it is rewritten it is drawn
-                      // as raw material, with a prompt, and focusing it selects it so typing replaces it.
-                      const raw = Boolean(current) && a.title.trim() !== "" && a.title.trim() === stuffTitle(current!).trim();
-                      return (
-                      <li key={i} data-row={i} tabIndex={0} aria-label={`Proposed action ${i + 1}: ${a.title}`} className={`p-row ${a.done ? "is-done" : ""}`} onFocus={() => setRow(i)}>
-                        <div className="p-row-top">
-                          <span className="p-kind">{a.kind === "next" ? "Next" : a.kind === "waiting" ? "Waiting" : "Someday"}</span>
-                          {/* A title wraps rather than being cut off: the field grows to its lines (it stays one line of
-                              meaning, so Enter never adds a break). */}
-                          <textarea
-                            rows={1}
-                            ref={fitHeight}
-                            className={`p-title ${raw ? "is-raw" : ""}`}
-                            value={a.title}
-                            aria-label={`Action ${i + 1}`}
-                            aria-describedby={raw ? `p-raw-${i}` : undefined}
-                            onFocus={(e) => raw && e.currentTarget.select()}
-                            onKeyDown={enterLeaves}
-                            onChange={(e) => {
-                              fitHeight(e.currentTarget);
-                              updateRow(i, { title: e.target.value.replace(/\n/g, " ") });
-                            }}
-                          />
-                        </div>
-                        <div className="p-fields">
-                          <button type="button" className="p-field" onClick={() => pickFor(i, "project")}>
-                            <span className="p-lbl">Project</span>
-                            {a.project === "new" ? draft.new_project?.title : a.project ? s.projects.find((p) => p.id === a.project)?.title ?? <span className="dash" aria-hidden="true">–</span> : <span className="dash" aria-hidden="true">–</span>}
-                          </button>
-                          <button type="button" className={`p-field ${a.kind === "next" && !a.done && !a.context ? "is-needed" : ""}`} onClick={() => pickFor(i, "context")}>
-                            <span className="p-lbl">Context</span>
-                            {a.context ? (
-                              <ContextCode ctx={s.contexts.find((c) => c.name.toLowerCase() === a.context!.toLowerCase()) ?? { id: "", name: a.context, color: "var(--ink-3)", sort: 0 }} />
-                            ) : a.kind === "next" && !a.done ? (
-                              <span className="p-needed">needed</span>
-                            ) : (
-                              <span className="dash" aria-hidden="true">–</span>
-                            )}
-                          </button>
-                          {a.kind === "waiting" && (
-                            <button type="button" className="p-field" onClick={() => pickFor(i, "who")}>
-                              <span className="p-lbl">Waiting on</span>
-                              {a.waiting_who ?? <span className="dash" aria-hidden="true">–</span>}
-                            </button>
-                          )}
-                          <button type="button" className="p-field" onClick={() => pickFor(i, "due")}>
-                            <span className="p-lbl">Due</span>
-                            {a.due ? formatLong(a.due) : <span className="dash" aria-hidden="true">–</span>}
-                          </button>
-                          <button type="button" className="p-field" onClick={() => pickFor(i, "defer")}>
-                            <span className="p-lbl">Start</span>
-                            {a.defer ? formatLong(a.defer) : <span className="dash" aria-hidden="true">–</span>}
-                          </button>
-                          {a.kind === "someday" && (
-                            <button type="button" className="p-field" onClick={() => pickFor(i, "back")}>
-                              <span className="p-lbl">Bring back</span>
-                              {a.bring_back ? formatLong(a.bring_back) : <span className="dash" aria-hidden="true">–</span>}
-                            </button>
-                          )}
-                          <button type="button" className="p-field" onClick={() => pickFor(i, "time")}>
-                            <span className="p-lbl">Time</span>
-                            {a.time_min ? formatTime(a.time_min) : <span className="dash" aria-hidden="true">–</span>}
-                          </button>
-                          <button type="button" className="p-field" onClick={() => pickFor(i, "energy")}>
-                            <span className="p-lbl">Energy</span>
-                            <Energy level={a.energy} />
-                          </button>
-                        </div>
-                        {raw && (
-                          <p className="p-raw-note" id={`p-raw-${i}`}>
-                            Rewrite as a next action, verb first: what is the very next thing you'd do?
-                          </p>
-                        )}
-                        {a.done && <p className="p-done-note">Done now: goes straight to the Done log.</p>}
-                      </li>
-                      );
-                    })}
-                  </ol>
-                  {draft.actions.length === 0 && <p className="p-note">No actions yet. Add one if this needs doing.</p>}
-                </>
-              )}
-
+              {!draft.reference?.checklist && <p className="detail-meta">The captured words follow your notes.</p>}
             </>
           )}
-        </section>
-      </div>
-      <KeyHints
-        hints={reminder || orphan ? [] : gating ? [
-          { k: "y", label: "Yes, actionable", primary: true },
-          { k: "s", label: "Someday" },
-          { k: "r", label: "Reference" },
-          { k: "b", label: "Bring back on…", touch: "more" as const },
-          { k: "backspace", label: "Trash" },
-        ] : [
-          { k: "mod+enter", label: "Accept", primary: true },
-          { k: "n", label: "Add action", touch: "more" as const },
-          { k: "v", label: "File as" },
-          { k: "shift+p", label: "Project", touch: "more" as const },
-          { k: "e", label: "Done now" },
-          { k: "backspace", label: "Trash", touch: "more" as const },
-        ]}
-      />
-      {upNext.length > 0 && (
-        <section className="clarify-next" aria-label="Up next">
-          <h2 className="pane-h">
-            Up next
-            {ahead.length > upNext.length && <span className="muted-text small">and {ahead.length - upNext.length} more</span>}
-          </h2>
-          <ol>
-            {upNext.map((st) => (
-              <li key={st.id}>
-                {st.kind === "email" ? <Mail size={13} strokeWidth={1.75} aria-hidden /> : st.kind === "file" ? <FileText size={13} strokeWidth={1.75} aria-hidden /> : <StickyNote size={13} strokeWidth={1.75} aria-hidden />}
-                <span>{stuffTitle(st) || "Untitled"}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
+          {draft.disposition === "trash" && <p className="p-note">Accept to trash it, or file it as something else.</p>}
+          {(draft.disposition === "actionable" || draft.disposition === "someday") && (
+            <>
+              {draft.new_project && (
+                <section className="p-project" aria-label="Project">
+                  <label className="field field-title">
+                    <span className="field-head">
+                      <span className="field-label">{matchingProject(draft.new_project.title) ? "Existing project (same title)" : "New project"}</span>
+                    </span>
+                    <input
+                      className="field-text p-project-title"
+                      value={draft.new_project.title}
+                      onKeyDown={enterLeaves}
+                      onChange={(e) => update((d) => (d.new_project = { ...d.new_project!, title: e.target.value }))}
+                    />
+                  </label>
+                  <div className="field-grid">
+                    {pick(
+                      "Area",
+                      draft.new_project.area ? <AreaName name={draft.new_project.area} color={s.areas.find((x) => x.name.toLowerCase() === bareArea(draft.new_project!.area!).toLowerCase())?.color} /> : none,
+                      () =>
+                        ui.openPicker({
+                          type: "list",
+                          title: "Area",
+                          items: areaItems().map((a) => ({ ...a, id: bareArea(a.label) })),
+                          current: draft.new_project?.area ?? null,
+                          noneLabel: "No area",
+                          createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
+                          onCreate: (q) => update((d) => (d.new_project = { ...d.new_project!, area: bareArea(q) })),
+                          onPick: (a) => update((d) => (d.new_project = { ...d.new_project!, area: a })),
+                        }),
+                    )}
+                  </div>
+                </section>
+              )}
+              <ol className="p-actions">
+                {draft.actions.map((a, i) => {
+                  // By hand, the first action starts as the capture's own words: until it is rewritten it is drawn
+                  // as raw material, with a prompt, and focusing it selects it so typing replaces it.
+                  const raw = a.kind === "next" && !a.done && Boolean(current) && a.title.trim() !== "" && a.title.trim() === stuffTitle(current!).trim();
+                  const projectName = a.project === "new" ? draft.new_project?.title : a.project ? s.projects.find((p) => p.id === a.project)?.title : undefined;
+                  const ctx = a.context ? s.contexts.find((c) => c.name.toLowerCase() === a.context!.toLowerCase()) ?? { id: "", name: a.context, color: "var(--ink-3)", sort: 0 } : null;
+                  const needsCtx = a.kind === "next" && !a.done && !a.context;
+                  return (
+                    <li key={i} data-row={i} tabIndex={0} aria-label={`${kindName(a)}${draft.actions.length > 1 ? ` ${i + 1}` : ""}: ${a.title}`} className={`p-row ${a.done ? "is-done" : ""}`} onFocus={() => setRow(i)}>
+                      <div className="field field-title">
+                        <span className="field-head">
+                          <span className="field-label">{kindName(a)}</span>
+                        </span>
+                        {/* A title wraps rather than being cut off: the field grows to its lines (it stays one line of
+                            meaning, so Enter never adds a break). */}
+                        <textarea
+                          rows={1}
+                          ref={fitHeight}
+                          className={`field-text p-title ${raw ? "is-raw" : ""}`}
+                          value={a.title}
+                          aria-label={`${kindName(a)} ${i + 1}`}
+                          aria-describedby={raw ? `p-raw-${i}` : undefined}
+                          onFocus={(e) => raw && e.currentTarget.select()}
+                          onKeyDown={enterLeaves}
+                          onChange={(e) => {
+                            fitHeight(e.currentTarget);
+                            updateRow(i, { title: e.target.value.replace(/\n/g, " ") });
+                          }}
+                        />
+                      </div>
+                      {raw && (
+                        <p className="p-raw-note" id={`p-raw-${i}`}>
+                          Rewrite it as a next action, verb first: what is the very next thing you'd do?
+                        </p>
+                      )}
+                      {/* The details pane's grid, row by row: what it belongs to and where, when it comes up beside
+                          when it is due, then time and energy. */}
+                      <div className="field-grid">
+                        {pick("Project", projectName ?? none, () => pickFor(i, "project"))}
+                        {a.kind === "waiting"
+                          ? pick("Waiting on", a.waiting_who ?? none, () => pickFor(i, "who"))
+                          : pick("Context", ctx ? <ContextCode ctx={ctx} /> : needsCtx ? <span className="p-needed">Needed</span> : none, () => pickFor(i, "context"), needsCtx)}
+                        {a.kind === "someday" ? pick("Bring back", a.bring_back ? formatLong(a.bring_back) : none, () => pickFor(i, "back")) : pick("Start", a.defer ? formatLong(a.defer) : none, () => pickFor(i, "defer"))}
+                        {pick("Due", a.due ? formatLong(a.due) : none, () => pickFor(i, "due"))}
+                        {pick("Time", a.time_min ? formatTime(a.time_min) : none, () => pickFor(i, "time"))}
+                        {pick("Energy", a.energy ? <Energy level={a.energy} /> : none, () => pickFor(i, "energy"))}
+                      </div>
+                      {a.done && <p className="p-done-note">Done now: it goes straight to the Done log.</p>}
+                    </li>
+                  );
+                })}
+              </ol>
+              {draft.actions.length === 0 && <p className="p-note">No actions yet. Add one if this needs doing.</p>}
+            </>
+          )}
+            </div>
+          )}
+        </>
       )}
+    </>
+  );
+
+  // The key line names what this decision can take: an action can be added to, made a project or done now; a
+  // reference, checklist or trash only accepted, filed as something else or trashed.
+  const acting = draft?.disposition === "actionable" || draft?.disposition === "someday";
+  const hints = ready ? (
+    <KeyHints
+      hints={[
+        { k: "mod+enter", label: "Accept", primary: true },
+        ...(acting ? [{ k: "n", label: "Add action", touch: "more" as const }] : []),
+        { k: "v", label: "File as" },
+        ...(acting ? [{ k: "shift+p", label: "Project", touch: "more" as const }] : []),
+        ...(draft?.disposition === "actionable" ? [{ k: "e", label: "Done now" }] : []),
+        { k: "backspace", label: "Trash", touch: "more" as const },
+        { k: "escape", label: "Change answer", touch: "hide" as const },
+      ]}
+    />
+  ) : null;
+
+  const pane = (
+    <aside className="clarify-pane" aria-label="Decision" ref={card}>
+      <div className="clarify-pane-bar">
+        <h2 className="detail-title">Decision</h2>
+      </div>
+      <div className="clarify-pane-body">{decision}</div>
+      {hints && <div className="clarify-pane-foot">{hints}</div>}
+    </aside>
+  );
+
+  return (
+    <div className="clarify">
+      <div className="clarify-list" role="group" aria-label="Clarifying">
+        <div className="grid-head clarify-cols" aria-hidden="true">
+          <span />
+          <span className="gh">Stuff</span>
+          <span className="gh">Captured</span>
+        </div>
+        {current && (
+          <section className="clarify-item" aria-label={`Clarifying: ${stuffTitle(current) || "Untitled"}`}>
+            <div className="row clarify-cols is-current">
+              <span className="cell c-mark kind-icon">{kindIcon(current)}</span>
+              <span className="cell">
+                <span className="subject">
+                  <span className="subject-text" ref={subjectRef}>
+                    {stuffTitle(current) || "Untitled"}
+                  </span>
+                  {from(current) && <span className="subject-more">{from(current)}</span>}
+                </span>
+              </span>
+              <span className="cell">
+                <span className="date">{formatDate(current.created_at.slice(0, 10))}</span>
+              </span>
+            </div>
+            {(body || cut) && (
+              <div className="clarify-body">
+                {cut && <p className="sheet-text clarify-whole">{stuffTitle(current)}</p>}
+                {body && <p className="sheet-text">{body}</p>}
+              </div>
+            )}
+            {/* A document or an email is read in the app's own viewer, opened where the item is (owner's request). */}
+            {files.length > 0 && <Viewer key={current.id} ids={files.map((f) => f.id)} at={Math.min(fileAt, files.length - 1)} active={regionActive} onStep={setFileAt} embedded />}
+          </section>
+        )}
+        {phone && pane}
+        {waiting.length > 0 && (
+          <section className="clarify-queue" aria-label="Up next">
+            <h2 className="group-head">
+              <span className="group-label">Up next</span>
+              <span className="group-meta">{plural(waiting.length, "item")}</span>
+            </h2>
+            <ol>
+              {waiting.map((st) => (
+                <li key={st.id} className="row clarify-cols">
+                  <span className="cell c-mark kind-icon">{kindIcon(st)}</span>
+                  <span className="cell">
+                    <span className="subject">
+                      <span className="subject-text">{stuffTitle(st) || "Untitled"}</span>
+                      {from(st) && <span className="subject-more">{from(st)}</span>}
+                    </span>
+                  </span>
+                  <span className="cell">
+                    <span className="date">{formatDate(st.created_at.slice(0, 10))}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+      </div>
+      {!phone && work && createPortal(pane, work)}
     </div>
   );
 }
@@ -803,7 +921,9 @@ function ChecklistPreview({ text }: { text: string }) {
   if (!items.length) return <p className="p-note">The item has nothing under its title, so the checklist starts empty, ready to fill.</p>;
   return (
     <div className="field">
-      <span className="field-label">{plural(toTick, "item")} to tick, from the item's lines</span>
+      <span className="field-head">
+        <span className="field-label">{plural(toTick, "item")} to tick, from the item's lines</span>
+      </span>
       <ul className="cl-preview">
         {items.slice(0, 8).map((i) => (
           <li key={i.id} className={i.section ? "is-section" : ""}>

@@ -1116,7 +1116,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         <div className="cal-modes" role="tablist" aria-label="Calendar view">
           {(["day", "week", "month", "year"] as Mode[]).map((m, i) => (
             <button key={m} id={`cal-tab-${m}`} type="button" role="tab" aria-selected={mode === m} aria-controls="cal-panel" tabIndex={mode === m ? 0 : -1} className={mode === m ? "is-current" : ""} onClick={() => setMode(m)} title={`${m[0].toUpperCase()}${m.slice(1)} (${i + 1})`} aria-keyshortcuts={String(i + 1)}>
-              {m}
+              {m[0].toUpperCase() + m.slice(1)}
             </button>
           ))}
         </div>

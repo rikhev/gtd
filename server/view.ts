@@ -1,7 +1,7 @@
 import { simpleParser } from "mailparser";
 import mammoth from "mammoth";
 import MsgReader from "@kenjiuno/msgreader";
-import { csvTable, docPage, emailBlock, textBlock } from "../shared/viewDoc.ts";
+import { csvTable, docPage, emailBlock, emailHtml, textBlock } from "../shared/viewDoc.ts";
 
 /**
  * Documents the viewer shows as a page made here: Word, email, CSV, text and HTML. PDFs and images need no page (the
@@ -31,7 +31,7 @@ export async function renderPage(name: string, mime: string, buf: Buffer, dark: 
   }
   if (mime === "message/rfc822") {
     const mail = await simpleParser(buf);
-    const body = mail.html || (mail.text ? textBlock(mail.text) : `<p class="none">No message text.</p>`);
+    const body = mail.html ? emailHtml(mail.html) : mail.text ? textBlock(mail.text) : `<p class="none">No message text.</p>`;
     const names = (a: typeof mail.to) => (Array.isArray(a) ? a.map((t) => t.text).join(", ") : a?.text);
     return docPage(title, emailBlock({ from: mail.from?.text, to: names(mail.to), cc: names(mail.cc), date: when(mail.date, zone), subject: mail.subject }, body), dark);
   }

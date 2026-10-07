@@ -745,12 +745,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     <div className="review">
       <ol className="review-steps" aria-label="Review steps">
         {STEPS.map((st, i) => [
-          // Allen's three phases name themselves where each begins; screen readers hear the phase in each step's name.
-          st.phase && st.phase !== STEPS[i - 1]?.phase && (
-            <li key={`phase-${st.phase}`} className="review-phase" aria-hidden="true">
-              {st.phase}
-            </li>
-          ),
+          // Allen's three phases are kept apart by space and a hairline, not named (owner's request); screen readers
+          // hear the phase in each step's name.
+          i > 0 && st.phase !== STEPS[i - 1].phase && <li key={`phase-${st.phase}`} className="review-phase" aria-hidden="true" />,
           <li key={st.id} className={`${i === stepIdx ? "is-current" : ""} ${isDone(st.id) ? "is-done" : ""}`} aria-current={i === stepIdx ? "step" : undefined}>
             <button type="button" onClick={() => setStepIdx(i)}>
               {st.phase && <span className="visually-hidden">{st.phase}: </span>}
