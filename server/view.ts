@@ -17,6 +17,9 @@ export function viewKind(mime: string): "page" | "pdf" | "image" | null {
 
 const isCsv = (name: string, mime: string) => mime === "text/csv" || mime === "text/tab-separated-values" || /\.(csv|tsv)$/i.test(name);
 
+/** An email's date in the owner's time zone ("7 Oct 2026, 14:05"). */
+const when = (d: Date | undefined, zone?: string) => (d && !Number.isNaN(d.getTime()) ? d.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: zone }) : undefined);
+
 /** `zone` is the owner's time zone, as their browser reports it: an email's date is never in the server's. */
 export async function renderPage(name: string, mime: string, buf: Buffer, dark: boolean, zone?: string): Promise<string> {
   const title = name;
@@ -29,12 +32,24 @@ export async function renderPage(name: string, mime: string, buf: Buffer, dark: 
   if (mime === "message/rfc822") {
     const mail = await simpleParser(buf);
     const body = mail.html || (mail.text ? textBlock(mail.text) : `<p class="none">No message text.</p>`);
-    return docPage(title, emailBlock({ from: mail.from?.text, to: Array.isArray(mail.to) ? mail.to.map((t) => t.text).join(", ") : mail.to?.text, date: mail.date?.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: zone }), subject: mail.subject }, body), dark);
+    const names = (a: typeof mail.to) => (Array.isArray(a) ? a.map((t) => t.text).join(", ") : a?.text);
+    return docPage(title, emailBlock({ from: mail.from?.text, to: names(mail.to), cc: names(mail.cc), date: when(mail.date, zone), subject: mail.subject }, body), dark);
   }
   if (mime === "application/vnd.ms-outlook") {
     const data = new MsgReader(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer).getFileData();
     const from = `${data.senderName ?? ""}${data.senderEmail ? ` <${data.senderEmail}>` : ""}`.trim();
-    return docPage(title, emailBlock({ from, subject: data.subject }, data.body ? textBlock(data.body) : `<p class="none">No message text.</p>`), dark);
+    // Outlook keeps To and Cc as one list of recipients, each marked with its kind.
+    const people = (kind: "to" | "cc") =>
+      (data.recipients ?? [])
+        .filter((r) => (r.recipType ?? "to") === kind)
+        .map((r) => {
+          const address = r.smtpAddress || r.email;
+          return r.name && address && r.name !== address ? `${r.name} <${address}>` : (r.name || address || "");
+        })
+        .filter(Boolean)
+        .join(", ");
+    const sent = data.messageDeliveryTime ?? data.clientSubmitTime;
+    return docPage(title, emailBlock({ from, to: people("to"), cc: people("cc"), date: when(sent ? new Date(sent) : undefined, zone), subject: data.subject }, data.body ? textBlock(data.body) : `<p class="none">No message text.</p>`), dark);
   }
   const text = buf.toString("utf8");
   if (isCsv(name, mime)) return docPage(title, csvTable(text), dark, true);

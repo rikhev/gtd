@@ -50,10 +50,10 @@ export function csvTable(text: string): string {
 /** Plain text (and Markdown, JSON) as it was typed, wrapped to the page. */
 export const textBlock = (text: string) => `<pre>${escapeHtml(text)}</pre>`;
 
-/** An email: who, when and what, then its words. */
-export function emailBlock(head: { from?: string; to?: string; date?: string; subject?: string }, bodyHtml: string): string {
+/** An email: who, when and what, then its words. Cc shows only when it has someone on it. */
+export function emailBlock(head: { from?: string; to?: string; cc?: string; date?: string; subject?: string }, bodyHtml: string): string {
   const row = (k: string, v?: string) => (v ? `<tr><th>${k}</th><td>${escapeHtml(v)}</td></tr>` : "");
-  return `<header class="mail"><h1>${escapeHtml(head.subject || "(No subject)")}</h1><table>${row("From", head.from)}${row("To", head.to)}${row("Date", head.date)}</table></header>${bodyHtml}`;
+  return `<header class="mail"><h1>${escapeHtml(head.subject || "(No subject)")}</h1><table>${row("From", head.from)}${row("To", head.to)}${row("Cc", head.cc)}${row("Date", head.date)}</table></header>${bodyHtml}`;
 }
 
 /** The whole page: the document's body on the app's sheet, with its type and spacing. */
