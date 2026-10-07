@@ -101,6 +101,7 @@ None yet. The project folder is empty.
 4. **Keyboard first, everything has a shortcut.** If an action can't be done from the keyboard, it isn't finished.
 5. **Faithful to GTD.** Use the method's vocabulary and flow rather than inventing a new productivity model.
 6. **The owner's data stays with the owner.** It is local-first and portable.
+7. **Consistency above all** (owner's rule). Every view is built from the same parts, used the same way: lists of one-line rows, one details pane at one width, the same heading, keys, pickers and fonts. No view gets a layout, a row shape, a surface or a control of its own, even where it might read a little better alone. When one place would look or work differently from the rest, it changes to match the rest.
 
 ## Accessibility & Inclusion
 

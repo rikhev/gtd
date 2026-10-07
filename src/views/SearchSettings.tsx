@@ -673,8 +673,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     {
       key: "subject",
       label: "Name",
-      // A reading width (about 70 characters of explanation), the value right after it.
-      width: "minmax(260px, 560px)",
+      width: "minmax(260px, 1fr)",
       render: (r) =>
         editing === r.key ? (
           <InlineEdit
