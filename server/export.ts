@@ -1,5 +1,6 @@
 import { zipSync, strToU8 } from "fflate";
-import { loadState } from "./db.ts";
+import { existsSync, readFileSync } from "node:fs";
+import { FILES_DIR, loadState } from "./db.ts";
 import { addDays, formatTime, fromIso, recurrenceLabel, parseRecurrence, today } from "../shared/dates.ts";
 import type { Action, State } from "../shared/types.ts";
 
@@ -91,6 +92,38 @@ export function exportZip({ day = today(), weekStart = 1 }: { day?: string; week
       })
       .join("\n\n"),
   );
+  // And each note as a file of its own, as a notes app keeps them (owner's request after the Reference critique: the
+  // notes go back out as they came in): notes/<Title>.md, the project it supports as a property, a list as a Markdown
+  // list, and its files beside it in notes/files, which its ![[name]] embeds name. Locked notes stay encrypted.
+  const used = new Set<string>();
+  const unique = (base: string, ext: string) => {
+    let name = `${base}${ext}`;
+    for (let n = 2; used.has(name.toLowerCase()); n++) name = `${base} (${n})${ext}`;
+    used.add(name.toLowerCase());
+    return name;
+  };
+  const safe = (t: string) => t.replace(/[\\/:*?"<>|#^[\]]/g, "-").replace(/\s+/g, " ").trim().slice(0, 120) || "Untitled";
+  const fileNames = new Set<string>();
+  for (const r of s.refs.filter((x) => x.status === "active" && !x.sealed)) {
+    const project = s.projects.find((p) => p.id === r.project_id)?.title;
+    const body =
+      r.form === "list"
+        ? r.notes
+            .split("\n")
+            .filter((l) => l.trim())
+            .map((l) => (/^#{1,6}\s+/.test(l) ? `\n## ${l.replace(/^#{1,6}\s+/, "").trim()}\n` : `- ${l.trim()}`))
+            .join("\n")
+            .trim()
+        : r.notes;
+    const props = [project && `project: "${project.replace(/"/g, '\\"')}"`, `created: ${r.created_at.slice(0, 10)}`].filter(Boolean).join("\n");
+    files[`notes/${unique(safe(r.title), ".md")}`] = strToU8(`---\n${props}\n---\n\n${body.trim()}\n`);
+    for (const f of s.files.filter((x) => x.owner_kind === "ref" && x.owner_id === r.id && !x.sealed)) {
+      const path = `${FILES_DIR}/${f.id}`;
+      if (fileNames.has(f.name.toLowerCase()) || !existsSync(path)) continue;
+      fileNames.add(f.name.toLowerCase());
+      files[`notes/files/${f.name.replace(/[\\/]/g, "-")}`] = new Uint8Array(readFileSync(path));
+    }
+  }
   md(
     "horizons.md",
     "Horizons",

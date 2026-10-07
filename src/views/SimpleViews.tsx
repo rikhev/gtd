@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, List, Lock, Paperclip, StickyNote } from "lucide-react";
 import { itemCount, openRefList, setForm, useOpenRefList } from "../refList.ts";
 import { RefListView } from "./RefListView.tsx";
+import { byTitle, firstLine, openTodayNote, renameNote, showNote } from "../notes.ts";
 import { fileKind } from "../components/Viewer.tsx";
 import { lockNow, lockWithPassword, removeLock, useLock } from "../lock.ts";
 import { quote, completeActions, getState, mutate, named, newAction, notify, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
-import { useUI } from "../ui.tsx";
+import { useUI, type UI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { DateCell, Lamp, Marker } from "../components/bits.tsx";
@@ -212,7 +213,9 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
 
 /**
  * Reference has two levels, as Checklists has: every reference, and a reference list opened across the whole width
- * (owner's request). A list's own address (#reference/<id>) brings it back; one that is gone lands on every reference.
+ * (owner's request). A note is an item like any other: its text is written in the details pane (owner's decision after
+ * the note page: the app is lists and one pane). A list's own address (#reference/<id>) brings it back; one that is
+ * gone lands on every reference.
  */
 export function ReferenceView({ regionActive }: { regionActive: boolean }) {
   const openId = useOpenRefList();
@@ -225,6 +228,29 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
     }
   }, [openId, open]);
   return open ? <RefListView key={open.id} r={open} regionActive={regionActive} /> : <ReferenceIndex regionActive={regionActive} />;
+}
+
+/**
+ * / finds a note by its title or its words (every word must be in one or the other), most recently changed first
+ * until you type; a match in the text shows the line it was found on. The cursor goes to it.
+ */
+function findNote(ui: UI, current: ID | null, onPick: (id: ID) => void) {
+  const s = getState();
+  const refs = s.refs.filter((r) => r.status === "active").sort((a, b) => refUpdated(s, b).localeCompare(refUpdated(s, a)));
+  ui.openPicker({
+    type: "list",
+    title: "Find a note",
+    wide: true,
+    placeholder: "Title or words in it",
+    items: refs.map((r) => ({
+      id: r.id,
+      label: r.title || "Untitled",
+      hint: s.projects.find((p) => p.id === r.project_id)?.title ?? formatDate(refUpdated(s, r).slice(0, 10)),
+      body: r.sealed ? undefined : r.notes,
+    })),
+    current,
+    onPick: (id) => id && onPick(id),
+  });
 }
 
 function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
@@ -252,7 +278,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     [s, filesBy],
   );
   const rows = useMemo(
-    () => sortGroups([{ key: "refs", label: "", rows: s.refs.filter((r) => r.status === "active").sort((a, b) => a.title.localeCompare(b.title)) }], sorters, sort)[0].rows,
+    () => sortGroups([{ key: "refs", label: "", rows: s.refs.filter((r) => r.status === "active").sort((a, b) => byTitle(a.title, b.title)) }], sorters, sort)[0].rows,
     [s.refs, sorters, sort],
   );
   const nav = useListNav("reference", useMemo(() => [{ key: "refs", rowKeys: rows.map((r) => r.id), showHeader: false }], [rows]));
@@ -272,10 +298,10 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.revealTarget]);
 
-  /** N: a new note; New list: a new list, opened to be filled once it is named. */
+  /** N: a new note, named in its row and then written in the pane; New list: a new list, opened to be filled once named. */
   const create = (form: "list" | null = null) => {
     const id = uid();
-    mutate(form ? "New list" : "New reference", [{ type: "create", table: "refs", row: { id, title: "", notes: "", project_id: null, status: "active", created_at: stamp(), form } }], { silent: true });
+    mutate(form ? "New list" : "New note", [{ type: "create", table: "refs", row: { id, title: "", notes: "", project_id: null, status: "active", created_at: stamp(), form } }], { silent: true });
     nav.setFocus(id);
     setEditing(id);
   };
@@ -300,6 +326,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       run: () => create(),
     },
     { id: "ref.newlist", label: "New list", group: "Reference", run: () => create("list") },
+    { id: "ref.today", label: "Open today's note", group: "Reference", keys: ["d"], run: () => openTodayNote(ui) },
     {
       // A note's lines become a list's items, and back; nothing is lost either way.
       id: "ref.form",
@@ -315,32 +342,25 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       },
     },
     {
-      // Typing a title finds it (the list's letters are its commands, so the typing happens in a picker): what starts
-      // with the words comes first. ⌥Q searches inside notes and files as well.
+      // Typing finds a note by its title or its words (the list's letters are its commands, so the typing happens in
+      // a picker), and opens it. ⌥Q searches everything, files and other lists too.
       id: "ref.find",
-      label: "Find a reference by its title",
+      label: "Find a note",
       group: "Reference",
       keys: ["/"],
       enabled: rows.length > 0,
-      run: () =>
-        ui.openPicker({
-          type: "list",
-          title: "Find a reference",
-          items: [...rows].sort((a, b) => a.title.localeCompare(b.title)).map((r) => ({ id: r.id, label: r.title || "Untitled", hint: s.projects.find((p) => p.id === r.project_id)?.title })),
-          current: focusId,
-          onPick: (id) => id && nav.setFocus(id),
-        }),
+      run: () => findNote(ui, focusId, (id) => nav.setFocus(id)),
     },
     {
       id: "ref.open",
       row: true,
-      label: focusRef?.form === "list" ? "Open the list" : focusRef && kindOf(focusRef) === "document" ? "View the document" : "Open details",
+      label: focusRef?.form === "list" ? "Open the list" : focusRef && kindOf(focusRef) === "document" ? "View the document" : "Open the note",
       group: "Reference",
       keys: ["enter"],
       enabled: Boolean(focusId),
       run: () => focusId && open(focusId),
     },
-    { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusRef && (focusRef.form === "list" || kindOf(focusRef) === "document")), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
+    { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", row: true, label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "ref.jump", row: true, label: "Jump to its project", group: "Reference", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {
@@ -411,13 +431,17 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
         editing === r.id ? (
           <InlineEdit
             value={r.title}
-            placeholder="Title the reference"
+            placeholder={r.form === "list" ? "Name the list" : "Title"}
             onDone={(v) => {
               setEditing(null);
               if (!v.trim() && !r.title) mutate("Discarded", [{ type: "delete", table: "refs", id: r.id }], { silent: true });
-              else if (v.trim() !== r.title) mutate(`Renamed ${quote(v)}`, [{ type: "patch", table: "refs", id: r.id, data: { title: v.trim() } }]);
-              // A new list, once named, opens to be filled.
-              if (v.trim() && !r.title && r.form === "list") openRefList(r.id);
+              // A rename takes the links to it along ([[Old]] becomes [[New]]).
+              else if (v.trim() !== r.title) renameNote(r, v.trim());
+              // A new list, once named, opens to be filled; a new note opens its details, the cursor in its text.
+              if (v.trim() && !r.title) {
+                if (r.form === "list") openRefList(r.id);
+                else showNote(ui, r.id, "notes");
+              }
             }}
           />
         ) : (
@@ -436,7 +460,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
                 {firstFile.get(r.id)!.name} · {fileKind(firstFile.get(r.id)!.name, firstFile.get(r.id)!.mime)}
               </span>
             ) : (
-              r.notes && <span className="subject-more">{r.notes.split("\n")[0]}</span>
+              r.notes && <span className="subject-more">{firstLine(r.notes, r.title)}</span>
             )}
           </span>
         ),
@@ -486,8 +510,8 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
         onOpen={(k) => open(k)}
         empty={
           <EmptyState
-            title="No reference material"
-            lines={["A note, a list (⌘K › New list) or a document: anything to look up later. Stuff filed from the Inbox lands here too."]}
+            title="No notes yet"
+            lines={["Notes, lists and documents: anything you write down or want to find again. Stuff filed from the Inbox lands here too."]}
             action={{ label: "New note", run: () => create() }}
           />
         }

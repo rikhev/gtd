@@ -1,9 +1,9 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock } from "lucide-react";
+import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock, StickyNote } from "lucide-react";
 import { linesOf, noteAsList, openRefList, setForm, textOf, useRefText } from "../refList.ts";
 import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes } from "../lock.ts";
-import { quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, startsToday, uid, upload, useMeta, useStore } from "../store.ts";
+import { type MutateOpts, getState, quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, startsToday, uid, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
@@ -12,18 +12,18 @@ import { habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist
 import { linkSupport } from "../support.ts";
 import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
-import { NotesArea } from "./NotesArea.tsx";
+import { NotesArea, type Follow, type NotesApi } from "./NotesArea.tsx";
+import { useAutosave } from "../noteSave.ts";
+import { backlinks, byTitle, firstLine, followNote, linkContext, renameOps, takeNoteFocus } from "../notes.ts";
 import { AreaName, ContextCode, DoneBox, Energy, EventMark, KeyHints, Lamp, Marker, useIsTouch } from "./bits.tsx";
 import { formatDate, formatLong, formatTime, parseRecurrence, recurrenceLabel, today } from "../../shared/dates.ts";
 import type { Action, Checklist, ChecklistItem, FileRow, Project, Ref, Stuff, TableName } from "../../shared/types.ts";
 
-/** Text field that commits on blur (one undo step per edit, not per keystroke). */
+/** A one-line text field that commits on blur (one undo step per edit, not per keystroke). Notes are a NotesField. */
 function TextField({
   label,
   value,
   onCommit,
-  multiline,
-  rows = 3,
   placeholder,
   autoFocus,
   className,
@@ -38,8 +38,6 @@ function TextField({
   value: string;
   /** Return false to refuse the edit; the field then snaps back to the saved value. */
   onCommit: (v: string) => void | boolean;
-  multiline?: boolean;
-  rows?: number;
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
@@ -47,14 +45,7 @@ function TextField({
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   // Every pane marks its fields the same way: the heading field takes F2 (the pane's edit key) and the notes take N.
-  const active = useContext(DetailActive);
-  const area = useRef<HTMLDivElement>(null);
-  const k = autoFocus ? "F2" : multiline ? "N" : undefined;
-  useCommands(
-    `detail-notes:${label}`,
-    multiline ? [{ id: `detail.notes.${label}`, label: `Edit ${label.toLowerCase()}`, group: "Details", keys: ["n"], run: () => area.current?.focus() }] : [],
-    { priority: 21, active: active && Boolean(multiline) },
-  );
+  const k = autoFocus ? "F2" : undefined;
   const commit = () => {
     if (v !== value && onCommit(v) === false) setV(value);
   };
@@ -74,9 +65,7 @@ function TextField({
           {mark}
         </span>
       </span>
-      {multiline ? (
-        <NotesArea value={v} onValue={setV} onBlur={commit} placeholder={placeholder} aria-label={label} ref={area} rows={rows} className="field-text" aria-keyshortcuts={k} />
-      ) : lead ? (
+      {lead ? (
         <span className="field-lead-wrap">
           <span className="field-lead" aria-hidden="true">
             {lead}
@@ -102,6 +91,120 @@ function TextField({
           }}
         />
       )}
+    </label>
+  );
+}
+
+/**
+ * A notes field, the same in every pane, and a field like any other (owner's decision): at rest it shows the text as
+ * it reads (no Markdown syntax; links and boxes answer a click); Enter on it (the pane's edit key), N, or a click into
+ * it writes, as the plain Markdown in monospace, and leaving it shows the text again. Saved a second after typing
+ * stops (and on leaving it, hiding the tab or closing the page), a stretch of typing one ⌘Z; `local` keeps unsaved
+ * typing in this browser (never a locked note's). A pasted or dropped file joins the item's files and is named in the
+ * text. A note's field (`note`) also offers the notes to link on "[[" and takes the cursor when the note was opened
+ * to be written in.
+ */
+function NotesField({
+  label,
+  value,
+  saveKey,
+  save,
+  local = true,
+  placeholder,
+  owner,
+  onFollow,
+  note,
+}: {
+  label: string;
+  value: string;
+  saveKey: string;
+  save: (text: string, opts: MutateOpts) => Promise<boolean> | void;
+  local?: boolean;
+  placeholder?: string;
+  owner?: { kind: FileRow["owner_kind"]; id: string };
+  onFollow?: (f: Follow) => void;
+  note?: Ref;
+}) {
+  const ui = useUI();
+  const active = useContext(DetailActive);
+  const area = useRef<HTMLDivElement>(null);
+  const api = useRef<NotesApi | null>(null);
+  const auto = useAutosave({ key: saveKey, value, save, local });
+  const [writing, setWriting] = useState(false);
+  // While the "[[" picker is open the text keeps writing (focus is in the picker only for the moment).
+  const linking = useRef(false);
+  // Where a click into the text landed, so writing starts there.
+  const clickedAt = useRef<number | null>(null);
+  /** Into the text to write, the caret at `at` (or where it was clicked, or at the end). */
+  const write = (at?: number) => {
+    const to = at ?? clickedAt.current ?? auto.text.length;
+    clickedAt.current = null;
+    setWriting(true);
+    requestAnimationFrame(() => api.current?.focus(to));
+  };
+  // A note opened to be written in (N's new note, today's note, a link to a note not yet written) takes the cursor.
+  useEffect(() => {
+    const at = note ? takeNoteFocus(note.id) : null;
+    if (at === "notes" || at === "end") requestAnimationFrame(() => requestAnimationFrame(() => write(at === "end" ? auto.text.length : 0)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.id]);
+  useCommands(`detail-notes:${label}`, [{ id: `detail.notes.${label}`, label: `Edit ${label.toLowerCase()}`, group: "Details", keys: ["n"], run: () => write() }], {
+    priority: 21,
+    active,
+  });
+  /** "[[" typed in a note: the notes to link, and the link written in on a pick. */
+  const linkStart = (at: number) => {
+    const put = (title: string) => window.setTimeout(() => api.current?.replace(at, at, `${title}]]`), 0);
+    linking.current = true;
+    ui.openPicker({
+      type: "list",
+      title: "Link to a note",
+      wide: true,
+      items: getState()
+        .refs.filter((x) => x.status === "active" && x.id !== note?.id && x.title.trim())
+        .sort((a, b) => byTitle(a.title, b.title))
+        .map((x) => ({ id: x.id, label: x.title })),
+      createLabel: (q) => `Link to “${q}”, a new note`,
+      onCreate: (q) => put(q),
+      onPick: (id) => {
+        const t = getState().refs.find((x) => x.id === id)?.title;
+        if (t) put(t);
+        else api.current?.focus(at);
+      },
+    });
+  };
+  return (
+    <label className="field">
+      <span className="field-head">
+        <span className="field-label">{label}</span>
+      </span>
+      <NotesArea
+        value={auto.text}
+        onValue={auto.change}
+        onFocus={() => {
+          // Reached at rest (Enter under the pane's cursor, Tab, a click): it opens to be written in.
+          linking.current = false;
+          if (!writing) write();
+          auto.focus();
+        }}
+        onBlur={() => {
+          auto.blur();
+          // A picker opened from the text ("[[") keeps it open to be written in when it closes.
+          if (!linking.current) setWriting(false);
+        }}
+        onClickAt={(at) => (clickedAt.current = at)}
+        placeholder={placeholder}
+        aria-label={label}
+        ref={area}
+        rows={4}
+        className="field-text"
+        aria-keyshortcuts="Enter N"
+        owner={owner}
+        onFollow={onFollow}
+        onLinkStart={note && !note.sealed && writing ? linkStart : undefined}
+        view={writing ? "source" : "read"}
+        api={api}
+      />
     </label>
   );
 }
@@ -195,7 +298,7 @@ function removeFile(f: FileRow) {
   mutate(`“${f.name}” removed`, [{ type: "delete", table: "files", id: f.id }]);
 }
 
-function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }) {
+export function Files({ owner, layer, title }: { owner: { kind: FileRow["owner_kind"]; id: string }; layer?: string; title?: string }) {
   const ui = useUI();
   const files = useStore((s) => s.files).filter((f) => f.owner_kind === owner.kind && f.owner_id === owner.id);
   // Only a list of files, no thumbnails or text previews (owner's request: several files made the pane too busy).
@@ -209,7 +312,7 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
     return files.find((f) => f.id === id);
   };
   useCommands(
-    `detail-files:${owner.id}`,
+    layer ?? `detail-files:${owner.id}`,
     [
       { id: "detail.attach", label: "Attach file", group: "Details", keys: ["mod+o"], inInput: true, run: () => input.current?.click() },
       {
@@ -224,7 +327,7 @@ function Files({ owner }: { owner: { kind: FileRow["owner_kind"]; id: string } }
         },
       },
     ],
-    { priority: 30 },
+    { priority: 30, title },
   );
   return (
     <section className="detail-files">
@@ -465,7 +568,7 @@ function ActionDetail({ a }: { a: Action }) {
       <div className="field-grid">
         {layout}
       </div>
-      <TextField label="Notes" value={a.notes} multiline rows={4} onCommit={(v) => patch("actions", a.id, { notes: v })} placeholder="Details, links, phone numbers…" />
+      <NotesField label="Notes" value={a.notes} saveKey={`actions:${a.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "actions", id: a.id, data: { notes: v } }], o)} owner={{ kind: "action", id: a.id }} placeholder="Details, links, phone numbers…" />
       <Files owner={{ kind: "action", id: a.id }} />
       <p className="detail-meta">
         Created {formatLong(a.created_at.slice(0, 10))}
@@ -503,8 +606,8 @@ const STATUS_LABEL = { accepted: "Accepted", tentative: "Tentative", none: "No a
 
 /**
  * An appointment from a subscribed calendar, read-only (owner's request): when and where, how to join, who organised
- * it and who is coming, and what it's about. Only what the calendar's feed shares can be shown: a published Outlook
- * calendar leaves attendees out, so the pane says so rather than showing an empty list.
+ * it, and who is coming when the feed says (a published Outlook calendar leaves attendees out, and then nothing is
+ * said about them). Its description is never shown (owner's decision: the feeds in use don't share one).
  */
 function EventDetail({ e }: { e: CalEvent }) {
   const ui = useUI();
@@ -582,12 +685,13 @@ function EventDetail({ e }: { e: CalEvent }) {
           <Video size={14} strokeWidth={2} aria-hidden /> Join the online meeting
         </a>
       )}
+      {/* Who is coming, only when the feed says: feeds that leave it out show nothing about it (owner's request). */}
+      {people.length > 0 && (
       <section className="event-people" aria-label="Attendees">
         <h3 className="detail-h">
-          Attendees <span className="count">{e.attendees.length || ""}</span>
+          Attendees <span className="count">{e.attendees.length}</span>
         </h3>
         {counts.length > 0 && <p className="event-counts">{counts.map(([st, n]) => `${n} ${STATUS_LABEL[st].toLowerCase()}`).join(" · ")}</p>}
-        {people.length ? (
           <ul>
             {people.map((a, i) => (
               <li key={i} className={`is-${a.status}`}>
@@ -599,20 +703,9 @@ function EventDetail({ e }: { e: CalEvent }) {
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="muted-text small">This calendar's feed doesn't include who is invited (published and shared calendars usually leave that out); the full list is in the calendar itself.</p>
-        )}
       </section>
-      {e.description ? (
-        <section className="event-about" aria-label="Description">
-          <h3 className="detail-h">Description</h3>
-          <p className="event-desc">
-            <Linked text={e.description} />
-          </p>
-        </section>
-      ) : (
-        <p className="muted-text small">{/outlook|office365/i.test(feed?.host ?? "") ? "No description shared. A published Outlook calendar includes it only with “All details”." : "No description shared by this calendar."}</p>
       )}
+      {/* No description (owner's decision): the feeds in use never share one. It is only read for a meeting link. */}
     </>
   );
 }
@@ -814,7 +907,7 @@ function ProjectDetail({ p }: { p: Project }) {
         />
       </section>
       <SupportMaterial projectId={p.id} />
-      <TextField label="Support notes" value={p.notes} multiline rows={4} onCommit={(v) => patch("projects", p.id, { notes: v })} placeholder="Plans, meeting notes, phone numbers, links…" />
+      <NotesField label="Support notes" value={p.notes} saveKey={`projects:${p.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "projects", id: p.id, data: { notes: v } }], o)} owner={{ kind: "project", id: p.id }} placeholder="Plans, meeting notes, phone numbers, links…" />
       <Files owner={{ kind: "project", id: p.id }} />
     </>
   );
@@ -891,7 +984,14 @@ function StuffDetail({ st }: { st: Stuff }) {
           patch("stuff", st.id, { text: joinStuff(v, parts.rest, parts.prefix) }, "Edited");
         }}
       />
-      <TextField label="Notes" value={parts.rest} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("stuff", st.id, { text: joinStuff(parts.title, v, parts.prefix) }, "Edited")} />
+      <NotesField
+        label="Notes"
+        value={parts.rest}
+        saveKey={`stuff:${st.id}:notes`}
+        save={(v, o) => mutate("Edited", [{ type: "patch", table: "stuff", id: st.id, data: { text: joinStuff(parts.title, v, parts.prefix) } }], o)}
+        owner={{ kind: "stuff", id: st.id }}
+        placeholder="Details, links, phone numbers…"
+      />
       <Files owner={{ kind: "stuff", id: st.id }} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
     </>
@@ -1138,11 +1238,11 @@ function SealedFile({ f, onOpen }: { f: FileRow; onOpen: () => void }) {
  * A locked reference while the lock is shut: the pane says what is locked and takes the password right here, where
  * you are looking, rather than in a picker.
  */
-function RefUnlock({ files }: { files: number }) {
+export function RefUnlock({ files, autoFocus }: { files: number; autoFocus?: boolean }) {
   const [pw, setPw] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "wrong">("idle");
   const field = useRef<HTMLInputElement>(null);
-  const active = useContext(DetailActive);
+  const active = useContext(DetailActive) || Boolean(autoFocus);
   useEffect(() => {
     if (active) field.current?.focus({ preventScroll: true });
   }, [active]);
@@ -1323,9 +1423,22 @@ function RefDetail({ r }: { r: Ref }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [r.sealed, lock.unlocked, files.length]);
   const open = !r.sealed || lock.unlocked;
+  const links = r.form === "list" ? [] : backlinks(s, r);
   return (
     <>
-      <TextField label="Title" value={r.title} onCommit={(v) => patch("refs", r.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
+      <TextField
+        label="Title"
+        value={r.title}
+        // A rename takes the links to it along ([[Old]] becomes [[New]]), as one step.
+        onCommit={(v) => {
+          const ops = renameOps(getState(), r, v);
+          if (!ops.length) return;
+          const n = ops.length - 1;
+          mutate(`Renamed ${quote(v)}${n ? `, ${n === 1 ? "1 link" : `${n} links`} to it updated` : ""}`, ops);
+        }}
+        autoFocus
+        className="field-title"
+      />
       <PickField
         label="Project"
         k="P"
@@ -1338,16 +1451,50 @@ function RefDetail({ r }: { r: Ref }) {
         <RefUnlock files={files.length} />
       ) : r.form === "list" ? (
         <RefListPane r={r} />
-      ) : r.sealed ? (
-        notes === null ? (
-          <p className="detail-meta">Opening…</p>
-        ) : (
-          <TextField label="Notes" value={notes} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => void saveSealedNotes(r, v)} />
-        )
+      ) : r.sealed && notes === null ? (
+        <p className="detail-meta">Opening…</p>
       ) : (
-        <TextField label="Notes" value={r.notes} multiline rows={4} placeholder="Details, links, phone numbers…" onCommit={(v) => patch("refs", r.id, { notes: v })} />
+        <NotesField
+            label="Notes"
+            note={r}
+            value={(r.sealed ? notes : r.notes) ?? ""}
+            saveKey={`refs:${r.id}:notes`}
+            local={!r.sealed}
+            save={(v, o) => (r.sealed ? saveSealedNotes(r, v, "Notes saved", {}, o) : mutate("Notes saved", [{ type: "patch", table: "refs", id: r.id, data: { notes: v } }], o))}
+            owner={{ kind: "ref", id: r.id }}
+            onFollow={(f) => {
+              if (f.kind === "note") return followNote(ui, f.title);
+              if (f.kind === "url") return void window.open(f.href, "_blank", "noopener");
+              const ids = files.map((x) => x.id);
+              ui.openViewer(ids, Math.max(0, ids.indexOf(f.id)));
+            }}
+            placeholder="Write anything. # for a heading, - for a list, [[ to link a note"
+          />
       )}
       {open && <Files owner={{ kind: "ref", id: r.id }} />}
+      {/* The notes that link to this one, each with the line that does: a click opens it here. */}
+      {links.length > 0 && (
+        <section className="detail-actions" aria-label="Linked from">
+          <h3 className="detail-h">
+            Linked from <span className="count">{links.length}</span>
+          </h3>
+          <ul className="timeline">
+            {links.map((x) => (
+              <li key={x.id}>
+                {/* As support material opens: in the pane, Esc back to this note. */}
+                <button type="button" className="mini-row" onClick={() => ui.drillDetail({ kind: "ref", id: x.id })} title={linkContext(x.notes, r.title) || firstLine(x.notes, x.title)}>
+                  <span className="kind-icon">
+                    <StickyNote size={14} strokeWidth={1.75} aria-label="Note" />
+                  </span>
+                  <span className="mini-title">{x.title || "Untitled"}</span>
+                  <span className="mini-meta" />
+                  <span className="mini-date">{formatDate(refUpdated(s, x).slice(0, 10))}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {r.sealed && lock.unlocked && (
         <p className="ref-lock-line">
           <Lock size={12} strokeWidth={2} aria-hidden />
@@ -1402,11 +1549,20 @@ export function Detail({ target, active }: { target: Target | null; active: bool
    * its first field, the title.
    */
   const stops = () => [...(root.current?.querySelectorAll<HTMLElement>(PANE_STOPS) ?? [])].filter((el) => el.offsetParent !== null);
+  // Where the cursor was in each item the pane has shown on this trail, so Esc back from an item opened inside the
+  // pane (support material, a project's action) lands where you were, not on the first field (owner's rule: Esc
+  // always takes you back to where you were).
+  const cursorAt = useRef(new Map<string, number>());
+  const shownKey = target ? `${target.kind}:${target.id}` : "";
+  const shownKeyRef = useRef(shownKey);
+  shownKeyRef.current = shownKey;
   const setCursor = (el: HTMLElement | null | undefined) => {
     root.current?.querySelectorAll("[data-cursor]").forEach((x) => x !== el && x.removeAttribute("data-cursor"));
     if (!el) return;
     el.setAttribute("data-cursor", "");
     el.scrollIntoView({ block: "nearest" });
+    const i = stops().indexOf(el);
+    if (i >= 0) cursorAt.current.set(shownKeyRef.current, i);
   };
   const cursorEl = () => root.current?.querySelector<HTMLElement>("[data-cursor]") ?? null;
   const moveCursor = (dir: 1 | -1) => {
@@ -1414,8 +1570,18 @@ export function Detail({ target, active }: { target: Target | null; active: bool
     const i = list.findIndex((x) => x.hasAttribute("data-cursor"));
     setCursor(list[Math.max(0, Math.min(list.length - 1, i < 0 ? 0 : i + dir))]);
   };
+  // A new item starts the cursor on its first field; one come back to along the trail (Esc, the back link) puts it back
+  // where it was. Anything opened from a list starts the trail, and the memory, afresh.
+  const trailWas = useRef(ui.detailTrail.length);
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setCursor(stops()[0]));
+    const back = ui.detailTrail.length < trailWas.current;
+    trailWas.current = ui.detailTrail.length;
+    if (!ui.detailTrail.length && !back) cursorAt.current = new Map();
+    const raf = requestAnimationFrame(() => {
+      const list = stops();
+      const at = back ? cursorAt.current.get(shownKey) : undefined;
+      setCursor(list[at !== undefined ? Math.min(at, list.length - 1) : 0]);
+    });
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.kind, target?.id]);

@@ -204,17 +204,20 @@ function invert(ops: Op[]): Op[] {
   return inv;
 }
 
-async function send(ops: Op[]) {
+/**
+ * Sends ops to the server; true once they are stored. A small save carries keepalive, so one sent as the page closes
+ * (a note flushed on pagehide) still arrives.
+ */
+async function send(ops: Op[]): Promise<boolean> {
   try {
-    const res = await fetch("/api/ops", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ops }),
-    });
+    const body = JSON.stringify({ ops });
+    const res = await fetch("/api/ops", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: body.length < 60_000 });
     if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+    return true;
   } catch (e) {
     notify(`Couldn't save: ${(e as Error).message}. Reloading your lists.`, { tone: "error" });
     await load();
+    return false;
   }
 }
 
@@ -275,22 +278,28 @@ function stampTrash(ops: Op[]): Op[] {
  * Applies ops as one undoable step. `key` names the step; `join` folds this one into the last step when that step
  * has the key (a new row and its name are one ⌘Z); `undoable: false` keeps it off the stack.
  */
-export function mutate(label: string, rawOps: Op[], opts: { silent?: boolean; key?: string; join?: string; undoable?: boolean } = {}) {
-  if (!rawOps.length) return;
+export type MutateOpts = { silent?: boolean; key?: string; join?: string; undoable?: boolean };
+/**
+ * Applies ops as one undoable step and sends them; resolves true once the server has them. Joined with a key of its
+ * own, a step stays joinable (a stretch of typing in a note, saved every second, is one ⌘Z).
+ */
+export function mutate(label: string, rawOps: Op[], opts: MutateOpts = {}): Promise<boolean> {
+  if (!rawOps.length) return Promise.resolve(true);
   const ops = stampTrash(touchActions(dropBringBack(dropStaleWaiting(rawOps))));
   const inverse = invert(ops);
   applyLocal(ops);
-  void send(ops);
+  const sent = send(ops);
   const top = undoStack[undoStack.length - 1];
   if (opts.undoable === false) {
     // Kept off the stack.
   } else if (opts.join && top?.key === opts.join) {
-    undoStack[undoStack.length - 1] = { label, inverse: [...inverse, ...top.inverse] };
+    undoStack[undoStack.length - 1] = { label, inverse: [...inverse, ...top.inverse], key: opts.key };
   } else {
     undoStack.push({ label, inverse, key: opts.key });
     if (undoStack.length > 200) undoStack.shift();
   }
   if (!opts.silent) notify(label, { undo: true });
+  return sent;
 }
 
 /** Takes back the last step if it has this key (a new row left blank was never really there). */

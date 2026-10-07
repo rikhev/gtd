@@ -242,6 +242,17 @@ function sweepFiles() {
  * Subscribed calendars (Outlook, iCloud… read-only ICS/webcal): their links stay here; the browser gets names, colours,
  * hosts and the appointments.
  */
+// The lock password goes only when nothing is locked with it (else what it locks would be lost).
+app.delete("/api/settings/lock", async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { replaces?: string | null };
+  if (!lockKey()) return c.json({ ok: true });
+  if (lockKey()!.wrapped !== (body.replaces ?? null)) return c.json({ error: "The lock password was changed elsewhere; reload and try again" }, 409);
+  const sealed = (db.prepare("SELECT COUNT(*) AS n FROM refs WHERE sealed IS NOT NULL AND sealed != ''").get() as { n: number }).n;
+  if (sealed) return c.json({ error: "Some references are still locked: remove their locks first" }, 409);
+  db.prepare("DELETE FROM settings WHERE key = 'lock'").run();
+  return c.json({ ok: true });
+});
+
 app.post("/api/calendars/probe", async (c) => {
   const { url } = (await c.req.json().catch(() => ({}))) as { url?: string };
   const r = await probe(String(url ?? ""));

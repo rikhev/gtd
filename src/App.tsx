@@ -10,6 +10,7 @@ import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, PhoneChrome, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
+import { endPrint, preparePrint } from "./print.ts";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView } from "./views/TrashView.tsx";
 import { DoneView } from "./views/DoneView.tsx";
@@ -25,6 +26,8 @@ import { SomedayView, ReferenceView } from "./views/SimpleViews.tsx";
 import { ChecklistsView } from "./views/ChecklistsView.tsx";
 import { HorizonsView } from "./views/HorizonsView.tsx";
 import { itemCount, openRefList, useOpenRefList } from "./refList.ts";
+import { openTodayNote } from "./notes.ts";
+import { replayDrafts } from "./noteSave.ts";
 import { dayWords, openChecklist, progress, progressLabel, setChecklistDay, startOver, useChecklistDay, useOpenChecklist } from "./checklists.ts";
 import { ClarifyView } from "./views/ClarifyView.tsx";
 // Views opened now and then load when first opened, so the lists come up faster on a cold phone.
@@ -65,6 +68,9 @@ function focusedName(): string {
 
 const openChecklistHash = () => (/^#checklists\/.+/.test(window.location.hash) ? window.location.hash : null);
 /** The address of the reference list open in Reference, if one is. */
+/** What takes focus when the list region does: the active list. */
+const LIST_FOCUS = ".list-region .grid.is-active";
+
 const openRefListHash = () => (/^#reference\/.+/.test(window.location.hash) ? window.location.hash : null);
 function viewFromHash(): ViewId | null {
   const h = hashView(window.location.hash) as ViewId;
@@ -163,7 +169,7 @@ export default function App() {
       // the list takes it, so the keys and screen readers follow the row that was clicked.
       requestAnimationFrame(() => {
         if (!document.activeElement || document.activeElement === document.body)
-          document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true });
+          document.querySelector<HTMLElement>(LIST_FOCUS)?.focus({ preventScroll: true });
       });
     };
     window.addEventListener("pointerdown", onDown, true);
@@ -192,6 +198,24 @@ export default function App() {
     }
     return off;
   }, []);
+
+  // ⌘P (the browser's own) and ⌘K › Print print where the keys are: the details pane's item, else the list.
+  const printFrom = useRef<"list" | "detail">("list");
+  printFrom.current = region === "detail" && detail ? "detail" : "list";
+  useEffect(() => {
+    const before = () => preparePrint(printFrom.current);
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", endPrint);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", endPrint);
+    };
+  }, []);
+
+  // Typing that never reached the server (a crash, a closed tab) is saved once the lists are in.
+  useEffect(() => {
+    if (meta.loaded && meta.signedIn) replayDrafts();
+  }, [meta.loaded, meta.signedIn]);
 
   // Refresh at midnight-ish and when returning to the tab, so tickler items and dates stay current.
   useEffect(() => {
@@ -256,7 +280,7 @@ export default function App() {
     } else if (!pinnedRef.current) setDetail(null);
     (document.activeElement as HTMLElement | null)?.blur?.();
     // Land on the new view's list, so the keyboard and screen readers start where the cursor is.
-    requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(LIST_FOCUS)?.focus({ preventScroll: true }));
   }, []);
   // Appointment reminders (Settings › General): a click on one goes to the appointment in the Calendar.
   useEffect(
@@ -292,7 +316,7 @@ export default function App() {
         if (r !== "detail") (document.activeElement as HTMLElement | null)?.blur?.();
         // Coming back to the list always puts focus on it (after capture, search, the detail pane),
         // even when the list was already the active region, so the cursor and screen readers never land on the page.
-        if (r === "list") requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
+        if (r === "list") requestAnimationFrame(() => document.querySelector<HTMLElement>(LIST_FOCUS)?.focus({ preventScroll: true }));
       },
       detail,
       openDetail: (t, focus) => {
@@ -351,7 +375,7 @@ export default function App() {
         setViewer(null);
         // Back to where it was opened from: the details pane, if it is still there, or the list.
         if (viewerFrom.current === "detail" && detail) return setRegion("detail");
-        requestAnimationFrame(() => document.querySelector<HTMLElement>(".list-region .grid.is-active")?.focus({ preventScroll: true }));
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(LIST_FOCUS)?.focus({ preventScroll: true }));
       },
       focusCapture: () => captureRef.current?.focus(),
       openPalette: () => {
@@ -543,6 +567,10 @@ export default function App() {
     // Sync the subscribed calendars from anywhere (in the Calendar also ⌥S and its toolbar button).
     { id: "g.synccal", label: "Sync calendars", group: "Calendar", enabled: meta.calendars.length > 0 && view !== "calendar", run: () => void syncCalendars() },
     { id: "g.review", label: "Start the Weekly Review", group: "Review", keys: ["shift+r"], run: ui.startReview },
+    // ⌘P stays the browser's; this names what it prints from here.
+    { id: "g.print", label: region === "detail" && detail ? "Print the details" : "Print the list", group: "View", displayKeys: ["mod+p"], run: () => window.print() },
+    // Today's note from anywhere (on Reference also D): the day's page, made the first time.
+    { id: "g.today", label: "Open today's note", group: "Reference", run: () => openTodayNote(ui) },
     // A project from anywhere: its outcome, its area, its first next action (on Projects, N adds one in place).
     { id: "g.newproject", label: "New project", group: "Projects", keys: ["alt+n"], run: () => projectEditors(ui).create() },
     // A next action from anywhere: what, where (context), and its project if any (T on Projects adds to one).
@@ -643,6 +671,7 @@ export default function App() {
       return n ? `${n} ${n === 1 ? "person" : "people"}` : "";
     })(),
     someday: some(s.actions.filter((a) => a.status === "someday").length + s.projects.filter((p) => p.status === "someday").length, "item"),
+    // Inside a list, how many items it holds; otherwise how many references there are.
     // Inside a list, how many items it holds; otherwise how many references there are.
     reference: openRef ? (openRef.sealed ? "Locked" : some(itemCount(openRef.notes), "item")) : some(s.refs.filter((r) => r.status === "active").length, "reference"),
     // Inside a checklist, how far this run has got; otherwise how many checklists there are.

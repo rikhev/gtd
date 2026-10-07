@@ -5,6 +5,7 @@ import { useCommands } from "../keys.ts";
 import { useUI } from "../ui.tsx";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getMeta } from "../store.ts";
+import { excerpt } from "../notes.ts";
 import { parseDate, formatLong, TIME_PRESETS, formatTime, parseTime, today, addDays, addMonths, fromIso } from "../../shared/dates.ts";
 
 /*
@@ -25,7 +26,7 @@ interface Props {
   close: () => void;
 }
 
-type Option = { id: string | null; label: string; hint?: string; color?: string; create?: string; section?: string };
+type Option = { id: string | null; label: string; hint?: string; color?: string; create?: string; section?: string; sub?: string };
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const WD = ["S", "M", "T", "W", "T", "F", "S"];
@@ -177,18 +178,22 @@ export function Picker({ spec, close }: Props) {
   const options: Option[] = useMemo(() => {
     if (spec.type === "list") {
       const needle = q.trim().toLowerCase();
+      const words = needle.split(/\s+/).filter(Boolean);
       const scored = spec.items
         .map((it: ListItem) => {
           const l = it.label.toLowerCase();
           const bare = l.replace(/^@/, "");
-          const score = !needle ? 1 : l.startsWith(needle) || bare.startsWith(needle) ? 3 : l.includes(needle) ? 2 : 0;
-          return { it, score };
+          // A title that starts with the words first, then one that holds them; an item's own text (a note's) last,
+          // when it holds every word.
+          const inBody = Boolean(it.body && words.length && words.every((w) => it.body!.toLowerCase().includes(w) || l.includes(w)));
+          const score = !needle ? 1 : l.startsWith(needle) || bare.startsWith(needle) ? 3 : l.includes(needle) ? 2 : inBody ? 1 : 0;
+          return { it, score, sub: score === 1 && needle && it.body ? excerpt(it.body, words.filter((w) => !l.includes(w)), 70) : undefined };
         })
         .filter((x) => x.score > 0)
         .sort((a, b) => b.score - a.score);
       const out: Option[] = [];
       if (spec.noneLabel && !needle) out.push({ id: null, label: spec.noneLabel });
-      out.push(...scored.map(({ it }) => ({ id: it.id, label: it.label, hint: it.hint, color: it.color, section: it.section })));
+      out.push(...scored.map(({ it, sub }) => ({ id: it.id, label: it.label, hint: it.hint, color: it.color, section: it.section, sub })));
       const exact = spec.items.some((it) => it.label.toLowerCase() === needle || it.label.toLowerCase() === `@${needle}`);
       if (spec.onCreate && needle && !exact) {
         out.push({ id: "__create__", label: spec.createLabel ? spec.createLabel(q.trim()) : `New “${q.trim()}”`, create: q.trim() });
@@ -326,7 +331,7 @@ export function Picker({ spec, close }: Props) {
             : spec.placeholder;
 
   return (
-    <div className={`picker ${spec.type === "date" ? "is-date" : ""}`} ref={box} style={{ top: pos.top, left: pos.left }} role="dialog" aria-label={title}>
+    <div className={`picker ${spec.type === "date" ? "is-date" : ""} ${spec.type === "list" && spec.wide ? "is-wide" : ""}`} ref={box} style={{ top: pos.top, left: pos.left }} role="dialog" aria-label={title}>
       <div className="picker-title">{title}</div>
       <input
         ref={input}
@@ -374,7 +379,14 @@ export function Picker({ spec, close }: Props) {
             ) : (
               <>
                 {o.color && <span className="swatch" style={{ background: o.color }} />}
-                <span className="po-label">{o.label}</span>
+                {o.sub ? (
+                  <span className="po-label po-two">
+                    {o.label}
+                    <span className="po-sub">{o.sub}</span>
+                  </span>
+                ) : (
+                  <span className="po-label">{o.label}</span>
+                )}
               </>
             )}
             {o.hint && <span className="po-hint">{o.hint}</span>}

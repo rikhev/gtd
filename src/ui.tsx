@@ -34,6 +34,8 @@ export interface ListItem {
   color?: string;
   /** Items sharing a section sit together; a hairline divides one section from the next. */
   section?: string;
+  /** More of the item's words to find it by (a note's text): a match there shows the line it was found on. */
+  body?: string;
 }
 
 export type PickerSpec =
@@ -54,6 +56,8 @@ export type PickerSpec =
       onCreate?: (q: string) => void;
       /** Nothing is pre-highlighted: Enter does nothing until you type or arrow to a choice. */
       mustChoose?: boolean;
+      /** Wider, for long titles and the lines a search finds (finding a note). */
+      wide?: boolean;
       placeholder?: string;
       /** Opened by the mouse (a right-click): the menu appears at this point instead of under the focused row. */
       at?: { x: number; y: number };

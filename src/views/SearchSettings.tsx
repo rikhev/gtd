@@ -1,7 +1,9 @@
 import { clearEvents, type FeedInfo } from "../calendarFeed.ts";
-import { useEffect, useMemo, useState } from "react";
-import { LIST_NAMES, quote, getMeta, mutate, notify, plural, updateMeta, useMeta, useStore, bareArea, HORIZON_LABEL, type Horizon } from "../store.ts";
-import { today } from "../../shared/dates.ts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { LIST_NAMES, quote, getMeta, mutate, notify, plural, refUpdated, updateMeta, useMeta, useStore, bareArea, HORIZON_LABEL, type Horizon } from "../store.ts";
+import { formatDate, today } from "../../shared/dates.ts";
+import { excerpt } from "../notes.ts";
+import { importNotes } from "../noteImport.ts";
 import { useUI, type EntityKind, type ViewId } from "../ui.tsx";
 import { runKey, useCommands, type Command } from "../keys.ts";
 import { ChevronDown, Download } from "lucide-react";
@@ -12,9 +14,9 @@ import { InlineEdit } from "./ActionsView.tsx";
 import { AREA_COLORS, COLOR_NAMES, CONTEXT_COLORS, nextAreaColor } from "../actionCommands.tsx";
 import { isDark, setTheme, useTheme } from "../theme.ts";
 import { ALERT_LABEL, setAlertMode, useAlerts, type AlertMode } from "../alerts.ts";
-import type { ID } from "../../shared/types.ts";
+import type { ID, Op } from "../../shared/types.ts";
 import { openChecklist } from "../checklists.ts";
-import { choosePassword, lockNow, useLock } from "../lock.ts";
+import { choosePassword, lockNow, removeLockPassword, useLock } from "../lock.ts";
 
 /* ------------------------------------------------------------------ */
 /* Search                                                               */
@@ -30,13 +32,17 @@ interface Hit {
   home: ViewId;
   /** A checklist hit found by one of its items: the item the checklist opens on. */
   at?: ID;
+  /** Found in its text, not its title: the line it was found on. */
+  line?: string;
+  /** When it last changed (or was made), as an ISO stamp. */
+  when?: string;
 }
 
 export function SearchView({ regionActive, query }: { regionActive: boolean; query: string }) {
   const ui = useUI();
   const s = useStore((x) => x);
   const [sort, setSort] = useSort("search");
-  const sorters: Sorters<Hit> = useMemo(() => ({ subject: (h) => h.title, where: (h) => h.where }), []);
+  const sorters: Sorters<Hit> = useMemo(() => ({ subject: (h) => h.title, where: (h) => h.where, when: (h) => h.when ?? null }), []);
   const found: GridGroup<Hit>[] = useMemo(() => {
     const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
@@ -53,21 +59,36 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
     }
     const filesOf = (kind: string, id: ID) => fileWords.get(`${kind}:${id}`) ?? [];
     const projectOf = (id: ID | null) => (id ? s.projects.find((p) => p.id === id)?.title : undefined);
+    // A hit found in its text shows the line it was found on; one whose title holds every word needs none.
+    const lineOf = (title: string, ...texts: (string | null | undefined)[]) => {
+      const t = title.toLowerCase();
+      const rest = words.filter((w) => !t.includes(w));
+      return rest.length ? excerpt(texts.filter(Boolean).join("\n"), rest) || undefined : undefined;
+    };
     const where: Record<string, string> = { ...LIST_NAMES, trashed: "" };
     const home = { next: "next", waiting: "waiting", someday: "someday", later: "projects", done: "done", trashed: "next" } as const;
     const actions = s.actions
       .filter((a) => a.status !== "trashed" && match(a.title, a.notes, a.waiting_who, ...filesOf("action", a.id)))
-      .map((a) => ({ key: `a:${a.id}`, kind: "action" as const, id: a.id, title: a.title, where: where[a.status], home: home[a.status] as ViewId }));
+      .map((a) => ({ key: `a:${a.id}`, kind: "action" as const, id: a.id, title: a.title, where: where[a.status], home: home[a.status] as ViewId, line: lineOf(a.title, a.notes, a.waiting_who, ...filesOf("action", a.id)), when: a.updated_at ?? a.created_at }));
     const projects = s.projects
       .filter((p) => p.status !== "trashed" && match(p.title, p.notes, ...filesOf("project", p.id)))
-      .map((p) => ({ key: `p:${p.id}`, kind: "project" as const, id: p.id, title: p.title, where: p.status === "someday" ? "Someday / Maybe" : "Projects", home: (p.status === "someday" ? "someday" : "projects") as ViewId }));
+      .map((p) => ({ key: `p:${p.id}`, kind: "project" as const, id: p.id, title: p.title, where: p.status === "someday" ? "Someday / Maybe" : "Projects", home: (p.status === "someday" ? "someday" : "projects") as ViewId, line: lineOf(p.title, p.notes, ...filesOf("project", p.id)), when: p.created_at }));
     const stuff = s.stuff
       .filter((x) => x.status === "inbox" && match(x.text, ...filesOf("stuff", x.id)))
-      .map((x) => ({ key: `s:${x.id}`, kind: "stuff" as const, id: x.id, title: x.text.split("\n")[0], where: "Inbox", home: "inbox" as ViewId }));
+      .map((x) => ({ key: `s:${x.id}`, kind: "stuff" as const, id: x.id, title: x.text.split("\n")[0], where: "Inbox", home: "inbox" as ViewId, line: lineOf(x.text.split("\n")[0], x.text.split("\n").slice(1).join("\n"), ...filesOf("stuff", x.id)), when: x.created_at }));
     // A reference matches by its words, its files or the project it supports, and says which project that is.
     const refs = s.refs
       .filter((r) => r.status === "active" && match(r.title, r.notes, projectOf(r.project_id), ...filesOf("ref", r.id)))
-      .map((r) => ({ key: `r:${r.id}`, kind: "ref" as const, id: r.id, title: r.title, where: projectOf(r.project_id) ? `Reference · ${projectOf(r.project_id)}` : "Reference", home: "reference" as ViewId }));
+      .map((r) => ({
+        key: `r:${r.id}`,
+        kind: "ref" as const,
+        id: r.id,
+        title: r.title,
+        where: projectOf(r.project_id) ? `Reference · ${projectOf(r.project_id)}` : "Reference",
+        home: "reference" as ViewId,
+        line: lineOf(r.title, r.notes, ...filesOf("ref", r.id)),
+        when: refUpdated(s, r),
+      }));
     // A checklist matches by its name or any of its items; the hit names the item that matched.
     const lists = s.checklists
       .filter((c) => c.status === "active")
@@ -77,11 +98,13 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
         if (!match(c.title) && !inItem) return [];
         return [{ key: `c:${c.id}`, kind: "checklist" as const, id: c.id, title: c.title || "Untitled checklist", where: inItem ? `Checklists · ${inItem.title}` : "Checklists", home: "checklists" as ViewId, at: inItem?.id }];
       });
+    // In each group, what holds the words in its title comes first.
+    const titleFirst = (rows: Hit[]) => [...rows.filter((h) => !h.line), ...rows.filter((h) => h.line)];
     return [
-      { key: "actions", label: "Actions", rows: actions },
-      { key: "projects", label: "Projects", rows: projects },
-      { key: "inbox", label: "Inbox", rows: stuff },
-      { key: "refs", label: "Reference", rows: refs },
+      { key: "actions", label: "Actions", rows: titleFirst(actions) },
+      { key: "projects", label: "Projects", rows: titleFirst(projects) },
+      { key: "inbox", label: "Inbox", rows: titleFirst(stuff) },
+      { key: "refs", label: "Reference", rows: titleFirst(refs) },
       { key: "checklists", label: "Checklists", rows: lists as Hit[] },
     ].filter((g) => g.rows.length);
   }, [s, query]);
@@ -118,8 +141,19 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
   useCommands("list:search", commands, { priority: 10, active: regionActive });
 
   const columns: Column<Hit>[] = [
-    { key: "subject", label: "Item", width: "minmax(240px, 1fr)", render: (h) => <span className="subject-text">{h.title || "Untitled"}</span> },
+    {
+      key: "subject",
+      label: "Item",
+      width: "minmax(240px, 1fr)",
+      render: (h) => (
+        <span className="subject">
+          <span className="subject-text">{h.title || "Untitled"}</span>
+          {h.line && <span className="subject-more">{h.line}</span>}
+        </span>
+      ),
+    },
     { key: "where", label: "In", width: "160px", render: (h) => <span className="muted-text">{h.where}</span> },
+    { key: "when", label: "Date", width: "100px", drop: 1, render: (h) => (h.when ? <span className="date">{formatDate(h.when.slice(0, 10))}</span> : <span className="dash" aria-hidden="true">–</span>) },
   ];
 
   return (
@@ -142,7 +176,7 @@ export function SearchView({ regionActive, query }: { regionActive: boolean; que
 /* Settings: general, areas, contexts, export                          */
 /* ------------------------------------------------------------------ */
 
-type SRow = { key: string; kind: "context" | "area" | "stall" | "scheduled" | "theme" | "trash" | "week" | "export" | "feed" | "addfeed" | "hours" | "alerts" | "lock"; id: ID; text: string; status?: string; color?: string };
+type SRow = { key: string; kind: "context" | "area" | "stall" | "scheduled" | "theme" | "trash" | "week" | "export" | "import" | "feed" | "addfeed" | "hours" | "alerts" | "lock"; id: ID; text: string; status?: string; color?: string };
 
 /** Settings in tabs, like the steps of the Weekly Review: each tab one short list, walked with ⌘. / ⌘, or 1–4. */
 const TABS = [
@@ -155,10 +189,12 @@ type TabId = (typeof TABS)[number]["id"];
 const TAB_OF: Record<string, TabId> = {
   appearance: "general",
   calendar: "general",
+  projects: "general",
   review: "general",
   trash: "general",
   areas: "areas",
   contexts: "contexts",
+  import: "data",
   export: "data",
   lock: "data",
 };
@@ -175,6 +211,16 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   // A tab remembered from before that no longer exists falls back to General.
   const tab: TabId = TABS.some((t) => t.id === storedTab) ? storedTab : "general";
   const tabIdx = Math.max(0, TABS.findIndex((t) => t.id === tab));
+  const sealedCount = s.refs.filter((r) => r.sealed && r.status !== "trashed").length;
+  // While a tab has focus, ← → move between the tabs (the list's own arrows wait).
+  const [onTabs, setOnTabs] = useState(false);
+  const stepTab = (dir: 1 | -1) => {
+    const next = TABS[(tabIdx + dir + TABS.length) % TABS.length];
+    setTab(next.id);
+    requestAnimationFrame(() => document.getElementById(`settings-tab-${next.id}`)?.focus());
+  };
+  const filesInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
 
   const groups: GridGroup<SRow>[] = useMemo(
     () => [
@@ -190,8 +236,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         hideCount: true,
         rows: [
           { key: "week", kind: "week" as const, id: "week", text: "Week starts on" },
-          { key: "hours", kind: "hours" as const, id: "hours", text: "Hours in the week" },
-          { key: "alerts", kind: "alerts" as const, id: "alerts", text: "Reminders" },
+          { key: "hours", kind: "hours" as const, id: "hours", text: "Hours the week shows" },
+          { key: "alerts", kind: "alerts" as const, id: "alerts", text: "Appointment reminders" },
           // Subscribed calendars (the hard landscape), each named and coloured, then the way to add one.
           ...meta.calendars.map((f) => ({ key: `f:${f.id}`, kind: "feed" as const, id: f.id, text: f.name, color: f.color, status: f.error })),
           { key: "addfeed", kind: "addfeed" as const, id: "addfeed", text: "Add a calendar" },
@@ -220,15 +266,24 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         key: "areas",
         label: "Areas",
         rows: [...s.areas].sort((a, b) => a.sort - b.sort).map((a) => ({ key: `a:${a.id}`, kind: "area" as const, id: a.id, text: a.name, color: a.color ?? undefined })),
-        meta: s.areas.length ? undefined : "None yet. N adds one; projects are grouped by area",
+      },
+      {
+        // Notes from another notes app: Markdown files, or a whole folder of them.
+        key: "import",
+        label: "Import",
+        hideCount: true,
+        rows: [
+          { key: "import-files", kind: "import" as const, id: "files", text: "Import Markdown files" },
+          { key: "import-folder", kind: "import" as const, id: "folder", text: "Import a folder" },
+        ],
       },
       {
         key: "export",
         label: "Export",
         hideCount: true,
         rows: [
-          { key: "zip", kind: "export" as const, id: `/api/export/zip?today=${today()}`, text: "Markdown files (.zip)" },
-          { key: "json", kind: "export" as const, id: "/api/export/json", text: "JSON" },
+          { key: "zip", kind: "export" as const, id: `/api/export/zip?today=${today()}`, text: "Export as Markdown (.zip)" },
+          { key: "json", kind: "export" as const, id: "/api/export/json", text: "Export as JSON" },
         ],
       },
       {
@@ -257,18 +312,19 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
 
   // Only contexts and areas can be renamed or deleted; the other rows are settings, not list items.
   const listRow = cur?.kind === "context" || cur?.kind === "area";
-  const moveArea = (id: ID, dir: -1 | 1) => {
-    const list = [...s.areas].sort((a, b) => a.sort - b.sort);
+  /** ⌥↑↓ on an area or a context: one place up or down (contexts and areas reorder alike); the list is renumbered. */
+  const moveRow = (table: "areas" | "contexts", id: ID, dir: -1 | 1) => {
+    const list = [...(table === "areas" ? s.areas : s.contexts)].sort((a, b) => a.sort - b.sort);
     const i = list.findIndex((a) => a.id === id);
-    const other = list[i + dir];
-    if (!other) return;
-    mutate("Reordered", [
-      { type: "patch", table: "areas", id, data: { sort: other.sort } },
-      { type: "patch", table: "areas", id: other.id, data: { sort: list[i].sort } },
-    ], { silent: true });
+    if (i < 0 || !list[i + dir]) return;
+    [list[i], list[i + dir]] = [list[i + dir], list[i]];
+    const ops = list.flatMap((x, k): Op[] => (x.sort === k ? [] : [{ type: "patch", table, id: x.id, data: { sort: k } }]));
+    mutate("Reordered", ops, { silent: true });
   };
 
   const commands: Command[] = [
+    { id: "set.tabright", label: "Go to the next tab", group: "Settings", keys: ["arrowright"], hidden: true, enabled: onTabs, run: () => stepTab(1) },
+    { id: "set.tableft", label: "Go to the previous tab", group: "Settings", keys: ["arrowleft"], hidden: true, enabled: onTabs, run: () => stepTab(-1) },
     ...nav.commands,
     { id: "set.nexttab", label: "Go to the next settings tab", group: "Settings", keys: ["mod+."], inInput: true, run: () => setTab(TABS[(tabIdx + 1) % TABS.length].id) },
     { id: "set.prevtab", label: "Go to the previous settings tab", group: "Settings", keys: ["mod+,"], inInput: true, run: () => setTab(TABS[(tabIdx - 1 + TABS.length) % TABS.length].id) },
@@ -282,7 +338,27 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       enabled: cur?.kind === "lock",
       run: () => choosePassword(ui),
     },
-    { id: "set.locknow", label: "Lock now", group: "Settings", enabled: lock.unlocked, run: () => lockNow() },
+    { id: "set.locknow", row: true, label: "Lock now", group: "Settings", enabled: lock.unlocked, run: () => lockNow() },
+    {
+      id: "set.lockremove",
+      row: true,
+      label: "Remove the lock password",
+      group: "Settings",
+      enabled: Boolean(meta.lock),
+      run: () =>
+        sealedCount
+          ? notify(`${plural(sealedCount, "reference")} still locked: remove their locks first (L on Reference)`, { tone: "error" })
+          : void removeLockPassword(),
+    },
+    {
+      id: "set.import",
+      row: true,
+      label: "Choose what to import",
+      group: "Settings",
+      keys: ["enter"],
+      enabled: cur?.kind === "import",
+      run: () => (cur?.id === "folder" ? folderInput : filesInput).current?.click(),
+    },
     {
       id: "set.export",
       row: true,
@@ -360,7 +436,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       run: () =>
         ui.openPicker({
           type: "list",
-          title: "The day starts at",
+          title: "Hours the week shows: from",
           items: Array.from({ length: 13 }, (_, h) => ({ id: String(h), label: hh(h) })),
           current: String(meta.dayHours[0]),
           onPick: (a) => {
@@ -369,7 +445,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             window.setTimeout(() =>
               ui.openPicker({
                 type: "list",
-                title: `From ${hh(start)} until`,
+                title: `Hours the week shows: ${hh(start)} until`,
                 items: Array.from({ length: 24 - start - 3 }, (_, i) => start + 4 + i).map((h) => ({ id: String(h), label: hh(h) })),
                 current: String(Math.max(meta.dayHours[1], start + 4)),
                 onPick: (b) => b !== null && void saveDayHours(start, Number(b)),
@@ -398,7 +474,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           onPick: (m) => m && void setAlertMode(m as AlertMode),
         }),
     },
-    { id: "set.addfeed", label: "Add a calendar", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
+    { id: "set.addfeed", row: true, label: "Add a calendar", group: "Settings", keys: ["enter", "f2"], enabled: cur?.kind === "addfeed", run: () => addCalendar(ui) },
     {
       id: "set.feedlink",
       row: true,
@@ -502,7 +578,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           onPick: (id) => {
             if (id !== "system" && id !== "light" && id !== "dark") return;
             setTheme(id);
-            notify(id === "system" ? "Following the system theme" : `${id === "dark" ? "Dark" : "Light"} theme`);
+            notify(id === "system" ? "Following the system theme" : `Using the ${id} theme`);
           },
         }),
     },
@@ -550,8 +626,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         }
       },
     },
-    { id: "set.areaup", row: true, label: "Move area up", group: "Settings", keys: ["alt+arrowup"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, -1) },
-    { id: "set.areadown", row: true, label: "Move area down", group: "Settings", keys: ["alt+arrowdown"], enabled: cur?.kind === "area", run: () => cur && moveArea(cur.id, 1) },
+    { id: "set.rowup", row: true, label: cur?.kind === "context" ? "Move context up" : "Move area up", group: "Settings", keys: ["alt+arrowup"], enabled: listRow, run: () => cur && moveRow(cur.kind === "context" ? "contexts" : "areas", cur.id, -1) },
+    { id: "set.rowdown", row: true, label: cur?.kind === "context" ? "Move context down" : "Move area down", group: "Settings", keys: ["alt+arrowdown"], enabled: listRow, run: () => cur && moveRow(cur.kind === "context" ? "contexts" : "areas", cur.id, 1) },
     {
       id: "set.color",
       row: true,
@@ -578,10 +654,13 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     nav.setFocus(r.key);
     requestAnimationFrame(() => runKey(k));
   };
-  const valueBtn = (r: SRow, content: React.ReactNode, opts: { k?: string; icon?: "chevron" | "download"; label?: string } = {}) => (
+  // A value (theme, weeks, days) carries the picker's chevron; an action (Add, Import, Set the password) carries none,
+  // a download its arrow. Never a Tab stop of its own: the row under the cursor is where the keys are (Enter).
+  const valueBtn = (r: SRow, content: React.ReactNode, opts: { k?: string; icon?: "chevron" | "download" | "none"; label?: string } = {}) => (
     <button
       type="button"
       className="set-value"
+      tabIndex={-1}
       aria-label={opts.label}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => {
@@ -590,7 +669,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       }}
     >
       {content}
-      {opts.icon === "download" ? <Download size={13} strokeWidth={2} aria-hidden /> : <ChevronDown size={13} strokeWidth={2} aria-hidden />}
+      {opts.icon === "download" ? <Download size={13} strokeWidth={2} aria-hidden /> : opts.icon === "none" ? null : <ChevronDown size={13} strokeWidth={2} aria-hidden />}
     </button>
   );
 
@@ -598,7 +677,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     {
       key: "subject",
       label: "Name",
-      width: "minmax(260px, 1fr)",
+      // A reading width (about 70 characters of explanation), the value right after it.
+      width: "minmax(260px, 560px)",
       render: (r) =>
         editing === r.key ? (
           <InlineEdit
@@ -618,20 +698,30 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ) : r.kind === "theme" ? (
           <span className="subject">
             <span className="subject-text strong">Theme</span>
-            <span className="subject-more">Light, dark, or follow the system. Kept in this browser.</span>
+            <span className="subject-more">Light, dark, or the system's. Kept in this browser.</span>
           </span>
         ) : r.kind === "lock" ? (
           <span className="subject">
             <span className="subject-text strong">Lock password</span>
             <span className="subject-more">
-              Locks the reference notes and files you choose (L on Reference). They are encrypted in this browser before they are saved, so nobody can read
-              them without it. A forgotten password can't be reset.
+              {!meta.lock
+                ? "Encrypts the references you lock (L on Reference). A forgotten password can't be reset."
+                : `${sealedCount ? plural(sealedCount, "reference") : "Nothing"} locked${lock.unlocked ? ", open now (⌘K › Lock now)" : ""}. A forgotten password can't be reset.`}
             </span>
           </span>
         ) : r.kind === "export" ? (
           <span className="subject">
             <span className="subject-text strong">{r.text}</span>
-            <span className="subject-more">{r.key === "zip" ? "Every list as Markdown, one file each, zipped." : "Everything in one file, as data."}</span>
+            <span className="subject-more">
+              {r.key === "zip" ? "Every list, and every note with its files." : "Everything in one file, as data."}
+            </span>
+          </span>
+        ) : r.kind === "import" ? (
+          <span className="subject">
+            <span className="subject-text strong">{r.text}</span>
+            <span className="subject-more">
+              {r.id === "folder" ? "Such as an Obsidian vault; the pictures the notes show come along." : "Each .md file becomes a note in Reference."}
+            </span>
           </span>
         ) : r.kind === "week" ? (
           <span className="subject">
@@ -640,18 +730,18 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           </span>
         ) : r.kind === "hours" ? (
           <span className="subject">
-            <span className="subject-text strong">Hours in the week</span>
-            <span className="subject-more">The part of the day the Calendar's week shows, fitted to the window. A week with an appointment outside them stretches to show it.</span>
+            <span className="subject-text strong">Hours the week shows</span>
+            <span className="subject-more">The Calendar's week; an appointment outside these hours stretches it.</span>
           </span>
         ) : r.kind === "alerts" ? (
           <span className="subject">
-            <span className="subject-text strong">Reminders</span>
+            <span className="subject-text strong">Appointment reminders</span>
             {alerts.permission === "denied" ? (
-              <span className="subject-more error-text">The browser blocks notifications for this page. Allow them in its site settings, then choose again.</span>
+              <span className="subject-more error-text">Allow notifications in the browser's site settings, then choose again.</span>
             ) : alerts.permission === "unsupported" ? (
               <span className="subject-more">This browser can't show notifications.</span>
             ) : (
-              <span className="subject-more">A notification 15 and again 5 minutes before each appointment with a time, while the app is open in a tab. Kept in this browser.</span>
+              <span className="subject-more">15 and 5 minutes before each timed appointment, while the app is open.</span>
             )}
           </span>
         ) : r.kind === "feed" ? (
@@ -661,28 +751,28 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
               {r.text}
             </span>
             <span className={`subject-more ${r.status ? "error-text" : ""}`}>
-              {r.status ? `Can't be read right now: ${r.status}` : `From ${meta.calendars.find((f) => f.id === r.id)?.host ?? "a link"}. Read-only; the link stays on the server.`}
+              {r.status ? `Can't be read: ${r.status}` : `From ${meta.calendars.find((f) => f.id === r.id)?.host ?? "a link"}, read-only.`}
             </span>
           </span>
         ) : r.kind === "addfeed" ? (
           <span className="subject">
             <span className="subject-text strong">Add a calendar</span>
-            <span className="subject-more">Outlook: Settings › Calendar › Shared calendars › Publish a calendar, then the ICS link. iCloud: share the calendar as a public calendar, then its webcal link. Shown read-only in the Calendar, Look back and Upcoming.</span>
+            <span className="subject-more">A published Outlook or iCloud calendar, shown read-only.</span>
           </span>
         ) : r.kind === "trash" ? (
           <span className="subject">
             <span className="subject-text strong">Keep deleted items</span>
-            <span className="subject-more">Anything deleted stays in the Trash this long, so it can be put back. Then it is gone for good.</span>
+            <span className="subject-more">How long the Trash keeps things before they are gone for good.</span>
           </span>
         ) : r.kind === "scheduled" ? (
           <span className="subject">
             <span className="subject-text strong">Hide scheduled starting after</span>
-            <span className="subject-more">With Hide scheduled projects on (Projects' View menu), a project starting after this is hidden until its start comes this close. One starting sooner stays in sight, with its clock.</span>
+            <span className="subject-more">With Hide scheduled projects on, one starting later than this stays out of sight.</span>
           </span>
         ) : r.kind === "stall" ? (
           <span className="subject">
             <span className="subject-text strong">Idle after</span>
-            <span className="subject-more">A project untouched this long is marked idle, and the Weekly Review asks whether it is still current. Stalled means no current next action, however recent.</span>
+            <span className="subject-more">A project untouched this long is marked idle and comes up in the Weekly Review.</span>
           </span>
         ) : r.kind === "area" ? (
           <AreaName name={r.text} color={r.color} />
@@ -710,15 +800,21 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ) : r.kind === "hours" ? (
           valueBtn(r, <span className="num">{hh(meta.dayHours[0])}–{hh(meta.dayHours[1])}</span>)
         ) : r.kind === "alerts" ? (
-          valueBtn(r, <span>{alerts.permission === "granted" || alerts.mode === "off" ? ALERT_LABEL[alerts.mode] : "Off"}</span>)
+          alerts.permission === "denied" ? (
+            <span className="muted-text error-text">Blocked</span>
+          ) : (
+            valueBtn(r, <span>{alerts.permission === "granted" || alerts.mode === "off" ? ALERT_LABEL[alerts.mode] : "Off"}</span>)
+          )
         ) : r.kind === "feed" ? (
-          valueBtn(r, <span>{r.status ? "Can't read" : "Change link"}</span>)
+          valueBtn(r, <span>{r.status ? "Fix the link…" : "Change link…"}</span>, { icon: "none" })
         ) : r.kind === "addfeed" ? (
-          valueBtn(r, <span>Add…</span>)
+          valueBtn(r, <span>Add…</span>, { icon: "none" })
         ) : r.kind === "lock" ? (
-          valueBtn(r, <span>{meta.lock ? "Change…" : "Set…"}</span>)
+          valueBtn(r, <span>{meta.lock ? "Change…" : "Set…"}</span>, { icon: "none" })
         ) : r.kind === "export" ? (
           valueBtn(r, <span>Download</span>, { icon: "download" })
+        ) : r.kind === "import" ? (
+          valueBtn(r, <span>Choose…</span>, { icon: "none" })
         ) : r.kind === "area" ? (
           <span className="num muted-text">{plural(s.projects.filter((p) => p.area_id === r.id && p.status === "active").length, "active project")}</span>
         ) : r.kind === "context" ? (
@@ -735,13 +831,13 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           { k: "n", label: "New" },
           { k: "f2", label: "Rename" },
           { k: "c", label: "Colour" },
-          ...(tab === "areas" ? [{ k: "alt+arrowup", label: "Move" }] : []),
+          { k: "alt+arrowup", label: "Move" },
           { k: "delete", label: "Delete" },
         ]
       : tab === "data"
-        ? [{ k: "enter", label: "Download" }]
+        ? [{ k: "enter", label: cur?.kind === "import" ? "Choose" : cur?.kind === "lock" ? (meta.lock ? "Change" : "Set") : "Download" }]
         : cur?.kind === "feed"
-          ? [{ k: "enter", label: "Link" }, { k: "f2", label: "Rename" }, { k: "c", label: "Colour" }, { k: "delete", label: "Remove" }]
+          ? [{ k: "enter", label: "Change link" }, { k: "f2", label: "Rename" }, { k: "c", label: "Colour" }, { k: "delete", label: "Remove" }]
           : cur?.kind === "addfeed"
             ? [{ k: "enter", label: "Add a calendar" }]
             : [{ k: "enter", label: "Change" }]),
@@ -753,15 +849,29 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
   }, [tab]);
   return (
     <div className="settings">
+      {/* One Tab stop for the tabs (the current one); ← → move between them, as tabs do. */}
       <ol className="review-steps settings-tabs" role="tablist" aria-label="Settings">
         {TABS.map((t, i) => (
           <li key={t.id} role="presentation" className={t.id === tab ? "is-current" : ""}>
-            <button type="button" role="tab" aria-selected={t.id === tab} aria-keyshortcuts={String(i + 1)} title={`${t.title} (${i + 1})`} onClick={() => setTab(t.id)}>
+            <button
+              type="button"
+              role="tab"
+              id={`settings-tab-${t.id}`}
+              aria-selected={t.id === tab}
+              aria-controls="settings-panel"
+              tabIndex={t.id === tab ? 0 : -1}
+              aria-keyshortcuts={String(i + 1)}
+              title={`${t.title} (${i + 1})`}
+              onClick={() => setTab(t.id)}
+              onFocus={() => setOnTabs(true)}
+              onBlur={() => setOnTabs(false)}
+            >
               {t.title}
             </button>
           </li>
         ))}
       </ol>
+      <div role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
       <Grid
         listId={`settings-${tab}`}
         columns={columns}
@@ -771,14 +881,44 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         active={regionActive}
         showHeaders={heads}
         head={false}
-        empty={null}
+        // Areas and Contexts are filled here, so an empty one offers its first step (General and Data are never empty).
+        empty={
+          tab === "areas" ? (
+            <EmptyState title="No areas yet" lines={["Areas group your projects: #Work, #Home."]} action={{ label: "New area", run: () => runKey("n") }} />
+          ) : tab === "contexts" ? (
+            <EmptyState title="No contexts yet" lines={["Contexts say where an action can be done: @computer, @phone."]} action={{ label: "New context", run: () => runKey("n") }} />
+          ) : null
+        }
         // Double-click: what Enter does, or rename for areas and contexts.
         onOpen={(k) => {
           const r = all.find((x) => x.key === k);
           if (r) actOn(r, r.kind === "area" || r.kind === "context" ? "f2" : "enter");
         }}
       />
+      </div>
       <KeyHints hints={hints} />
+      <input
+        ref={filesInput}
+        type="file"
+        accept=".md,.markdown,text/markdown,image/*,application/pdf"
+        multiple
+        hidden
+        onChange={(e) => {
+          if (e.target.files) void importNotes(e.target.files);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={folderInput}
+        type="file"
+        // A folder and all that is in it (every browser takes this attribute, under this name).
+        {...{ webkitdirectory: "" }}
+        hidden
+        onChange={(e) => {
+          if (e.target.files) void importNotes(e.target.files);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
@@ -821,7 +961,7 @@ async function saveWeekStart(start: 0 | 1) {
 
 const linkPreview = (v: string) => {
   const u = v.trim();
-  if (!u) return { ok: false, text: "Paste the calendar's webcal or ICS link" };
+  if (!u) return { ok: false, text: "Outlook: Settings › Calendar › Shared calendars › Publish, the ICS link. iCloud: share as a public calendar, the webcal link." };
   if (!/^(https|webcals?|http):\/\//i.test(u)) return { ok: false, text: "A webcal or https link, from the calendar's share or publish settings" };
   return { ok: true, text: "Checks the link first. It stays on the server; only the appointments are shown, read-only." };
 };

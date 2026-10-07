@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { getMeta, getState, localApply, mutate, notify, plural, quote, updateMeta } from "./store.ts";
+import { getMeta, getState, localApply, mutate, notify, plural, quote, updateMeta, type MutateOpts } from "./store.ts";
+import { flushAll } from "./noteSave.ts";
 import type { PickerSpec } from "./ui.tsx";
 import type { FileRow, ID, Ref } from "../shared/types.ts";
 
@@ -78,6 +79,11 @@ function hold(k: CryptoKey) {
 /** Forget the key: everything locked is unreadable again until the password is typed. */
 export function lockNow(idle = false) {
   if (!key) return;
+  // A locked note being typed in is saved (encrypted) first, while the key is still here.
+  void flushAll().finally(() => shut(idle));
+}
+function shut(idle: boolean) {
+  if (!key) return;
   key = null;
   window.clearTimeout(idleTimer);
   window.removeEventListener("keydown", activity, true);
@@ -85,6 +91,21 @@ export function lockNow(idle = false) {
   opened.clear();
   emit();
   notify(idle ? "Locked again after 5 minutes idle" : "Locked references locked");
+}
+
+/**
+ * Takes the lock password away, when nothing is locked with it any more (the server checks too): the key goes, and
+ * L on Reference asks for a new password the next time.
+ */
+export async function removeLockPassword() {
+  const was = getMeta().lock;
+  if (!was) return;
+  const res = await fetch("/api/settings/lock", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ replaces: was.wrapped }) });
+  const j = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) return notify(j.error ?? "Couldn't remove the lock password", { tone: "error" });
+  if (key) shut(false);
+  updateMeta({ lock: null });
+  notify("Lock password removed");
 }
 
 /** Opens the lock with the password; false when it is wrong. */
@@ -208,10 +229,11 @@ export function useOpenedFile(f: FileRow): { name: string; mime: string } | null
 }
 
 /** Saves edited notes of a locked reference, encrypted. */
-export async function saveSealedNotes(r: Ref, notes: string, label = "Saved", extra: Record<string, unknown> = {}) {
+export async function saveSealedNotes(r: Ref, notes: string, label = "Saved", extra: Record<string, unknown> = {}, opts: MutateOpts = {}): Promise<boolean> {
+  if (!key) return false;
   const sealed = await sealText(r.id, notes);
   opened.set(`${r.id}|${sealed}`, notes);
-  mutate(label, [{ type: "patch", table: "refs", id: r.id, data: { sealed, ...extra } }]);
+  return mutate(label, [{ type: "patch", table: "refs", id: r.id, data: { sealed, ...extra } }], opts);
 }
 
 /** A locked reference's notes, read outside a component (unlocked only). */
