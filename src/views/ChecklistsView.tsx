@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { setRoute } from "../route.ts";
 import { ListChecks } from "lucide-react";
 import { quote, forgetUndo, getMeta, getState, mutate, notify, patchMany, plural, stamp, uid, useTables } from "../store.ts";
 import { useUI, type UI } from "../ui.tsx";
@@ -51,7 +52,7 @@ export function ChecklistsView({ regionActive }: { regionActive: boolean }) {
   // An address for a checklist that is gone (deleted, or never there) lands on every checklist instead.
   useEffect(() => {
     if (openId && !open) {
-      window.history.replaceState(null, "", "#checklists");
+      setRoute("checklists", true);
       openChecklist(null, false);
     }
   }, [openId, open]);

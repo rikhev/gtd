@@ -18,6 +18,7 @@ import { AgendasView } from "./views/AgendasView.tsx";
 import { Picker } from "./components/Picker.tsx";
 import { Detail } from "./components/Detail.tsx";
 import { Viewer } from "./components/Viewer.tsx";
+import { routePath, routeView, setRoute } from "./route.ts";
 import { usePhone } from "./phone.ts";
 import { ActionsView } from "./views/ActionsView.tsx";
 import { InboxView } from "./views/InboxView.tsx";
@@ -40,14 +41,12 @@ import { isDark, setTheme, useTheme } from "./theme.ts";
 import { today } from "../shared/dates.ts";
 
 /**
- * Views with their own address (#inbox, #projects, #reference…), so the browser's Back and Forward move between
+ * Views with their own address (/inbox, /projects, /reference…), so the browser's Back and Forward move between
  * them and a reload or bookmark lands on the same list. Search is a query, not a place, and gets no entry.
  */
 /** Lists with a View menu (⌥V), which touch reaches by a button in the heading. */
 const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "done", "agendas", "checklists"];
 const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "checklists", "horizons", "done", "trash", "review", "settings", "clarify"];
-/** The view an address belongs to: "#checklists/…" (one checklist, open) is still Checklists. */
-const hashView = (hash: string) => hash.slice(1).split("/")[0];
 /** The address of the checklist open in Checklists, if one is. */
 /**
  * The name of what the cursor is on, for the palette's first group ("“Launch the site”"): the item in the details
@@ -66,14 +65,14 @@ function focusedName(): string {
   return "";
 }
 
-const openChecklistHash = () => (/^#checklists\/.+/.test(window.location.hash) ? window.location.hash : null);
+const openChecklistPath = () => (/^checklists\/.+/.test(routePath()) ? routePath() : null);
 /** The address of the reference list open in Reference, if one is. */
 /** What takes focus when the list region does: the active list. */
 const LIST_FOCUS = ".list-region .grid.is-active";
 
-const openRefListHash = () => (/^#reference\/.+/.test(window.location.hash) ? window.location.hash : null);
-function viewFromHash(): ViewId | null {
-  const h = hashView(window.location.hash) as ViewId;
+const openRefListPath = () => (/^reference\/.+/.test(routePath()) ? routePath() : null);
+function viewFromPath(): ViewId | null {
+  const h = routeView() as ViewId;
   // Clarify can't be rebuilt from an address (it needs the run that opened it): it lands on the Inbox it clarifies.
   if (h === "clarify") return "inbox";
   return ROUTED.includes(h) ? h : null;
@@ -117,7 +116,7 @@ if (typeof window !== "undefined") {
 export default function App() {
   const meta = useMeta();
   const s = useStore((x) => x);
-  const [view, setView] = useState<ViewId>(() => viewFromHash() ?? "next");
+  const [view, setView] = useState<ViewId>(() => viewFromPath() ?? "next");
   const [region, setRegion] = useState<Region>("list");
   const [detail, setDetail] = useState<Target | null>(null);
   // What the pane showed before each drill into a related item (a project's action or appointment).
@@ -256,16 +255,15 @@ export default function App() {
   viewNow.current = view;
   useEffect(() => {
     if (view === "search") return;
-    // Checklists keeps a checklist that is open in its address (#checklists/…).
-    const hash = view === "checklists" && openChecklistHash() ? openChecklistHash()! : view === "reference" && openRefListHash() ? openRefListHash()! : `#${view}`;
+    // Checklists keeps a checklist that is open in its address (/checklists/…), Reference a list (/reference/…).
+    const path = view === "checklists" && openChecklistPath() ? openChecklistPath()! : view === "reference" && openRefListPath() ? openRefListPath()! : view;
     if (popping.current) {
       popping.current = false;
-      if (hashView(window.location.hash) !== view) window.history.replaceState(null, "", hash);
+      if (routeView() !== view) setRoute(path, true);
       return;
     }
-    if (window.location.hash === hash) return;
-    if (!window.location.hash) window.history.replaceState(null, "", hash);
-    else window.history.pushState(null, "", hash);
+    if (routePath() === path) return;
+    setRoute(path, !routePath());
   }, [view]);
 
   const go = useCallback((v: ViewId, popped = false) => {
@@ -300,9 +298,9 @@ export default function App() {
     const onPop = () => {
       // A picker belongs to the list it was opened on: Back or Forward to another place closes it.
       setPicker(null);
-      const v = viewFromHash() ?? "next";
-      // An address that can't be shown as is (#clarify out of a run, or unknown) is rewritten to the view it lands on.
-      if (hashView(window.location.hash) !== v && viewNow.current !== "clarify") window.history.replaceState(null, "", `#${v}`);
+      const v = viewFromPath() ?? "next";
+      // An address that can't be shown as is (/clarify out of a run, or unknown) is rewritten to the view it lands on.
+      if (routeView() !== v && viewNow.current !== "clarify") setRoute(v, true);
       if (v === viewNow.current) return;
       popping.current = true;
       go(v, true);

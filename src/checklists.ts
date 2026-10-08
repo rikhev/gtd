@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { routePath, routeView, setRoute } from "./route.ts";
 import { getMeta, getState, mutate, notify, plural, stamp, uid } from "./store.ts";
 import { addDays, formatLong, fromIso, iso, today } from "../shared/dates.ts";
 import type { Checklist, ChecklistItem, ChecklistTick, ID, Op, State } from "../shared/types.ts";
@@ -14,20 +15,20 @@ import type { Checklist, ChecklistItem, ChecklistTick, ID, Op, State } from "../
 
 /**
  * The Checklists view has two levels: every checklist, and one checklist's items. The open one has its own address
- * (#checklists/<id>), so Back and Forward step between them and a reload or bookmark lands inside it.
+ * (/checklists/<id>), so Back and Forward step between them and a reload or bookmark lands inside it.
  */
 const listeners = new Set<() => void>();
-const fromHash = () => {
-  const m = /^#checklists\/(.+)$/.exec(window.location.hash);
+const fromPath = () => {
+  const m = /^checklists\/(.+)$/.exec(routePath());
   return m ? decodeURIComponent(m[1]) : null;
 };
-let open: ID | null = typeof window === "undefined" ? null : fromHash();
+let open: ID | null = typeof window === "undefined" ? null : fromPath();
 const emit = () => listeners.forEach((l) => l());
 
 if (typeof window !== "undefined") {
   window.addEventListener("popstate", () => {
-    if (!window.location.hash.startsWith("#checklists")) return;
-    const id = fromHash();
+    if (routeView() !== "checklists") return;
+    const id = fromPath();
     if (id !== open) {
       open = id;
       emit();
@@ -61,7 +62,7 @@ export function openChecklist(id: ID | null, history = true, at: ID | null = nul
   open = id;
   // A checklist opens on today: a day stepped back to belongs to the checklist it was stepped in.
   viewDay = null;
-  if (history) window.history.pushState(null, "", id ? `#checklists/${encodeURIComponent(id)}` : "#checklists");
+  if (history) setRoute(id ? `checklists/${encodeURIComponent(id)}` : "checklists");
   emit();
 }
 

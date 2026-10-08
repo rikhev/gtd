@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { setRoute } from "../route.ts";
 import { FileText, List, Lock, Paperclip, StickyNote } from "lucide-react";
 import { itemCount, openRefList, setForm, useOpenRefList } from "../refList.ts";
 import { RefListView } from "./RefListView.tsx";
@@ -213,7 +214,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
 /**
  * Reference has two levels, as Checklists has: every reference, and a reference list opened across the whole width
  * (owner's request). A note is an item like any other: its text is written in the details pane (owner's decision after
- * the note page: the app is lists and one pane). A list's own address (#reference/<id>) brings it back; one that is
+ * the note page: the app is lists and one pane). A list's own address (/reference/<id>) brings it back; one that is
  * gone lands on every reference.
  */
 export function ReferenceView({ regionActive }: { regionActive: boolean }) {
@@ -222,7 +223,7 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
   const open = openId ? refs.find((r) => r.id === openId && r.status === "active" && r.form === "list") : undefined;
   useEffect(() => {
     if (openId && !open) {
-      window.history.replaceState(null, "", "#reference");
+      setRoute("reference", true);
       openRefList(null, false);
     }
   }, [openId, open]);

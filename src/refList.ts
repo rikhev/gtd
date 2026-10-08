@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { routePath, routeView, setRoute } from "./route.ts";
 import { getState, mutate } from "./store.ts";
 import { isUnlocked, readSealedNotes, saveSealedNotes, useOpenedNotes } from "./lock.ts";
 import type { ID, Ref } from "../shared/types.ts";
@@ -83,19 +84,19 @@ export async function setForm(ids: ID[], form: "list" | null) {
 
 /**
  * Reference has two levels, as Checklists has: every reference, and one list across the whole width, to keep up with
- * the list's keys. The open one has its own address (#reference/<id>), so Back and Forward step between them.
+ * the list's keys. The open one has its own address (/reference/<id>), so Back and Forward step between them.
  */
 const listeners = new Set<() => void>();
-const fromHash = () => {
-  const m = /^#reference\/(.+)$/.exec(window.location.hash);
+const fromPath = () => {
+  const m = /^reference\/(.+)$/.exec(routePath());
   return m ? decodeURIComponent(m[1]) : null;
 };
-let open: ID | null = typeof window === "undefined" ? null : fromHash();
+let open: ID | null = typeof window === "undefined" ? null : fromPath();
 const emit = () => listeners.forEach((l) => l());
 if (typeof window !== "undefined") {
   window.addEventListener("popstate", () => {
-    if (!window.location.hash.startsWith("#reference")) return;
-    const id = fromHash();
+    if (routeView() !== "reference") return;
+    const id = fromPath();
     if (id !== open) {
       open = id;
       emit();
@@ -114,6 +115,6 @@ export function useOpenRefList(): ID | null {
 export function openRefList(id: ID | null, history = true) {
   if (id === open) return;
   open = id;
-  if (history) window.history.pushState(null, "", id ? `#reference/${encodeURIComponent(id)}` : "#reference");
+  if (history) setRoute(id ? `reference/${encodeURIComponent(id)}` : "reference");
   emit();
 }
