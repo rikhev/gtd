@@ -323,7 +323,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       keys: ["n"],
       run: () => create(),
     },
-    { id: "ref.newlist", label: "New list", group: "Reference", keys: ["shift+l"], run: () => create("list") },
+    { id: "ref.newlist", label: "New list", group: "Reference", keys: ["l"], run: () => create("list") },
     { id: "ref.today", label: "Open today's note", group: "Reference", keys: ["d"], run: () => openTodayNote(ui) },
     {
       // A note's lines become a list's items, and back; nothing is lost either way.
@@ -371,12 +371,13 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       run: () => setProject(ui, "refs", nav.targets()),
     },
     {
-      // L locks the reference (setting the lock password the first time); on a locked one it takes the lock off.
+      // ⇧L locks the reference (setting the lock password the first time); on a locked one it takes the lock off. L
+      // makes a new list, as N makes a note: making something new is one key (owner's rule).
       id: "ref.lock",
       row: true,
       label: focusId && s.refs.find((r) => r.id === focusId)?.sealed ? "Remove the lock" : "Lock with password",
       group: "Reference",
-      keys: ["l"],
+      keys: ["shift+l"],
       enabled: Boolean(focusId),
       run: () => {
         const ids = nav.targets();
