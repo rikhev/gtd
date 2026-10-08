@@ -255,8 +255,11 @@ export function stepChoice(dir: 1 | -1) {
  * tabs or steps the screen already shows) are left out. With a keyboard every hint shows as its key, in order.
  */
 export type KeyHint = { k: string; label: string; primary?: boolean; touch?: "more" | "hide" };
-export function KeyHints({ hints }: { hints: KeyHint[] }) {
+export function KeyHints({ hints, touchOnly }: { hints: KeyHint[]; touchOnly?: boolean }) {
   const touch = useIsTouch();
+  // A screen's row of keys is printed only where a key picks an answer (owner's rule after the consistency critique);
+  // elsewhere it is there on touch alone, as the screen's buttons, and ⌘K lists the keys.
+  if (touchOnly && !touch) return null;
   const [more, setMore] = useState(false);
   const btn = (h: KeyHint, extra = "") => (
     <button key={h.k + h.label} type="button" className={`kh ${extra}`} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => runKey(h.k)}>

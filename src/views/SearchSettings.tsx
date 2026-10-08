@@ -861,7 +861,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         }}
       />
       </div>
-      <KeyHints hints={hints} />
+      <KeyHints hints={hints} touchOnly />
       <input
         ref={filesInput}
         type="file"

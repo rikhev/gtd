@@ -1013,6 +1013,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   const acting = draft?.disposition === "actionable" || draft?.disposition === "someday";
   const hints = ready ? (
     <KeyHints
+      touchOnly
       hints={[
         { k: "mod+enter", label: "Accept", primary: true },
         ...(acting ? [{ k: "n", label: "Add action", touch: "more" as const }] : []),

@@ -816,6 +816,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       )}
       {!clarifying && (
         <KeyHints
+          touchOnly
           hints={[
             // On touch the step bar is right above: moving between steps is a tap there, not a button here.
             ...(step.id !== "finish" ? [{ k: "mod+.", label: "Next step", touch: "hide" as const }] : []),

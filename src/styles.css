@@ -3443,6 +3443,9 @@ textarea.field-text {
   flex-direction: column;
   gap: var(--sp-xl);
 }
+.clarify-pane-foot:empty {
+  display: none;
+}
 .clarify-pane-foot {
   padding: 0 16px 14px;
 }
