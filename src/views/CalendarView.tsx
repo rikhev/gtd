@@ -741,6 +741,26 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     ) : null;
   };
 
+  /**
+   * Where today stands in the year, on today's date itself (owner's request: in the page heading it was unclear what
+   * it meant): its day of the year and the days left after it, "281 | 84".
+   */
+  const yearMark = (d: string) => {
+    if (d !== t) return null;
+    const day = daysBetween(`${t.slice(0, 4)}-01-01`, t) + 1;
+    const left = daysBetween(t, `${t.slice(0, 4)}-12-31`);
+    const said = `Day ${day} of the year, ${left} ${left === 1 ? "day" : "days"} left`;
+    return (
+      <span className="cal-yearday" title={said} aria-label={said}>
+        {day}
+        <span className="cal-yearday-sep" aria-hidden="true">
+          |
+        </span>
+        {left}
+      </span>
+    );
+  };
+
   const dayCell = (d: string, opts: { outside?: boolean; hidden?: number; head?: boolean }) => (
     <div
       key={d}
@@ -762,9 +782,13 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         <span className="cal-dayhead">
           <span className="cal-wd">{WEEKDAY[dow(d)]}</span>
           <span className="cal-num">{Number(d.slice(8))}</span>
+          {yearMark(d)}
         </span>
       ) : (
-        <span className="cal-num">{Number(d.slice(8)) === 1 && !phone ? `${Number(d.slice(8))} ${MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}` : Number(d.slice(8))}</span>
+        <>
+          <span className="cal-num">{Number(d.slice(8)) === 1 && !phone ? `${Number(d.slice(8))} ${MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}` : Number(d.slice(8))}</span>
+          {!phone && yearMark(d)}
+        </>
       )}
       {phone && !opts.head && dots(d)}
       {/* What should already have happened, on today's cell, so Week and Month don't hide it in the past. */}
@@ -919,6 +943,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
                 <span className="cal-wd">{WEEKDAY[dow(d)]}</span>
                 <span className="cal-num">{Number(d.slice(8))}</span>
                 <span className="cal-agenda-month">{MONTH[Number(d.slice(5, 7)) - 1].slice(0, 3)}</span>
+                {yearMark(d)}
                 {overdueLink(d)}
               </h3>
               {list.length > 0 && <ul className="cal-agenda">{list.map((i) => agendaRow(i, d))}</ul>}
@@ -1034,6 +1059,11 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
               <span className="cal-title-dates">
                 {weekDays[0]} – {weekDays[6]}
               </span>
+            </>
+          ) : mode === "day" ? (
+            <>
+              {title}
+              {yearMark(cursor)}
             </>
           ) : (
             title

@@ -344,9 +344,21 @@ a:hover {
   text-decoration-color: var(--rule-strong);
   text-underline-offset: 4px;
 }
-/* The Calendar's "281 | 84": the divider with room either side, a step quieter than the numbers. */
-.viewcount-sep {
-  margin: 0 6px;
+/* Today's place in the year, on today's date in the Calendar ("281 | 84"): small, quiet, in tabular figures, the
+   divider a step quieter still, so it reads as a note on the date, not as another date. */
+.cal-yearday {
+  margin-left: 8px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cal-yearday-sep {
+  margin: 0 4px;
   color: var(--rule-strong);
 }
 .viewcrumb-sep {
