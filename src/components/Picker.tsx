@@ -109,6 +109,7 @@ export function Picker({ spec, close }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 120, left: 320 });
   // Remember what had focus when the picker opened; by the time effects re-run, the picker's own input has it.
+  const [touch] = useState(() => window.matchMedia("(pointer: coarse)").matches);
   const [opener] = useState(() =>
     document.activeElement instanceof HTMLElement && document.activeElement !== document.body && !document.activeElement.closest(".picker") ? document.activeElement : null,
   );
@@ -174,7 +175,10 @@ export function Picker({ spec, close }: Props) {
     if (top + h > window.innerHeight - 12) top = Math.max(12, (at ? at.y : r ? r.top : top) - h - 4);
     if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;
     setPos({ top, left });
-    input.current?.focus();
+    // On a touch screen the typing field isn't focused: that would put the on-screen keyboard over the choices. The
+    // choices are tapped; the field is there to tap into when something new is to be typed.
+    if (touch) box.current?.focus({ preventScroll: true });
+    else input.current?.focus();
   }, []);
 
   const options: Option[] = useMemo(() => {
@@ -321,11 +325,14 @@ export function Picker({ spec, close }: Props) {
 
   const title =
     spec.type === "time" ? "Time estimate" : spec.type === "energy" ? "Energy" : spec.title;
+  // A short menu with nothing to type (the View menu, Where are you?) has no field on a touch screen: only its choices.
+  const menuOnly = touch && spec.type === "list" && !spec.onCreate && spec.items.length <= 16;
 
   return (
-    <div className={`picker ${spec.type === "date" ? "is-date" : ""} ${spec.type === "list" && spec.wide ? "is-wide" : ""}`} ref={box} style={{ top: pos.top, left: pos.left }} role="dialog" aria-label={title}>
+    <div className={`picker ${spec.type === "date" ? "is-date" : ""} ${spec.type === "list" && spec.wide ? "is-wide" : ""}`} ref={box} tabIndex={-1} style={{ top: pos.top, left: pos.left }} role="dialog" aria-label={title}>
       <div className="picker-title">{title}</div>
       <input
+        hidden={menuOnly}
         ref={input}
         className="picker-input"
         type={spec.type === "text" && spec.secret ? "password" : "text"}

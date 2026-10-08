@@ -4,7 +4,7 @@ import { fits, openFit, useFit } from "./fit.ts";
 import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, SlidersHorizontal } from "lucide-react";
 import { quote, archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, notStarted, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
@@ -98,9 +98,11 @@ function homeOf(t: Target): ViewId {
   return ({ next: "next", waiting: "waiting", someday: "someday", later: "projects", done: "done", trashed: "next" } as const)[a.status];
 }
 
-// On a touch screen the cursor row means nothing until you use the list: the fill waits for the first key or tap.
+// On a touch screen the cursor row means nothing until you use the list: the fill waits for the first key or tap. On a
+// phone only a key counts: a tap opens the item in its sheet, and a fill left behind on the row is the desktop's cursor.
 if (typeof window !== "undefined") {
-  const engage = () => {
+  const engage = (e: Event) => {
+    if (e.type === "pointerdown" && window.matchMedia("(max-width: 820px)").matches) return;
     document.documentElement.classList.add("engaged");
     window.removeEventListener("keydown", engage, true);
     window.removeEventListener("pointerdown", engage, true);
@@ -800,13 +802,14 @@ export default function App() {
             )}
             {counts[view] && <span className={`viewcount ${openList?.repeats && checklistDay ? "is-past" : ""}`}>{counts[view]}</span>}
             <span className="viewtools">
-              {/* What fits now, in sight where it is used; while it is on, the line above the list takes over. */}
-              {view === "next" && !fitNow && (
+              {/* What fits now, in sight where it is used; while it is on, the line above the list takes over. On a phone
+                  it is in the View menu, with every other way of looking at the list: one button, not a row of links. */}
+              {!phone && view === "next" && !fitNow && (
                 <button type="button" className="text-btn" onClick={() => openFit(ui)}>
                   What fits now
                 </button>
               )}
-              {view === "projects" && !areaFilter && s.areas.length > 0 && (
+              {!phone && view === "projects" && !areaFilter && s.areas.length > 0 && (
                 <button type="button" className="text-btn" onClick={() => openAreaFilter(ui)}>
                   Filter by area
                 </button>
@@ -818,17 +821,23 @@ export default function App() {
                 </button>
               )}
               {/* A run under way can be started over from here: it has no key of its own (⌥V and ⌘K have it). */}
-              {openList && !openList.repeats && progress(s, openList.id).ticked > 0 && (
+              {!phone && openList && !openList.repeats && progress(s, openList.id).ticked > 0 && (
                 <button type="button" className="text-btn" onClick={() => startOver([openList.id])}>
                   Start over
                 </button>
               )}
-              {/* Touch has no ⌥V: the list's View menu (group, sort, show) as a button. */}
-              {LISTS_WITH_VIEW.includes(view) && (
-                <button type="button" className="text-btn touch-only" onClick={() => runKey("alt+v")}>
-                  View
-                </button>
-              )}
+              {/* Touch has no ⌥V: the list's View menu (group, sort, show, and on a phone what fits, areas and starting
+                  over) as a button; on a phone one icon button the thumb can hit. */}
+              {LISTS_WITH_VIEW.includes(view) &&
+                (phone ? (
+                  <button type="button" className="icon-btn view-btn" aria-label="View" onClick={() => runKey("alt+v")}>
+                    <SlidersHorizontal size={20} strokeWidth={1.75} aria-hidden />
+                  </button>
+                ) : (
+                  <button type="button" className="text-btn touch-only" onClick={() => runKey("alt+v")}>
+                    View
+                  </button>
+                ))}
             </span>
           </div>
           <div className="work">

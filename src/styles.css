@@ -4684,6 +4684,15 @@ textarea.field-text {
   line-height: 1.25;
   text-wrap: balance;
 }
+.cal-title-dates {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .calendar.is-phone .cal-nav {
   grid-area: nav;
   margin-right: -10px;
@@ -4726,7 +4735,13 @@ textarea.field-text {
 }
 .calendar.is-phone .cal-legend-item {
   flex: none;
-  min-height: 36px;
+  min-height: 44px;
+}
+/* Soft dates on a phone: a checkbox the thumb can see and hit, not the desktop's 10px square. */
+.calendar.is-phone .cal-soft-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
 }
 /* With no calendars after it, Soft dates needs no hairline to set it apart. */
 .calendar.is-phone .cal-soft:last-child {
@@ -4735,7 +4750,7 @@ textarea.field-text {
 .calendar.is-phone .cal-sync {
   grid-area: sync;
   min-width: 44px;
-  min-height: 36px;
+  min-height: 44px;
 }
 
 /* Agenda rows on a phone read as the lists' rows do: the whole title in 15px (up to two lines), and under it, in
@@ -5642,6 +5657,12 @@ body.is-cal-dragging {
   .picker [role="option"] {
     min-height: 44px;
   }
+  /* A sheet is tapped, not walked: no keyboard highlight on its first choice. The current one says "Current". */
+  .picker-list li.is-hi:not(:hover) {
+    background: none;
+    color: inherit;
+    box-shadow: none;
+  }
   .picker input {
     height: 44px;
   }
@@ -5815,6 +5836,48 @@ body.is-cal-dragging {
   }
   .pin-btn {
     display: none;
+  }
+  /* The heading's tools on a phone (owner's request: adapted for the phone, nothing carried over small): one View
+     button the size of a fingertip, its icon in ink, at the heading's right, where the title's line ends. */
+  .viewhead {
+    align-items: center;
+  }
+  .viewtools {
+    align-items: center;
+    margin-right: -10px;
+  }
+  .viewtools .icon-btn {
+    width: 44px;
+    height: 44px;
+    color: var(--ink);
+  }
+  .viewtools .text-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 10px;
+  }
+  /* A list filled in place offers its first step in the empty state; on a phone the + button at the thumb already
+     does, so the small link would only repeat it. */
+  .empty-action {
+    display: none;
+  }
+  /* What fits now and the area filter, while on: the line says so, and its Change and Show all are buttons a thumb
+     can hit. */
+  .fit-bar {
+    flex-wrap: wrap;
+    min-height: 44px;
+    column-gap: var(--sp-md);
+    padding-right: 0;
+  }
+  .fit-bar .text-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 8px;
+  }
+  .picker:focus {
+    outline: none;
   }
 }
 

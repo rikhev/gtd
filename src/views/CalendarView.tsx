@@ -325,9 +325,6 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const title =
     mode === "day"
       ? `${cursor === t ? "Today · " : ""}${formatLong(cursor)}`
-      : mode === "week" && phone
-        ? // A phone's narrow title breaks between the dates, never inside one, and leaves out this year.
-          `Week ${isoWeek(weekDays[3])} · ${weekDays[0]} – ${weekDays[6]}`
       : mode === "week"
       ? `Week ${isoWeek(weekDays[3])} · ${weekDays[0]} – ${weekDays[6]}`
       : mode === "month"
@@ -1060,7 +1057,20 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       tabIndex={-1}
     >
       <div className="cal-bar-top">
-        <h2 className="cal-title-period">{title}</h2>
+        {/* A phone's narrow title gives the week its own line and the dates a quieter one under it, so it never breaks
+            inside a date. */}
+        <h2 className="cal-title-period">
+          {mode === "week" && phone ? (
+            <>
+              Week {isoWeek(weekDays[3])}
+              <span className="cal-title-dates">
+                {weekDays[0]} – {weekDays[6]}
+              </span>
+            </>
+          ) : (
+            title
+          )}
+        </h2>
         <div className="cal-nav">
           <button type="button" className="icon-btn" onClick={() => step(-1)} aria-label={`Previous ${mode}`} title={`Previous ${mode} (${keyLabel("pageup")})`}>
             <ChevronLeft size={16} strokeWidth={2} />
