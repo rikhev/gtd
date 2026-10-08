@@ -546,7 +546,8 @@ export function actionRowCommands(
     { id: "row.trash", label: "Trash", group: o.group, keys: ["backspace", "delete"], run: () => trash(false) },
     { id: "row.delete", label: "Delete permanently", group: o.group, keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },
   ];
-  return all.filter((c) => !o.skip?.includes(c.id)).map((c) => ({ ...c, enabled: has, row: true }));
+  // A command's own condition stays (Bring back is for someday items only); the row's presence is added to it.
+  return all.filter((c) => !o.skip?.includes(c.id)).map((c) => ({ ...c, enabled: has && (c.enabled ?? true), row: true }));
 }
 
 export function useActionCommands(opts: {

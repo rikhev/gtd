@@ -6,7 +6,8 @@ import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unloc
 import { type MutateOpts, getState, quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, uid, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
-import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
+import { actionRowCommands, askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
+import { doneNow, trashNow } from "../fileStuff.ts";
 import { projectEditors } from "../views/ProjectsView.tsx";
 import { habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, progress, progressLabel, repeatsLabel, setChecklistDay, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
@@ -223,6 +224,8 @@ const FIELD_COMMAND: Record<string, string> = {
   Context: "Set context",
   Project: "Set project",
   "Do on": "Set the day to do it",
+  // The project's status is moved as the Projects list moves it (V): the same command, the same words.
+  Status: "Move or merge",
   Time: "Set time estimate",
   Energy: "Set energy",
   Repeat: "Set repeat",
@@ -293,7 +296,7 @@ function removeFile(f: FileRow) {
   mutate(`“${f.name}” removed`, [{ type: "delete", table: "files", id: f.id }]);
 }
 
-export function Files({ owner, layer, title }: { owner: { kind: FileRow["owner_kind"]; id: string }; layer?: string; title?: string }) {
+export function Files({ owner, layer, title, onDelete }: { owner: { kind: FileRow["owner_kind"]; id: string }; layer?: string; onDelete?: () => void; title?: string }) {
   const ui = useUI();
   const files = useStore((s) => s.files).filter((f) => f.owner_kind === owner.kind && f.owner_id === owner.id);
   // Only a list of files, no thumbnails or text previews (owner's request: several files made the pane too busy).
@@ -316,9 +319,12 @@ export function Files({ owner, layer, title }: { owner: { kind: FileRow["owner_k
         group: "Details",
         keys: ["backspace", "delete"],
         enabled: active && files.length > 0,
+        // Delete removes the file under the pane's cursor; anywhere else in the pane it trashes the item, as on its
+        // list row (owner's rule: the pane is the row, bigger).
         run: () => {
           const f = cursorFile();
           if (f) removeFile(f);
+          else onDelete?.();
         },
       },
     ],
@@ -429,6 +435,16 @@ function ActionDetail({ a }: { a: Action }) {
     [
       { id: "detail.a.addnext", label: "Add a next action", group: "Details", keys: ["t"], run: () => (a.project_id ? projectEditors(ui).addNextAction(a.project_id) : quickAddNextAction(ui)) },
       { id: "detail.a.addwait", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => (a.project_id ? projectEditors(ui).addWaiting(a.project_id) : quickAddWaiting(ui)) },
+      // The pane is the row, bigger (owner's rule): E, J, V, ⇧P, ⇧F, Delete and ⇧Delete do what they do on the row.
+      // The field keys are the pane's own fields, so they are left to them.
+      { id: "detail.a.done", label: done ? "Mark not done" : "Mark done", group: "Details", keys: ["e"], enabled: a.status !== "trashed", run: () => (done ? reopenActions([a.id]) : completeActions([a.id])) },
+      ...actionRowCommands(ui, {
+        targets: () => [a.id],
+        focusId: a.id,
+        group: "Details",
+        waiting: a.status === "waiting",
+        skip: ["row.open", "row.rename", "row.context", "row.project", "row.date", "row.since", "row.time", "row.energy", "row.repeat", "row.bringback", "row.person"],
+      }).map((c) => ({ ...c, row: false })),
     ],
     { priority: 21, active: paneActive },
   );
@@ -558,7 +574,7 @@ function ActionDetail({ a }: { a: Action }) {
         {layout}
       </div>
       <NotesField label="Notes" value={a.notes} saveKey={`actions:${a.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "actions", id: a.id, data: { notes: v } }], o)} owner={{ kind: "action", id: a.id }} />
-      <Files owner={{ kind: "action", id: a.id }} />
+      <Files owner={{ kind: "action", id: a.id }} onDelete={() => mutate(`${quote(a.title)} trashed`, [{ type: "patch", table: "actions", id: a.id, data: { status: "trashed" } }])} />
       <p className="detail-meta">
         Created {formatLong(a.created_at.slice(0, 10))}
         {a.completed_at ? ` · done ${formatLong(a.completed_at.slice(0, 10))}` : ""}
@@ -718,8 +734,12 @@ function ProjectDetail({ p }: { p: Project }) {
       { id: "detail.addwaiting", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => ed.addWaiting(p.id) },
       { id: "detail.support", label: "Link support material", group: "Details", run: () => linkSupport(ui, p.id) },
       { id: "detail.plan", label: "Plan a later step", group: "Details", run: () => planLater() },
-      // E, as on every list: the action under the pane's cursor is done (or, already done, not done after all).
-      { id: "detail.actdone", label: "Mark the action done", group: "Details", keys: ["e"], run: () => toggleDone(cursorAction()) },
+      // E, as on every list: the action under the pane's cursor is done (or not done after all); anywhere else in the
+      // pane, the project is completed, as E does on its Projects row (the pane is the row, bigger).
+      { id: "detail.actdone", label: p.status === "done" ? "Mark not done" : "Complete project, or the action under the cursor", group: "Details", keys: ["e"], run: () => (cursorAction() ? toggleDone(cursorAction()) : p.status === "done" ? ed.reopen([p.id]) : ed.complete([p.id])) },
+      { id: "detail.pjump", label: "Jump to its next action", group: "Details", keys: ["j"], run: () => ui.jumpToAction(p.id) },
+      { id: "detail.ptrash", label: "Trash project", group: "Details", keys: ["backspace", "delete"], run: () => ed.trash([p.id], false) },
+      { id: "detail.pdelete", label: "Delete permanently", group: "Details", keys: ["shift+backspace", "shift+delete"], run: () => ed.trash([p.id], true) },
     ],
     { priority: 21, active },
   );
@@ -888,7 +908,7 @@ function ProjectDetail({ p }: { p: Project }) {
       </section>
       <SupportMaterial projectId={p.id} />
       <NotesField label="Support notes" value={p.notes} saveKey={`projects:${p.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "projects", id: p.id, data: { notes: v } }], o)} owner={{ kind: "project", id: p.id }} />
-      <Files owner={{ kind: "project", id: p.id }} />
+      <Files owner={{ kind: "project", id: p.id }} onDelete={() => ed.trash([p.id], false)} />
     </>
   );
 }
@@ -971,7 +991,7 @@ function StuffDetail({ st }: { st: Stuff }) {
         save={(v, o) => mutate("Edited", [{ type: "patch", table: "stuff", id: st.id, data: { text: joinStuff(parts.title, v, parts.prefix) } }], o)}
         owner={{ kind: "stuff", id: st.id }}
       />
-      <Files owner={{ kind: "stuff", id: st.id }} />
+      <Files owner={{ kind: "stuff", id: st.id }} onDelete={() => trashNow([st.id])} />
       <p className="detail-meta">Captured {formatLong(st.created_at.slice(0, 10))}</p>
     </>
   );
@@ -1097,6 +1117,28 @@ const WEEKDAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
  */
 function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
   const s = useStore((x) => x);
+  // E and Delete, as on the checklist's row (the pane is the row, bigger): tick (on the day the checklist is shown
+  // for), or remove it with its record.
+  const paneActive = useContext(DetailActive);
+  const shownDay = useChecklistDay();
+  useCommands(
+    "detail-checkitem",
+    [
+      { id: "detail.ci.tick", label: "Tick, or untick", group: "Details", keys: ["e"], enabled: !item.section, run: () => tickItems([item.id], shownDay) },
+      {
+        id: "detail.ci.remove",
+        label: "Remove",
+        group: "Details",
+        keys: ["backspace", "delete"],
+        run: () =>
+          mutate(`${quote(item.title || "Untitled")} removed`, [
+            { type: "delete", table: "checklist_items", id: item.id },
+            ...getState().checklist_ticks.filter((k) => k.item_id === item.id).map((k) => ({ type: "delete" as const, table: "checklist_ticks" as const, id: k.id })),
+          ]),
+      },
+    ],
+    { priority: 21, active: paneActive },
+  );
   const list = s.checklists.find((c) => c.id === item.checklist_id);
   const repeats = list?.repeats ?? null;
   const viewDay = useChecklistDay();
@@ -1385,9 +1427,11 @@ function RefDetail({ r }: { r: Ref }) {
     [
       { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+j"], run: () => ui.jumpFromSupport("ref", r.id) },
       ...(!r.sealed || lock.unlocked ? [{ id: "detail.r.form", label: r.form === "list" ? "Show as a note" : "Show as a list", group: "Details", run: () => void setForm([r.id], r.form === "list" ? null : "list") }] : []),
+      // ⇧L and Delete, as on the Reference row (the pane is the row, bigger).
       r.sealed
-        ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", run: () => removeLock(ui, [r.id]) }
-        : { id: "detail.r.seal", label: "Lock with password", group: "Details", run: () => lockWithPassword(ui, [r.id]) },
+        ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", keys: ["shift+l"], run: () => removeLock(ui, [r.id]) }
+        : { id: "detail.r.seal", label: "Lock with password", group: "Details", keys: ["shift+l"], run: () => lockWithPassword(ui, [r.id]) },
+      { id: "detail.r.trash", label: "Trash", group: "Details", keys: ["backspace", "delete"], run: () => mutate(`${quote(r.title)} trashed`, [{ type: "patch", table: "refs", id: r.id, data: { status: "trashed" } }]) },
       ...(lock.unlocked ? [{ id: "detail.r.locknow", label: "Lock now", group: "Details", run: () => lockNow() }] : []),
     ],
     { priority: 21, active },
@@ -1447,7 +1491,7 @@ function RefDetail({ r }: { r: Ref }) {
             }}
           />
       )}
-      {open && <Files owner={{ kind: "ref", id: r.id }} />}
+      {open && <Files owner={{ kind: "ref", id: r.id }} onDelete={() => mutate(`${quote(r.title)} trashed`, [{ type: "patch", table: "refs", id: r.id, data: { status: "trashed" } }])} />}
       {/* The notes that link to this one, each with the line that does: a click opens it here. */}
       {links.length > 0 && (
         <section className="detail-actions" aria-label="Linked from">
@@ -1624,10 +1668,10 @@ export function Detail({ target, active }: { target: Target | null; active: bool
         },
       },
       { id: "detail.close", label: "Close details, pinned or not", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
-      // An Inbox item's pane offers the Inbox's own two verbs.
+      // An Inbox item's pane takes the Inbox row's verbs (the pane is the row, bigger): V, K, E, Delete, ⇧Delete.
       {
         id: "detail.file",
-        label: "File as…",
+        label: "File",
         group: "Details",
         keys: ["v"],
         enabled: target?.kind === "stuff",
@@ -1638,6 +1682,20 @@ export function Detail({ target, active }: { target: Target | null; active: bool
         },
       },
       { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["k"], enabled: target?.kind === "stuff", run: () => ui.startClarify() },
+      {
+        id: "detail.stuffdone",
+        label: target?.kind === "stuff" && getState().stuff.find((x) => x.id === target.id)?.status === "done" ? "Mark not done" : "Mark done (two-minute rule)",
+        group: "Details",
+        keys: ["e"],
+        enabled: target?.kind === "stuff",
+        run: () => {
+          if (target?.kind !== "stuff") return;
+          if (getState().stuff.find((x) => x.id === target.id)?.status === "done") reopenActions([target.id]);
+          else doneNow([target.id]);
+        },
+      },
+      { id: "detail.stufftrash", label: "Trash", group: "Details", keys: ["backspace", "delete"], enabled: target?.kind === "stuff", run: () => target && trashNow([target.id]) },
+      { id: "detail.stuffdelete", label: "Delete permanently", group: "Details", keys: ["shift+backspace", "shift+delete"], enabled: target?.kind === "stuff", run: () => target && trashNow([target.id], true) },
     ],
     { priority: 20, active },
   );
