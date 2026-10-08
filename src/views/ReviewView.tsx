@@ -6,7 +6,7 @@ import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type Sorters } from "../components/Grid.tsx";
-import { DateCell, EventMark, KeyChoices, KeyHints, Lamp, Marker, Tag } from "../components/bits.tsx";
+import { DateCell, EventMark, KeyChoices, KeyHints, Lamp, Marker, Tag, stepChoice } from "../components/bits.tsx";
 import { actionRowCommands, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
@@ -567,6 +567,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     })),
     { id: "rv.file", row: true, label: "File", group: "Row", keys: ["v"], enabled: targetsOf("stuff").length > 0, run: () => fileStuff(ui, targetsOf("stuff")) },
     { id: "rv.new", label: "Start a new review", group: "Step", keys: [], run: startOver },
+    // The steps still open are answers: ↑↓ move between them, Enter goes to the one under the cursor.
+    { id: "rv.choicedown", label: "Go to the next answer", group: "Step", keys: ["arrowdown"], enabled: step.id === "finish" && notClear.length > 0, run: () => stepChoice(1) },
+    { id: "rv.choiceup", label: "Go to the previous answer", group: "Step", keys: ["arrowup"], enabled: step.id === "finish" && notClear.length > 0, run: () => stepChoice(-1) },
     { id: "rv.finish", label: "Record the review", group: "Step", keys: ["mod+enter"], enabled: step.id === "finish", run: () => void finish() },
     { id: "rv.here", label: step.id === "sweep" ? "Mark my head empty and go to the next step" : "Mark reviewed and go to the next step", group: "Step", keys: ["mod+enter"], inInput: true, enabled: step.id !== "finish", run: doneHere },
     {

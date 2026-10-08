@@ -6,7 +6,7 @@ import { quote, getState, mutate, newAction, newProject, notify, plural, stamp, 
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { RAIL } from "../components/Chrome.tsx";
-import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag } from "../components/bits.tsx";
+import { AreaName, ContextCode, Energy, KeyChoices, KeyHints, Tag, stepChoice } from "../components/bits.tsx";
 import { splitStuff, stuffTitle } from "./InboxView.tsx";
 import { itemsFromText, newChecklist } from "../checklists.ts";
 import { reminderChoices, reminderOf, reminderWhere } from "../reminders.ts";
@@ -58,16 +58,19 @@ export interface ClarifyHost {
 /** The lines a checklist is made from: those under the title, or every line once the checklist is given a title of its own (as Reference keeps the whole capture). */
 const checklistLines = (st: Stuff, title: string | undefined) => (!title?.trim() || title.trim() === stuffTitle(st) ? splitStuff(st).rest : st.text);
 
+/** What the decision's cursor stops on, top to bottom, as the details pane's does: each block's fields in turn. */
+const STOPS = ".clarify-fields .field-text, .clarify-fields .field-pick";
+
 /**
- * Enter in one of Clarify's naming fields keeps the name and leaves the field, as Esc does (owner's request): back to
- * its action's row, or out of the field. What is typed is kept as it is typed; ⌘Enter still accepts the decision.
+ * Enter in one of Clarify's naming fields keeps the name and leaves the field, as Esc does (owner's request): the
+ * cursor stays on the field and the pane keeps the keys. What is typed is kept as it is typed; ⌘Enter still accepts.
  */
 const enterLeaves = (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
   if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.nativeEvent.isComposing) return;
   e.preventDefault();
-  const row = e.currentTarget.closest<HTMLElement>("[data-row]");
-  if (row) row.focus();
-  else e.currentTarget.blur();
+  const pane = e.currentTarget.closest<HTMLElement>(".clarify-pane");
+  e.currentTarget.blur();
+  pane?.focus({ preventScroll: true });
 };
 
 const fitHeight = (el: HTMLTextAreaElement | null) => {
@@ -93,8 +96,15 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   const [answered, setAnswered] = useState<Set<string>>(new Set());
   // Answered no (owner's request: the question is yes or no): then what it is, among the things that aren't actions.
   const [declined, setDeclined] = useState<Set<string>>(new Set());
+  // Answered yes, then asked whether it is a project (owner's request: nothing is written before that is known).
+  const [actionable, setActionable] = useState<Set<string>>(new Set());
   // Items answered at least once: answering one the same way again keeps what was written.
   const touched = useRef<Set<string>>(new Set());
+  // Items whose do, delegate or defer has been answered, so it stays marked when stepped back to. Whether it is a project
+  // isn't asked (owner's decision): the action is linked to a project, or a new one, with P, as on every list.
+  const routed = useRef<Set<string>>(new Set());
+  // A project taken off an item, kept so making it a project again brings back its name, area and outcome.
+  const shelved = useRef<Record<string, NonNullable<Draft["new_project"]>>>({});
   const [row, setRow] = useState(0);
   // The decision pane: every proposed action, its fields and the naming fields live here.
   const card = useRef<HTMLElement>(null);
@@ -143,7 +153,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
 
   useEffect(() => {
     setRow(0);
-    card.current?.querySelector<HTMLElement>("[data-row='0']")?.focus();
+    card.current?.querySelectorAll("[data-cursor]").forEach((x) => x.removeAttribute("data-cursor"));
   }, [currentId, Boolean(draft)]);
 
   const update = (fn: (d: Draft) => void) => {
@@ -177,6 +187,12 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       askWaitingOn(ui, null, (who) => updateRow(missing, { waiting_who: who }));
       return;
     }
+    // A project is named before it is filed: back to its name.
+    if (draft.new_project && !draft.new_project.title.trim()) {
+      card.current?.querySelector<HTMLElement>("[data-row='project'] .p-title")?.focus();
+      notify("Name the project first: the outcome, verb first.");
+      return;
+    }
     // A next action is written in words, never left blank: back to the first empty one.
     const blank = draft.disposition === "actionable" ? draft.actions.findIndex((a) => a.kind !== "someday" && !a.done && !a.title.trim()) : -1;
     if (blank >= 0) {
@@ -187,7 +203,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     // Every next action needs a context before it's filed (owner's rule): go to the first one without.
     const noCtx = draft.disposition === "actionable" ? draft.actions.findIndex((a) => a.kind === "next" && !a.done && !a.context?.trim()) : -1;
     if (noCtx >= 0) {
-      card.current?.querySelector<HTMLElement>(`[data-row='${noCtx}']`)?.focus();
+      cursorTo(`[data-row='${noCtx}'] .field-pick.is-needed`);
       notify(`“${draft.actions[noCtx].title || "This action"}” needs a context. Pick one, then accept again.`);
       pickFor(noCtx, "context");
       return;
@@ -307,6 +323,9 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   const pickFor = (i: number, field: "context" | "project" | "due" | "defer" | "back" | "time" | "energy" | "kind" | "who") => {
     if (!draft || !draft.actions[i]) return;
     const a = draft.actions[i];
+    // A field's key takes the cursor to its field, as in the details pane.
+    const named = { context: "Context", project: "Project", due: "Due", defer: "Start", back: "Bring back", time: "Time", energy: "Energy", who: "Waiting on" }[field as string];
+    if (named) cursorTo(`[data-row='${i}'] [data-field='${named}']`);
     if (field === "context")
       ui.openPicker({
         type: "list",
@@ -333,7 +352,15 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
             d.new_project = { title: q, area: d.new_project?.area ?? null };
             d.actions[i].project = "new";
           }),
-        onPick: (id) => updateRow(i, { project: id }),
+        // Linked elsewhere (or to none), a new project no action is in any longer goes, rather than standing empty.
+        onPick: (id) =>
+          update((d) => {
+            d.actions[i].project = id;
+            if (d.new_project && !d.actions.some((x) => x.project === "new")) {
+              shelved.current[current!.id] = d.new_project;
+              d.new_project = null;
+            }
+          }),
       });
     if (field === "due" || field === "defer")
       ui.openPicker({ type: "date", title: field === "due" ? "Due date" : "Start date", current: a[field], onPick: (d) => updateRow(i, { [field]: d }) });
@@ -358,7 +385,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
         current: a.kind,
         onPick: (k) => {
           if (!k) return;
-          if (k === "item:project") makeProject();
+          if (k === "item:project") setProject(true);
           else if (k === "item:checklist" || k === "item:reference")
             update((d) => {
               d.disposition = "reference";
@@ -380,34 +407,95 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   };
 
   /**
-   * The item is a project: more than one step to the outcome. The project is named after the item, every action in
-   * the proposal goes into it, and the cursor lands on the first action to name the very next step (a project needs
-   * one). If that action only repeated the item's words, it is cleared to be written afresh.
+   * Whether the item is a project: more than one step to the outcome. A project is named after the item (or the name
+   * it had before it was taken off) and leads the decision's actions. Taken off, the actions stay as they were
+   * written, now on their own, so moving between the two loses nothing. Answering the question puts the cursor in the
+   * name to write (the project's, selected, or the action's); switching with ⇧P leaves it on the block, so ⇧P again
+   * switches back.
    */
-  const makeProject = () => {
+  const setProject = (on: boolean, write = false, quiet = false) => {
     if (!draft || !current) return;
-    const title = draft.new_project?.title || stuffTitle(current) || draft.actions[0]?.title || "New project";
+    const id = current.id;
     update((d) => {
       d.disposition = d.disposition === "someday" ? "someday" : "actionable";
-      d.new_project = { title, area: d.new_project?.area ?? null };
-      if (!d.actions.length) d.actions.push({ title: "", kind: "next", project: "new", context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false });
-      for (const a of d.actions) if (a.kind !== "someday" || d.disposition === "someday") a.project = "new";
-      if (normTitle(d.actions[0].title) === normTitle(title)) d.actions[0].title = "";
+      if (on) {
+        const title = d.new_project?.title || shelved.current[id]?.title || stuffTitle(current) || d.actions[0]?.title || "New project";
+        d.new_project = d.new_project ?? shelved.current[id] ?? { title, area: null, outcome: "" };
+        if (!d.actions.length) d.actions.push({ title: "", kind: "next", project: "new", context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false });
+        for (const a of d.actions) if (a.kind !== "someday" || d.disposition === "someday") a.project = "new";
+        // The project's name isn't its next action: an action that only repeats it is cleared to be written afresh.
+        if (normTitle(d.actions[0].title) === normTitle(d.new_project.title)) d.actions[0].title = "";
+      } else {
+        if (d.new_project) shelved.current[id] = d.new_project;
+        d.new_project = null;
+        for (const a of d.actions) if (a.project === "new") a.project = null;
+        if (!d.actions.length) d.actions.push({ title: "", kind: "next", project: null, context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false });
+      }
     });
-    window.setTimeout(() => card.current?.querySelector<HTMLElement>("[data-row='0'] .p-title")?.focus(), 0);
+    if (quiet) return;
+    window.setTimeout(() => {
+      const name = card.current?.querySelector<HTMLTextAreaElement>(on ? "[data-row='project'] .p-title" : "[data-row='0'] .p-title");
+      if (!write) return cursorTo(on ? "[data-row='project'] .p-title" : "[data-row='0'] .p-title");
+      name?.focus();
+      if (on) name?.select();
+    }, 0);
+  };
+
+  /** The project's area, from the same picker the details pane uses. */
+  const pickArea = () => {
+    if (!draft?.new_project) return;
+    cursorTo("[data-row='project'] [data-field='Area']");
+    ui.openPicker({
+      type: "list",
+      title: "Area",
+      items: areaItems().map((a) => ({ ...a, id: bareArea(a.label) })),
+      current: draft.new_project.area ?? null,
+      noneLabel: "No area",
+      createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
+      onCreate: (q) => update((d) => (d.new_project = { ...d.new_project!, area: bareArea(q) })),
+      onPick: (a) => update((d) => (d.new_project = { ...d.new_project!, area: a })),
+    });
   };
 
   const addRow = () =>
     update((d) => {
       d.disposition = d.disposition === "trash" || d.disposition === "reference" ? "actionable" : d.disposition;
       d.actions.push({ title: "", kind: "next", project: d.new_project ? "new" : null, context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false });
-      window.setTimeout(() => card.current?.querySelector<HTMLElement>(`[data-row='${d.actions.length - 1}'] .p-title`)?.focus(), 0);
+      window.setTimeout(() => titleOf(d.actions.length - 1)?.focus(), 0);
     });
 
-  const rowOfFocus = () => {
-    const el = document.activeElement?.closest<HTMLElement>("[data-row]");
-    return el ? Number(el.dataset.row) : row;
+  /*
+   * The decision is walked as the details pane is (owner's rule: the same in every side pane): a cursor sits on one
+   * field, ↑↓ move it through every block's fields (the project's, then each action's), Enter edits or opens the field
+   * under it, and the field takes the blue a focused row takes. A click, Tab or a field's key moves it there too. The
+   * block the cursor is in is the one C, D, P… set (the project is row -1, "project" in the markup).
+   */
+  const stops = () => [...(card.current?.querySelectorAll<HTMLElement>(STOPS) ?? [])].filter((el) => el.offsetParent !== null);
+  const cursorEl = () => card.current?.querySelector<HTMLElement>("[data-cursor]") ?? null;
+  const rowOf = (el: Element | null | undefined) => {
+    const r = el?.closest<HTMLElement>("[data-row]");
+    return !r ? row : r.dataset.row === "project" ? -1 : Number(r.dataset.row);
   };
+  const setCursor = (el: HTMLElement | null | undefined) => {
+    card.current?.querySelectorAll("[data-cursor]").forEach((x) => x !== el && x.removeAttribute("data-cursor"));
+    if (!el) return;
+    el.setAttribute("data-cursor", "");
+    el.scrollIntoView({ block: "nearest" });
+    setRow(rowOf(el));
+  };
+  /** The cursor onto a field, out of any field being typed in: the pane keeps the keys. */
+  const cursorTo = (selector: string) => {
+    setCursor(card.current?.querySelector<HTMLElement>(selector));
+    card.current?.focus({ preventScroll: true });
+  };
+  const moveCursor = (dir: 1 | -1) => {
+    const list = stops();
+    const i = list.findIndex((x) => x.hasAttribute("data-cursor"));
+    setCursor(list[Math.max(0, Math.min(list.length - 1, i < 0 ? 0 : i + dir))]);
+    card.current?.focus({ preventScroll: true });
+  };
+  const rowOfFocus = () => rowOf(cursorEl());
+  const titleOf = (i: number) => card.current?.querySelector<HTMLElement>(`[data-row='${i === -1 ? "project" : i}'] .p-title`);
 
   // A tickler entry ("Due back: …") isn't new stuff: it brings back an item already filed, to be decided again.
   const reminder = reminderOf(s, current);
@@ -429,32 +517,47 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   );
   const gating = Boolean(current && draft) && !answered.has(current!.id) && !reminder && !orphan;
   const ready = Boolean(current && draft) && !gating && !reminder && !orphan;
-  const asking = gating && !declined.has(current!.id);
+  const asking = gating && !declined.has(current!.id) && !actionable.has(current!.id);
   const notActionable = gating && declined.has(current!.id);
-  const decline = (no: boolean) => current && setDeclined((prev) => {
-    const next = new Set(prev);
-    if (no) next.add(current.id);
-    else next.delete(current.id);
+  // Answered yes: of the next action, do it now, delegate it, or put it on Next Actions?
+  const routing = gating && actionable.has(current!.id) && !declined.has(current!.id);
+  const onProject = ready && row === -1 && Boolean(draft?.new_project);
+  /** The open question takes the cursor: its marked answer if it has one, else its first. */
+  const focusQuestion = () =>
+    window.setTimeout(() => {
+      const asks = card.current?.querySelectorAll<HTMLElement>(".clarify-ask");
+      const open = asks?.[asks.length - 1];
+      (open?.querySelector<HTMLElement>(".is-current button") ?? open?.querySelector<HTMLElement>("button"))?.focus();
+    }, 0);
+  const without = (set: Set<string>, id: string) => {
+    const next = new Set(set);
+    next.delete(id);
     return next;
-  });
+  };
+  const decline = (no: boolean) => {
+    if (!current) return;
+    setDeclined((prev) => (no ? new Set(prev).add(current.id) : without(prev, current.id)));
+    setActionable((prev) => without(prev, current.id));
+  };
   /** One answer back (Esc, or choosing another): the answered question is open again, what was written kept. */
   const stepBack = () => {
     if (!current) return;
-    setAnswered((prev) => {
-      const next = new Set(prev);
-      next.delete(current.id);
-      return next;
-    });
-    window.setTimeout(() => card.current?.querySelector<HTMLElement>(".key-choices:not(.is-answered) button, .key-choices .is-current button")?.focus(), 0);
+    const yes = draft?.disposition === "actionable";
+    setAnswered((prev) => without(prev, current.id));
+    setActionable((prev) => (yes ? new Set(prev).add(current.id) : without(prev, current.id)));
+    setDeclined((prev) => (yes ? without(prev, current.id) : new Set(prev).add(current.id)));
+    focusQuestion();
   };
   // No, after yes: back to the second question, the fields still beneath until it is answered.
   const answerNo = () => {
     if (!current) return;
     if (answered.has(current.id)) stepBack();
     decline(true);
+    // The cursor goes on to the question the answer opens, as it does after yes.
+    focusQuestion();
   };
   /** The answer to "is it actionable?": Yes starts an empty next action to put into words; the rest file the item. */
-  const answer = (a: "yes" | "someday" | "reference" | "trash") => {
+  const answer = (a: "yes" | "someday" | "reference" | "checklist" | "trash") => {
     if (!current || !draft) return;
     if (a === "trash") return trashItem();
     const title = stuffTitle(current);
@@ -464,39 +567,80 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     update((d) => {
       if (a === "yes") {
         if (again && d.disposition === "actionable" && d.actions.length) return;
+        routed.current.delete(current.id);
         d.disposition = "actionable";
         d.new_project = null;
-        d.actions = [{ ...d.actions[0], title: "", kind: "next", bring_back: null, done: false }];
+        d.actions = [{ ...d.actions[0], title: "", kind: "next", project: null, bring_back: null, done: false }];
       } else if (a === "someday") {
         if (again && d.disposition === "someday" && !d.actions.some((x) => x.bring_back)) return;
         d.disposition = "someday";
         d.actions = [{ ...d.actions[0], title, kind: "someday", bring_back: null, done: false }];
       } else {
-        if (again && d.disposition === "reference" && !d.reference?.checklist) return;
+        // Reference, or a checklist: GTD keeps both as support material, kept to be looked at, not done.
+        const checklist = a === "checklist";
+        if (again && d.disposition === "reference" && Boolean(d.reference?.checklist) === checklist) return;
         d.disposition = "reference";
-        d.reference = { title, notes: "" };
+        d.reference = { title, notes: "", checklist };
       }
     });
+    // Yes asks what happens to the next action before anything is written; the other answers file the item as they are.
+    if (a === "yes") {
+      setActionable((prev) => new Set(prev).add(current.id));
+      setDeclined((prev) => without(prev, current.id));
+      focusQuestion();
+      return;
+    }
     setAnswered((prev) => new Set(prev).add(current.id));
-    setDeclined((prev) => {
-      const next = new Set(prev);
-      if (a === "yes") next.delete(current.id);
-      else next.add(current.id);
-      return next;
-    });
-    // Yes: the cursor waits in the empty action, the capture beside it as the source.
-    if (a === "yes") window.setTimeout(() => card.current?.querySelector<HTMLElement>("[data-row='0'] .p-title")?.focus(), 0);
+    setActionable((prev) => without(prev, current.id));
+    setDeclined((prev) => new Set(prev).add(current.id));
+    toFields();
+  };
+  /** Answered, the cursor leaves the questions for the decision's first field (its name), the pane keeping the keys. */
+  const toFields = () =>
+    window.setTimeout(() => {
+      setCursor(stops()[0]);
+      card.current?.focus({ preventScroll: true });
+    }, 0);
+  /**
+   * GTD's flowchart for the next action: under two minutes, do it now; someone else's to do, delegate it (who it waits
+   * on is asked first, as every way into Waiting For asks, and cancelling changes nothing); otherwise it goes on Next Actions, a next
+   * action. Then the decision's fields, the cursor in the name to write: the project's, or the action's.
+   */
+  const answerHow = (how: "now" | "delegate" | "defer") => {
+    if (!current || !draft) return;
+    const id = current.id;
+    const settle = (data: Partial<ProposedAction & { done?: boolean }>) => {
+      routed.current.add(id);
+      update((d) => {
+        if (!d.actions.length) d.actions.push({ title: "", kind: "next", project: d.new_project ? "new" : null, context: null, due: null, defer: null, time_min: null, energy: null, waiting_who: null, two_minute: false });
+        Object.assign(d.actions[0], data);
+      });
+      setAnswered((prev) => new Set(prev).add(id));
+      window.setTimeout(() => {
+        const name = titleOf(draft.new_project ? -1 : 0) as HTMLTextAreaElement | null | undefined;
+        name?.focus();
+        if (draft.new_project) name?.select();
+      }, 0);
+    };
+    const first = draft.actions[0];
+    if (how === "now") settle({ kind: "next", done: true, title: first?.title.trim() || stuffTitle(current) });
+    else if (how === "defer") settle({ kind: "next", done: false });
+    else askWaitingOn(ui, first?.kind === "waiting" ? first.waiting_who : null, (who) => settle({ kind: "waiting", waiting_who: who, done: false }));
   };
   const backLabel = host.backLabel;
   const commands: Command[] = [
-    { id: "cl.yes", label: "Yes, actionable: decide the next action", group: "Clarify", keys: ["y"], enabled: asking || notActionable, run: () => answer("yes") },
+    { id: "cl.yes", label: "Yes, actionable", group: "Clarify", keys: ["y"], enabled: asking || notActionable, run: () => answer("yes") },
     { id: "cl.no", label: "No, not actionable", group: "Clarify", keys: ["n"], enabled: asking, run: answerNo },
-    { id: "cl.someday", label: "Someday / Maybe", group: "Clarify", keys: ["s"], enabled: notActionable, run: () => answer("someday") },
-    { id: "cl.reference", label: "Keep as Reference", group: "Clarify", keys: ["r"], enabled: notActionable, run: () => answer("reference") },
+    { id: "cl.someday", label: "Incubate it on Someday / Maybe", group: "Clarify", keys: ["s"], enabled: notActionable, run: () => answer("someday") },
+    { id: "cl.reference", label: "File it in Reference", group: "Clarify", keys: ["r"], enabled: notActionable, run: () => answer("reference") },
+    { id: "cl.checklist", label: "Make it a checklist", group: "Clarify", keys: ["c"], enabled: notActionable, run: () => answer("checklist") },
+    { id: "cl.how.now", label: "Do it now", group: "Clarify", keys: ["e"], enabled: routing, run: () => answerHow("now") },
+    { id: "cl.how.delegate", label: "Delegate it to Waiting For", group: "Clarify", keys: ["w"], enabled: routing, run: () => answerHow("delegate") },
+    { id: "cl.how.defer", label: "Put it on Next Actions", group: "Clarify", keys: ["t"], enabled: routing, run: () => answerHow("defer") },
     // GTD's incubate has two homes: Someday/Maybe, and the tickler. B is the tickler: on Someday until the day it comes back.
     {
       id: "cl.tickler",
-      label: "Bring it back on a day",
+      label: "Incubate it until a day",
       group: "Clarify",
       keys: ["b"],
       enabled: notActionable,
@@ -515,7 +659,9 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
               d.actions = [{ ...d.actions[0], title, kind: "someday", bring_back: day }];
             });
             setAnswered((prev) => new Set(prev).add(current.id));
+            setActionable((prev) => without(prev, current.id));
             setDeclined((prev) => new Set(prev).add(current.id));
+            toFields();
           },
         });
       },
@@ -526,25 +672,28 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     } },
     // Trash is one of the answers to "no", so the question is answered first (owner's request).
     { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current) && !reminder && !orphan && !asking, run: trashItem },
-    { id: "cl.done", label: "Done it now (two-minute rule)", group: "Clarify", keys: ["e"], enabled: ready && draft?.disposition === "actionable", run: () => {
+    { id: "cl.done", label: "Mark it done now", group: "Clarify", keys: ["e"], enabled: ready && !onProject && draft?.disposition === "actionable", run: () => {
       const i = rowOfFocus();
       if (draft?.actions[i]) updateRow(i, { done: !draft.actions[i].done });
     } },
     { id: "cl.add", label: "Add an action", group: "Clarify", keys: ["n"], enabled: ready, run: addRow },
-    { id: "cl.remove", label: "Remove this action", group: "Clarify", keys: ["alt+backspace"], enabled: ready, run: () => {
+    { id: "cl.remove", label: onProject ? "Make it a single next action" : "Remove this action", group: "Clarify", keys: ["alt+backspace"], enabled: ready, run: () => {
       const i = rowOfFocus();
+      if (i === -1) return setProject(false);
       update((d) => d.actions.splice(i, 1));
     } },
-    { id: "cl.context", label: "Set context", group: "Fields", keys: ["c"], enabled: ready, run: () => pickFor(rowOfFocus(), "context") },
-    { id: "cl.project", label: "Set project", group: "Fields", keys: ["p"], enabled: ready, run: () => pickFor(rowOfFocus(), "project") },
-    { id: "cl.makeproject", label: "Make it a project", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: makeProject },
-    { id: "cl.due", label: "Set due date", group: "Fields", keys: ["d"], enabled: ready, run: () => pickFor(rowOfFocus(), "due") },
-    { id: "cl.defer", label: "Set start date", group: "Fields", keys: ["s"], enabled: ready, run: () => pickFor(rowOfFocus(), "defer") },
-    { id: "cl.back", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: ready && Boolean(draft?.actions.some((a) => a.kind === "someday")), run: () => pickFor(rowOfFocus(), "back") },
-    { id: "cl.time", label: "Set time estimate", group: "Fields", keys: ["m"], enabled: ready, run: () => pickFor(rowOfFocus(), "time") },
-    { id: "cl.energy", label: "Set energy", group: "Fields", keys: ["g"], enabled: ready, run: () => pickFor(rowOfFocus(), "energy") },
-    { id: "cl.kind", label: "File as", group: "Fields", keys: ["v"], enabled: ready, run: () => pickFor(rowOfFocus(), "kind") },
-    { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready, run: () => pickFor(rowOfFocus(), "who") },
+    { id: "cl.context", label: "Set context", group: "Fields", keys: ["c"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "context") },
+    { id: "cl.project", label: "Set project", group: "Fields", keys: ["p"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "project") },
+    { id: "cl.makeproject", label: draft?.new_project ? "Make it a single next action" : "Make it a project", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: () => setProject(!draft?.new_project) },
+    { id: "cl.area", label: "Set area", group: "Fields", keys: ["a"], enabled: ready && Boolean(draft?.new_project), run: pickArea },
+    { id: "cl.due", label: "Set due date", group: "Fields", keys: ["d"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "due") },
+    { id: "cl.defer", label: "Set start date", group: "Fields", keys: ["s"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "defer") },
+    { id: "cl.back", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: ready && !onProject && Boolean(draft?.actions.some((a) => a.kind === "someday")), run: () => pickFor(rowOfFocus(), "back") },
+    { id: "cl.time", label: "Set time estimate", group: "Fields", keys: ["m"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "time") },
+    { id: "cl.energy", label: "Set energy", group: "Fields", keys: ["g"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "energy") },
+    // V moves items between lists and has no place in a pane (owner's rule): File as is in ⌘K alone.
+    { id: "cl.kind", label: "File as", group: "Fields", keys: [], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "kind") },
+    { id: "cl.delegate", label: "Delegate → Waiting For", group: "Fields", keys: ["shift+f"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "who") },
     {
       id: "cl.leave",
       // One level at a time: out of a field first, then out of Clarify.
@@ -554,15 +703,21 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       inInput: true,
       run: () => {
         const el = document.activeElement as HTMLElement | null;
-        const rowEl = el?.closest<HTMLElement>("[data-row]");
-        if (el && rowEl && el !== rowEl) rowEl.focus();
-        else if (el && card.current?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) el.blur();
-        else if (ready && answered.has(current!.id)) stepBack();
-        else if (notActionable) decline(false);
+        if (el && card.current?.contains(el) && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
+          el.blur();
+          card.current.focus({ preventScroll: true });
+        } else if (ready && answered.has(current!.id)) stepBack();
+        else if (routing) {
+          setActionable((prev) => without(prev, current!.id));
+          focusQuestion();
+        } else if (notActionable) {
+          decline(false);
+          focusQuestion();
+        }
         else host.leave();
       },
     },
-    { id: "cl.edit", label: "Rename", group: "Clarify", keys: ["f2"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus()}'] .p-title`)?.focus() },
+    { id: "cl.edit", label: "Rename", group: "Clarify", keys: ["f2"], enabled: ready, run: () => titleOf(rowOfFocus())?.focus() },
     {
       id: "cl.enter",
       label: "Edit the focused row or field",
@@ -570,13 +725,18 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       keys: ["enter"],
       enabled: ready,
       run: () => {
-        const el = document.activeElement as HTMLElement | null;
-        if (el?.tagName === "BUTTON") el.click();
-        else card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus()}'] .p-title`)?.focus();
+        const el = cursorEl();
+        const focused = document.activeElement as HTMLElement | null;
+        if (el) el.matches("button") ? el.click() : el.focus();
+        else if (focused?.tagName === "BUTTON") focused.click();
+        else titleOf(rowOfFocus())?.focus();
       },
     },
-    { id: "cl.rowdown", label: "Next action in the decision", group: "Clarify", keys: ["arrowdown"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${rowOfFocus() + 1}']`)?.focus() },
-    { id: "cl.rowup", label: "Previous action in the decision", group: "Clarify", keys: ["arrowup"], enabled: ready, run: () => card.current?.querySelector<HTMLElement>(`[data-row='${Math.max(0, rowOfFocus() - 1)}']`)?.focus() },
+    { id: "cl.rowdown", label: "Go to the next field", group: "Clarify", keys: ["arrowdown"], enabled: ready, run: () => moveCursor(1) },
+    { id: "cl.rowup", label: "Go to the previous field", group: "Clarify", keys: ["arrowup"], enabled: ready, run: () => moveCursor(-1) },
+    // While a question is open (or on the screens that end a run), ↑↓ move between its answers, as between rows.
+    { id: "cl.choicedown", label: "Go to the next answer", group: "Clarify", keys: ["arrowdown"], enabled: !ready, run: () => stepChoice(1) },
+    { id: "cl.choiceup", label: "Go to the previous answer", group: "Clarify", keys: ["arrowup"], enabled: !ready, run: () => stepChoice(-1) },
   ];
   useCommands("clarify", commands, { priority: 15, active: regionActive });
 
@@ -626,7 +786,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       <span className="field-head">
         <span className="field-label">{label}</span>
       </span>
-      <button type="button" className={`field-pick ${needed ? "is-needed" : ""}`} onClick={onOpen}>
+      <button type="button" className={`field-pick ${needed ? "is-needed" : ""}`} data-field={label} onClick={onOpen}>
         <span className="visually-hidden">{label}: </span>
         <span className="field-pick-value">{value}</span>
       </button>
@@ -638,8 +798,10 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   // Stepped back, the earlier answer stays marked until another is chosen.
   const made = ready || (Boolean(current) && touched.current.has(current!.id));
   const first: string | null = !draft || reminder || orphan ? null : notActionable ? "n" : made ? (draft.disposition === "actionable" ? "y" : "n") : null;
+  const how: string | null =
+    !draft || first !== "y" || !(ready || routed.current.has(current!.id)) ? null : draft.actions[0]?.done ? "e" : draft.actions[0]?.kind === "waiting" ? "w" : "t";
   const second: string | null =
-    !made || !draft || first !== "n" || draft.disposition === "actionable" ? null : draft.disposition === "reference" ? "r" : draft.disposition === "trash" ? "backspace" : draft.actions.some((a) => a.bring_back) ? "b" : "s";
+    !made || !draft || first !== "n" || draft.disposition === "actionable" ? null : draft.disposition === "reference" ? (draft.reference?.checklist ? "c" : "r") : draft.disposition === "trash" ? "backspace" : draft.actions.some((a) => a.bring_back) ? "b" : "s";
   const decision = (
     <>
       {orphan ? (
@@ -668,24 +830,41 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
               autoFocus={asking}
               current={first}
               choices={[
-                { k: "y", label: "Yes: decide the next action", run: () => answer("yes") },
+                { k: "y", label: "Yes", run: () => answer("yes") },
                 { k: "n", label: "No", run: answerNo },
               ]}
             />
           </div>
+          {first === "y" && !asking && (
+            <div className="clarify-ask">
+              <p className="clarify-q">What happens to the next action?</p>
+              <p className="clarify-sub">If it takes less than two minutes, do it now. If someone else should do it, delegate it. Otherwise, do it as soon as you can.</p>
+              <KeyChoices
+                key="how"
+                autoFocus={false}
+                current={how}
+                choices={[
+                  { k: "e", label: "Done: do it now", run: () => answerHow("now") },
+                  { k: "w", label: "Waiting For: delegate it", run: () => answerHow("delegate") },
+                  { k: "t", label: "Next Actions: do it as soon as you can", run: () => answerHow("defer") },
+                ]}
+              />
+            </div>
+          )}
           {first === "n" && !asking && (
             <div className="clarify-ask">
               <p className="clarify-q">What is it, then?</p>
-              <p className="clarify-sub">Something for later, something to keep, or something to let go.</p>
+              <p className="clarify-sub">Trash it, incubate it, or file it as reference.</p>
               <KeyChoices
                 key="no"
                 autoFocus={false}
                 current={second}
                 choices={[
-                  { k: "s", label: "Someday / Maybe", run: () => answer("someday") },
-                  { k: "b", label: "Bring it back on a day…", run: () => commands.find((c) => c.id === "cl.tickler")?.run() },
-                  { k: "r", label: "Reference", run: () => answer("reference") },
-                  { k: "backspace", label: "Trash", run: trashItem },
+                  { k: "s", label: "Someday / Maybe: incubate it", run: () => answer("someday") },
+                  { k: "b", label: "Someday / Maybe: incubate it until a day…", run: () => commands.find((c) => c.id === "cl.tickler")?.run() },
+                  { k: "r", label: "Reference: file it", run: () => answer("reference") },
+                  { k: "c", label: "Checklists: make it a checklist", run: () => answer("checklist") },
+                  { k: "backspace", label: "Trash: throw it away", run: trashItem },
                 ]}
               />
             </div>
@@ -728,35 +907,44 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           {(draft.disposition === "actionable" || draft.disposition === "someday") && (
             <>
               {draft.new_project && (
-                <section className="p-project" aria-label="Project">
-                  <label className="field field-title">
+                // The project is a block of the decision like each action, walked with ↑↓ and taking the cursor alike.
+                <section
+                  className="p-row p-project"
+                  data-row="project"
+                  aria-label={`${matchingProject(draft.new_project.title) ? "Existing project" : "New project"}: ${draft.new_project.title}`}
+                >
+                  <div className="field field-title">
                     <span className="field-head">
                       <span className="field-label">{matchingProject(draft.new_project.title) ? "Existing project (same title)" : "New project"}</span>
                     </span>
-                    <input
-                      className="field-text p-project-title"
+                    <textarea
+                      rows={1}
+                      ref={fitHeight}
+                      className="field-text p-title"
                       value={draft.new_project.title}
+                      aria-label="Project"
                       onKeyDown={enterLeaves}
-                      onChange={(e) => update((d) => (d.new_project = { ...d.new_project!, title: e.target.value }))}
+                      onChange={(e) => {
+                        fitHeight(e.currentTarget);
+                        const title = e.target.value.replace(/\n/g, " ");
+                        update((d) => (d.new_project = { ...d.new_project!, title }));
+                      }}
                     />
-                  </label>
-                  <div className="field-grid">
-                    {pick(
-                      "Area",
-                      draft.new_project.area ? <AreaName name={draft.new_project.area} color={s.areas.find((x) => x.name.toLowerCase() === bareArea(draft.new_project!.area!).toLowerCase())?.color} /> : none,
-                      () =>
-                        ui.openPicker({
-                          type: "list",
-                          title: "Area",
-                          items: areaItems().map((a) => ({ ...a, id: bareArea(a.label) })),
-                          current: draft.new_project?.area ?? null,
-                          noneLabel: "No area",
-                          createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
-                          onCreate: (q) => update((d) => (d.new_project = { ...d.new_project!, area: bareArea(q) })),
-                          onPick: (a) => update((d) => (d.new_project = { ...d.new_project!, area: a })),
-                        }),
-                    )}
                   </div>
+                  <div className="field-grid">{pick("Area", draft.new_project.area ? <AreaName name={draft.new_project.area} color={s.areas.find((x) => x.name.toLowerCase() === bareArea(draft.new_project!.area!).toLowerCase())?.color} /> : none, pickArea)}</div>
+                  {!matchingProject(draft.new_project.title) && (
+                    <label className="field">
+                      <span className="field-head">
+                        <span className="field-label">Done looks like</span>
+                      </span>
+                      <input
+                        className="field-text"
+                        value={draft.new_project.outcome ?? ""}
+                        onKeyDown={enterLeaves}
+                        onChange={(e) => update((d) => (d.new_project = { ...d.new_project!, outcome: e.target.value }))}
+                      />
+                    </label>
+                  )}
                 </section>
               )}
               <ol className="p-actions">
@@ -768,7 +956,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                   const ctx = a.context ? s.contexts.find((c) => c.name.toLowerCase() === a.context!.toLowerCase()) ?? { id: "", name: a.context, color: "var(--ink-3)", sort: 0 } : null;
                   const needsCtx = a.kind === "next" && !a.done && !a.context;
                   return (
-                    <li key={i} data-row={i} tabIndex={0} aria-label={`${kindName(a)}${draft.actions.length > 1 ? ` ${i + 1}` : ""}: ${a.title}`} className={`p-row ${a.done ? "is-done" : ""}`} onFocus={() => setRow(i)}>
+                    <li key={i} data-row={i} aria-label={`${kindName(a)}${draft.actions.length > 1 ? ` ${i + 1}` : ""}: ${a.title}`} className={`p-row ${a.done ? "is-done" : ""}`}>
                       <div className="field field-title">
                         <span className="field-head">
                           <span className="field-label">{kindName(a)}</span>
@@ -830,8 +1018,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
       hints={[
         { k: "mod+enter", label: "Accept", primary: true },
         ...(acting ? [{ k: "n", label: "Add action", touch: "more" as const }] : []),
-        { k: "v", label: "File as" },
-        ...(acting ? [{ k: "shift+p", label: "Project", touch: "more" as const }] : []),
+        ...(acting ? [{ k: "shift+p", label: draft?.new_project ? "Single action" : "Project", touch: "more" as const }] : []),
         ...(draft?.disposition === "actionable" ? [{ k: "e", label: "Done now" }] : []),
         { k: "backspace", label: "Trash", touch: "more" as const },
         { k: "escape", label: "Change answer", touch: "hide" as const },
@@ -840,7 +1027,17 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
   ) : null;
 
   const pane = (
-    <aside className="clarify-pane" aria-label="Decision" ref={card}>
+    <aside
+      className="clarify-pane"
+      aria-label="Decision"
+      ref={card}
+      tabIndex={-1}
+      // Whatever field takes focus (a click, Tab, F2, its picker's key) takes the cursor with it.
+      onFocus={(e) => {
+        const stop = (e.target as HTMLElement).closest<HTMLElement>(STOPS);
+        if (stop && card.current?.contains(stop)) setCursor(stop);
+      }}
+    >
       <div className="clarify-pane-bar">
         <h2 className="detail-title">Decision</h2>
       </div>

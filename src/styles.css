@@ -3514,13 +3514,11 @@ textarea.field-text {
   padding-top: var(--sp-xl);
   border-top: 1px solid var(--rule);
 }
-/* A new project leads its actions, as a project leads the actions filed under it, a rule between them. */
-.p-project {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-lg);
-  padding-bottom: var(--sp-xl);
-  border-bottom: 1px solid var(--rule);
+/* A new project leads its actions, as a project leads the actions filed under it: a block like theirs, a rule between
+   it and the first action. */
+.p-project + .p-actions > .p-row:first-child {
+  margin-top: 0;
+  box-shadow: 0 -7px 0 -6px var(--rule);
 }
 .p-actions {
   list-style: none;
@@ -3529,27 +3527,29 @@ textarea.field-text {
   display: flex;
   flex-direction: column;
 }
-/* One action is one block of the pane's fields; more than one are walked with ↑↓, a rule between them. The block
-   you are on takes the cursor as a pane field does: Selection Blue inside the accent hairline. */
+/* One action is one block of the pane's fields; more than one have a rule between them. The decision is walked field
+   by field, as the details pane is: its cursor is styled with the pane's, below. */
 .p-row {
   display: flex;
   flex-direction: column;
   gap: var(--sp-lg);
-  margin: 0 -8px;
-  padding: 8px;
-  border-radius: 3px;
 }
 .p-row + .p-row {
-  margin-top: 6px;
+  margin-top: 14px;
   box-shadow: 0 -7px 0 -6px var(--rule);
 }
-.p-row:focus {
+.clarify-pane:focus {
   outline: none;
-  background: var(--select);
-  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
-.p-row:focus .field-label {
+/* The field under the decision's cursor looks as the details pane's does (the One Blue Rule): blue while Clarify has
+   the keys, a grey trace while you are elsewhere; a field being typed in shows the ordinary focus ring instead. */
+.clarify-pane [data-cursor]:not(:focus) {
+  background: var(--rail-2);
+}
+.app[data-region="list"] .clarify-pane [data-cursor]:not(:focus) {
+  background: var(--select);
   color: var(--select-ink);
+  border-color: var(--cursor-edge);
 }
 .p-title {
   display: block;
@@ -3614,14 +3614,25 @@ textarea.field-text {
   flex-direction: column;
   gap: var(--sp-hair);
 }
+/* Each answer is a row: its key cap still lines up with the question's text, and the one under the cursor is a focused
+   row (the One Blue Rule: Selection Blue inside the accent hairline), as the Weekly Review's steps are, never a ring. */
 .key-choices button {
   display: flex;
   align-items: center;
   gap: var(--sp-lg);
+  width: calc(100% + 16px);
   height: 30px;
-  padding: 0 8px 0 0;
+  margin: 0 -8px;
+  padding: 0 8px;
+  border-radius: 3px;
   color: var(--ink);
   font-size: var(--fs-head);
+}
+.key-choices button:focus-visible {
+  outline: none;
+  background: var(--select);
+  color: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
 .key-choices button:hover span {
   text-decoration: underline;

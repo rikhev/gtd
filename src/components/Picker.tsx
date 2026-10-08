@@ -156,6 +156,8 @@ export function Picker({ spec, close }: Props) {
     // A row whose value is its own control (a setting) opens the picker under that value, by mouse or by Enter.
     const valueEl = document.querySelector<HTMLElement>("[data-focused] .set-value");
     const anchor =
+      // In Clarify's decision the field under its cursor (the pane keeps focus while the cursor walks its fields).
+      (act?.closest(".clarify-pane") ? (act.closest(".clarify-pane")!.querySelector<HTMLElement>("[data-cursor]") ?? act) : null) ??
       (act?.closest(".detail, .clarify") ? act : null) ??
       valueEl ??
       document.querySelector(".is-active [data-focused]") ??
@@ -167,7 +169,7 @@ export function Picker({ spec, close }: Props) {
     const at = (spec.type === "list" ? spec.at : undefined) ?? pointerOpening() ?? undefined;
     let top = at ? at.y + 2 : r ? r.bottom + 4 : 120;
     // A list row opens past its marker column; a field, a setting's value or a calendar item at its own left edge.
-    const inset = anchor === valueEl || anchor?.closest(".calendar, .detail, .clarify") ? 0 : 40;
+    const inset = anchor === valueEl || anchor?.closest(".calendar, .detail, .clarify, .clarify-pane") ? 0 : 40;
     let left = at ? at.x + 2 : r ? Math.max(r.left + inset, 12) : 320;
     if (top + h > window.innerHeight - 12) top = Math.max(12, (at ? at.y : r ? r.top : top) - h - 4);
     if (left + w > window.innerWidth - 12) left = window.innerWidth - w - 12;

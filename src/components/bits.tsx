@@ -228,6 +228,19 @@ export function KeyChoices({ choices, autoFocus = true, current }: { choices: { 
   );
 }
 
+/**
+ * ↑↓ between a question's answers, as between rows: within the answers that have focus, else the last ones on screen
+ * (the question still open). The cursor stops at the first and last answer; Enter, or the answer's key, chooses.
+ */
+export function stepChoice(dir: 1 | -1) {
+  const lists = [...document.querySelectorAll<HTMLElement>(".key-choices")];
+  const list = document.activeElement?.closest<HTMLElement>(".key-choices") ?? lists[lists.length - 1];
+  if (!list) return;
+  const buttons = [...list.querySelectorAll<HTMLButtonElement>("button")];
+  const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  buttons[i < 0 ? (dir > 0 ? 0 : buttons.length - 1) : Math.max(0, Math.min(buttons.length - 1, i + dir))]?.focus();
+}
+
 /** One quiet line naming the few keys that matter in a rarely used mode (Clarify, Weekly Review). */
 /**
  * The keys a screen offers. Each hint is also a button that does what its key does, so the screen works by touch
