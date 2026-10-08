@@ -114,12 +114,6 @@ export function runWhenReady(id: string, frames = 120) {
   else if (frames > 0) requestAnimationFrame(() => runWhenReady(id, frames - 1));
 }
 
-/** The layer a command was registered in ("global" for the app-wide ones, a view or pane id otherwise). */
-export function layerOf(cmd: Command): string | undefined {
-  // By id: command objects are rebuilt on every render, so identity can't be relied on.
-  for (const l of layers.values()) if (l.commands.some((c) => c.id === cmd.id)) return l.id;
-  return undefined;
-}
 
 
 export function useCommands(

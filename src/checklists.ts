@@ -45,7 +45,6 @@ export function useOpenChecklist(): ID | null {
     () => open,
   );
 }
-export const openChecklistId = () => open;
 
 /** The item a checklist opens on (a search hit names one), kept until the cursor is there. */
 let landing: ID | null = null;

@@ -252,4 +252,3 @@ export function parseTime(input: string): number | null | undefined {
   return undefined;
 }
 
-export const ENERGY_LABEL = { 1: "Low", 2: "Medium", 3: "High" } as const;

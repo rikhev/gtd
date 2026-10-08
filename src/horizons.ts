@@ -61,5 +61,3 @@ export function pickGoal(ui: UI, ids: ID[]) {
   });
 }
 
-/** How many active projects serve a goal. */
-export const projectsServing = (goalId: ID) => getState().projects.filter((p) => p.goal_id === goalId && p.status === "active").length;

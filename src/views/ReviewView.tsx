@@ -41,8 +41,6 @@ const STEPS = [
   { id: "creative", phase: "Get creative", title: "Get creative", note: "Walk your goals and areas: does each have the projects it needs? Then capture anything new: projects, ideas, someday wishes." },
   { id: "finish", phase: "", title: "Finish", note: "Record the review." },
 ] as const;
-/** The order before Allen's (and before Checklists was added after Upcoming), to find a review saved without step names. */
-const OLD_ORDER = ["sweep", "clear", "projects", "next", "waiting", "someday", "lookback", "upcoming", "checklists", "creative", "finish"];
 type StepId = (typeof STEPS)[number]["id"];
 /** On Finish, a digit jumps back to a step not clear yet, counted down that list: 1–9, then 0 for the tenth. */
 const stepKey = (i: number) => (i === 9 ? "0" : String(i + 1));
@@ -67,13 +65,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
   // The review in progress survives leaving the view: stepping out to fix something resumes here.
   const [sess, setSess] = useState<ReviewSession>(() => {
     const s = loadSession();
-    // Back on the step it was on, by name; a review saved before steps had names, and before Checklists was added
-    // after Upcoming (index 8), is moved one on from there.
-    // A review saved before steps had names is found by its place in the old order (before Checklists, one less).
-    const legacy = OLD_ORDER[s.stepIdx >= 8 ? s.stepIdx + 1 : s.stepIdx];
-    const found = STEPS.findIndex((st) => st.id === (s.stepId ?? legacy));
+    // Back on the step it was on, by name (a new review starts on the first).
+    const found = STEPS.findIndex((st) => st.id === s.stepId);
     const at = Math.max(0, Math.min(STEPS.length - 1, found));
-    // Named from now on, so the move above happens once.
     const fixed = { ...s, stepIdx: at, stepId: STEPS[at].id };
     saveSession(fixed);
     return fixed;

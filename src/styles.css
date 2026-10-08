@@ -2028,9 +2028,6 @@ body.is-col-resizing * {
   color: var(--ink-3);
   background: var(--wash);
 }
-.badge.tiny {
-  padding: 2px 4px 1px;
-}
 .is-focus .badge {
   color: var(--select-ink);
   background: color-mix(in srgb, var(--select-ink) 8%, transparent);
@@ -2312,8 +2309,7 @@ body.is-col-resizing * {
   display: flex;
   gap: var(--sp-sm);
 }
-.detail-h .count,
-.group-toggle .count {
+.detail-h .count {
   color: var(--ink-3);
 }
 
@@ -2345,8 +2341,7 @@ input.field-text.has-lead {
   margin-left: 6px;
   vertical-align: -1px;
 }
-.field-label,
-.p-lbl {
+.field-label {
   font-family: var(--font-label);
   font-stretch: 75%;
   font-weight: 600;
@@ -2688,12 +2683,6 @@ textarea.field-text {
   border-color: var(--ink);
   box-shadow: 0 0 0 2px var(--accent);
 }
-.field-static {
-  height: 28px;
-  display: flex;
-  align-items: center;
-  color: var(--ink-2);
-}
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -2914,19 +2903,6 @@ textarea.field-text {
 }
 .add-action {
   margin-top: 8px;
-}
-.group-toggle {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  margin-top: 12px;
-  font-family: var(--font-label);
-  font-stretch: 75%;
-  font-weight: 600;
-  font-size: var(--fs-small);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-2);
 }
 .badge-line {
   display: flex;
@@ -3761,11 +3737,6 @@ textarea.field-text {
 }
 .review-steps button:focus-visible .step-count {
   color: inherit;
-}
-.review-tally {
-  margin: 0;
-  font-size: var(--fs-head);
-  color: var(--ink);
 }
 /* The step's title and what it asks for read as one line, like a view title and its count. */
 .review-head {
@@ -5375,17 +5346,6 @@ body.is-cal-dragging {
   border-radius: 50%;
   font-size: var(--fs-title);
 }
-.cal-empty {
-  position: absolute;
-  top: 72px;
-  left: 0;
-  right: 0;
-  margin: 0;
-  text-align: center;
-  font-size: var(--fs-note);
-  color: var(--ink-3);
-  pointer-events: none;
-}
 
 /* Year: twelve small months. Each day is shaded by how much it holds and dotted where something is due. */
 .cal-year {
@@ -6811,8 +6771,7 @@ body.is-cal-dragging {
   html[data-print] .md-box,
   html[data-print] .md-code,
   html[data-print] .md-code-in,
-  html[data-print] .lamp,
-  html[data-print] .ctx-code {
+  html[data-print] .lamp {
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
   }

@@ -494,11 +494,6 @@ export function reopenActions(ids: ID[]) {
   mutate(`${named("actions", acts.map((a) => a.id), "action")} not done`, ops);
 }
 
-/** Done actions still on their list, optionally only those on one list. */
-export function unarchivedDone(list?: "next" | "waiting" | "someday" | "inbox") {
-  return getState().actions.filter((a) => a.status === "done" && !a.archived_at && (!list || (a.done_from ?? "next") === list));
-}
-
 /** Moves done actions off their lists into Done. */
 export function archiveDone(ids: ID[], where = "") {
   const acts = ids.map((id) => find("actions", id)).filter((a): a is Action => Boolean(a && a.status === "done" && !a.archived_at));

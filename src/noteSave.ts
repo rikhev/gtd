@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getState, mutate, notify, quote, type MutateOpts } from "./store.ts";
 import type { TableName } from "../shared/types.ts";
 
@@ -38,26 +38,6 @@ function dropDraft(key: string, text?: string) {
   } catch {
     /* no storage */
   }
-}
-
-/* ---------------- how the last save went, per field ---------------- */
-
-export type SaveState = { state: "saved" | "pending" | "failed"; at: number } | null;
-const states = new Map<string, SaveState>();
-const stateSubs = new Set<() => void>();
-function setState(key: string, s: SaveState) {
-  states.set(key, s);
-  stateSubs.forEach((f) => f());
-}
-/** "Saved 14:02", "Saving…", or that it couldn't be: what the note page's line says. */
-export function useSaveState(key: string): SaveState {
-  return useSyncExternalStore(
-    (f) => {
-      stateSubs.add(f);
-      return () => stateSubs.delete(f);
-    },
-    () => states.get(key) ?? null,
-  );
 }
 
 /* ---------------- everything waiting to be saved ---------------- */
@@ -104,13 +84,8 @@ export function useAutosave({ key, value, save, local }: { key: string; value: s
     // Typing that starts with no focus (a link written in from a picker) still gets a step of its own.
     const session = l.session || `notes:${l.key}:${++sessions}`;
     if (!l.focused) l.session = "";
-    setState(l.key, { state: "pending", at: Date.now() });
     const ok = await l.save(t, { silent: true, key: session, join: session });
-    if (ok === false) {
-      setState(l.key, { state: "failed", at: Date.now() });
-      return;
-    }
-    setState(l.key, { state: "saved", at: Date.now() });
+    if (ok === false) return;
     l.base = t;
     if (l.local) dropDraft(l.key, t);
   }).current;
@@ -143,7 +118,6 @@ export function useAutosave({ key, value, save, local }: { key: string; value: s
       l.dirty = true;
       setText(next);
       if (l.local) writeDraft(l.key, { text: next, base: l.base });
-      setState(l.key, { state: "pending", at: Date.now() });
       window.clearTimeout(l.timer);
       l.timer = window.setTimeout(() => void flush(), DELAY);
     },

@@ -167,8 +167,6 @@ export function excerpt(text: string, words: string[], room = 90): string {
   return "";
 }
 
-/** Words in a note, for its page's heading ("312 words"). */
-export const wordCount = (text: string) => (text.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).length;
 
 /** A–Z the way people read titles: numbers in order ("Item 2" before "Item 11"), case aside. */
 export const byTitle = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });

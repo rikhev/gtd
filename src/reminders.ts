@@ -1,7 +1,7 @@
 import { LIST_NAMES, getState, stamp } from "./store.ts";
 import type { UI } from "./ui.tsx";
 import { askContext } from "./actionCommands.tsx";
-import type { Action, ID, Op, Project, State, Stuff } from "../shared/types.ts";
+import type { Action, Op, Project, State, Stuff } from "../shared/types.ts";
 
 /**
  * Tickler entries ("Due back: …"): on its bring-back date an item comes back to the Inbox for a fresh decision, as
@@ -121,5 +121,3 @@ export function reminderChoices(ui: UI | null, st: Stuff, r: Reminder, finish: (
   return out;
 }
 
-/** The ids of tickler entries among some Inbox items. */
-export const remindersAmong = (ids: ID[]) => getState().stuff.filter((x) => ids.includes(x.id) && reminderOf(getState(), x)).map((x) => x.id);
