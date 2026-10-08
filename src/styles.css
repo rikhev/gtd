@@ -3870,8 +3870,15 @@ textarea.field-text {
     flex: 1;
     width: auto;
   }
+  /* Pinned with a solid paper ground: iOS Safari (26) blurs whatever sits at the top edge of the page, its "scroll
+     edge" effect, unless a fixed or sticky header is there, whose colour it extends into the status bar instead. The
+     heading never moves, so pinning it changes nothing else. */
   .viewhead {
     padding: 12px 16px 6px;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: var(--paper);
   }
   /* Room under the last row for the + button, so it never sits on a row that can't scroll out from under it. */
   .list-region {
@@ -4667,10 +4674,13 @@ textarea.field-text {
    paper across the gutters, so nothing shows through, and a rule marks its edge once the days pass beneath. */
 .calendar.is-phone .cal-bar-top {
   position: sticky;
-  top: 0;
+  /* A pixel above the edge, with paper painted above it: iOS can leave a pixel or two between a sticky block and the
+     top of its scroller, where the days scrolling under showed through as slivers of text. */
+  top: -1px;
   z-index: 3;
   margin-inline: -16px;
   background: var(--paper);
+  box-shadow: 0 -12px 0 var(--paper);
   border-bottom: 1px solid var(--rule);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4680,7 +4690,7 @@ textarea.field-text {
     "legend sync";
   align-items: center;
   gap: var(--sp-sm) var(--sp-md);
-  padding: 0 16px var(--sp-lg);
+  padding: 1px 16px var(--sp-lg);
 }
 .calendar.is-phone .cal-title-period {
   grid-area: title;
