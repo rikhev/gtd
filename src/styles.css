@@ -3958,6 +3958,30 @@ textarea.field-text {
     line-height: 1.3;
     text-wrap: pretty;
   }
+  /* A list's or a checklist's section heading on a phone: a shorter row, its label just above the line under it, as
+     a group's heading reads, rather than at the top of a full row. */
+  .grid.is-phone .row.is-section {
+    min-height: 44px;
+  }
+  .grid.is-phone .row.is-section .cell.is-stacked {
+    justify-content: flex-end;
+    padding-block: 14px 6px;
+  }
+  /* A bullet or a tick box marks the item's first line, as a printed list does, when its words run to two. */
+  .grid.is-phone .row:not(.is-section) .cell.c-mark:has(> .ref-bullet) {
+    align-items: flex-start;
+    padding-top: 26px;
+  }
+  .grid.is-phone .row:not(.is-section) .cell.c-box {
+    align-items: flex-start;
+    padding-top: 6px;
+  }
+  /* Their words start at the same height on every row, one line or two, so the marker and the first line meet. */
+  .grid.is-phone .row:not(.is-section):has(> .cell.c-mark > .ref-bullet) .cell.is-stacked,
+  .grid.is-phone .row:not(.is-section):has(> .cell.c-box) .cell.is-stacked {
+    justify-content: flex-start;
+    padding-block: 18px;
+  }
   .grid.is-phone .is-stacked .subject-more {
     white-space: nowrap;
     font-size: 13px;

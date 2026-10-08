@@ -18,6 +18,11 @@ export interface Column<T> {
   headIcon?: ReactNode;
   /** Whether a row has nothing in this column. When no row in the list has anything, the column steps aside. */
   blank?: (row: T) => boolean;
+  /**
+   * A marker every row has, that reads before its words (a list's bullet, a checklist's tick box): on a phone it stays
+   * before the title, on the title's line, rather than going to the quiet second line with the status marks.
+   */
+  inline?: boolean;
   render: (row: T) => ReactNode;
 }
 
@@ -858,12 +863,16 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     // the other columns hold. Nothing is cut to fit one line.
     if (phone) {
       const firstLabelled = visible.findIndex((c) => c.label);
-      const lead = visible.slice(0, firstLabelled < 0 ? 0 : firstLabelled).filter((c) => !COMPACT_HIDE.includes(c.key));
+      const leading = visible.slice(0, firstLabelled < 0 ? 0 : firstLabelled).filter((c) => !COMPACT_HIDE.includes(c.key));
+      // A bullet or a tick box stays before the title; status marks (a lamp, a chase ring) lead the second line.
+      // 40px: a tick box on a touch screen is a 40px target, and a bullet lines up with it.
+      const inline = leading.filter((c) => c.inline).map((c) => ({ ...c, width: "40px" }));
+      const lead = leading.filter((c) => !c.inline);
       const subject = visible.find((c) => c.key === lockedKey);
       const stack = visible
-        .filter((c) => c !== subject && !lead.includes(c) && !COMPACT_HIDE.includes(c.key) && !PHONE_SKIP.includes(c.key) && c.label)
+        .filter((c) => c !== subject && !leading.includes(c) && !COMPACT_HIDE.includes(c.key) && !PHONE_SKIP.includes(c.key) && c.label)
         .sort((a, b) => phoneRank(a.key) - phoneRank(b.key));
-      return subject ? [{ ...subject, width: "minmax(0, 1fr)", stack, lead }] : lead;
+      return subject ? [...inline, { ...subject, width: "minmax(0, 1fr)", stack, lead }] : leading;
     }
     // On a phone-width list, keep what identifies a row: its marker (flag, lamp), the subject with all the remaining
     // room, and one date or value column. The done box and the kind icon go (owner's request: room for the text; a

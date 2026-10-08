@@ -582,6 +582,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       key: "box",
       label: "",
       width: "30px",
+      inline: true,
       render: (i) => (i.section ? null : <DoneBox done={done(i)} title={i.title || "this item"} onToggle={() => tick([i.id])} label={["Tick", "Untick"]} />),
     },
     {

@@ -166,7 +166,7 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
   }, [regionActive, text]);
 
   const columns: Column<Row>[] = [
-    { key: "mark", label: "", width: "30px", render: (l) => (l.section ? null : <span className="ref-bullet" aria-hidden="true" />) },
+    { key: "mark", label: "", width: "30px", inline: true, render: (l) => (l.section ? null : <span className="ref-bullet" aria-hidden="true" />) },
     {
       key: "subject",
       label: "Item",
