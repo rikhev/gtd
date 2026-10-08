@@ -323,7 +323,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       keys: ["n"],
       run: () => create(),
     },
-    { id: "ref.newlist", label: "New list", group: "Reference", run: () => create("list") },
+    { id: "ref.newlist", label: "New list", group: "Reference", keys: ["shift+l"], run: () => create("list") },
     { id: "ref.today", label: "Open today's note", group: "Reference", keys: ["d"], run: () => openTodayNote(ui) },
     {
       // A note's lines become a list's items, and back; nothing is lost either way.
