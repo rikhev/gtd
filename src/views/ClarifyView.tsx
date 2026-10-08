@@ -685,7 +685,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     { id: "cl.project", label: "Set project", group: "Fields", keys: ["p"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "project") },
     { id: "cl.makeproject", label: draft?.new_project ? "Make it a single next action" : "Make it a project", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: () => setProject(!draft?.new_project) },
     { id: "cl.area", label: "Set area", group: "Fields", keys: ["a"], enabled: ready && Boolean(draft?.new_project), run: pickArea },
-    { id: "cl.defer", label: "Set the day to do it", group: "Fields", keys: ["d"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "defer") },
+    { id: "cl.defer", label: "Set the day to do it", group: "Fields", keys: ["s"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "defer") },
     { id: "cl.back", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: ready && !onProject && Boolean(draft?.actions.some((a) => a.kind === "someday")), run: () => pickFor(rowOfFocus(), "back") },
     { id: "cl.time", label: "Set time estimate", group: "Fields", keys: ["m"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "time") },
     { id: "cl.energy", label: "Set energy", group: "Fields", keys: ["g"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "energy") },

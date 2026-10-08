@@ -526,12 +526,12 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       run: () => trashItem(focusItem),
     },
     {
-      // D is the follow-up on a waiting item, the day to do it on anything else, as on the lists.
+      // S sets the date, as on the lists: the follow-up on a waiting item, the day to do it on anything else.
       id: "cal.due",
       row: true,
       label: focusWaiting ? "Set follow-up date" : "Set the day to do it",
       group: "Fields",
-      keys: ["d"],
+      keys: ["s"],
       enabled: editable,
       run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], focusWaiting ? "followup" : "defer") : ped.date([focusItem.id], "start")),
     },

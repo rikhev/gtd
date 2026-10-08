@@ -489,8 +489,8 @@ export function editors(ui: UI) {
 /**
  * The keys a row that is an action answers to, the same on every list that shows actions (Next Actions, Waiting For,
  * Someday, Agendas, Done, the Calendar, the Weekly Review's steps), so a letter means one thing wherever the action
- * is: Enter opens it, J jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P D M G R B H set its
- * fields (D is the follow-up on a waiting item, the day to do it otherwise), ⇧F delegates, Delete trashes and ⇧Delete
+ * is: Enter opens it, J jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P S M G R B H set its
+ * fields (S sets the date: the follow-up on a waiting item, the day to do it otherwise), ⇧F delegates, Delete trashes and ⇧Delete
  * deletes for good. Each list adds its own verbs (new, done, reorder) and leaves out with `skip` what it does its
  * own way. `targets` names the actions to act on: a heading under the cursor says so instead of doing nothing.
  */
@@ -502,7 +502,7 @@ export function actionRowCommands(
   const ids = () => o.targets();
   const has = (o.enabled ?? true) && Boolean(o.focusId);
   const focus = o.focusId ? getState().actions.find((a) => a.id === o.focusId) : undefined;
-  // D is the follow-up on a waiting item (what the list shows), the day to do it (Do on) on anything else.
+  // S sets the date (owner's rule): the follow-up on a waiting item (what the list shows), the day to do it (Do on) on anything else.
   const waiting = o.waiting ?? focus?.status === "waiting";
   const rename = (id: ID) =>
     o.rename
@@ -532,8 +532,8 @@ export function actionRowCommands(
     { id: "row.context", label: "Set context", group: "Fields", keys: ["c"], run: () => ed.context(ids()) },
     { id: "row.project", label: "Set project", group: "Fields", keys: ["p"], run: () => ed.project(ids()) },
     waiting
-      ? { id: "row.date", label: "Set follow-up date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "followup") }
-      : { id: "row.date", label: "Set the day to do it", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "defer") },
+      ? { id: "row.date", label: "Set follow-up date", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "followup") }
+      : { id: "row.date", label: "Set the day to do it", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "defer") },
     ...(waiting ? [{ id: "row.since", label: "Set waiting since", group: "Fields", keys: ["i"], run: () => ed.date(ids(), "waiting_since") }] : []),
     // M for minutes: T and W add, everywhere (owner's decision after the critique found T editing here and adding elsewhere).
     { id: "row.time", label: "Set time estimate", group: "Fields", keys: ["m"], run: () => ed.time(ids()) },

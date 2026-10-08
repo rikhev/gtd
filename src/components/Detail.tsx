@@ -462,8 +462,8 @@ function ActionDetail({ a }: { a: Action }) {
     ],
     [
       "doon",
-      // The one date (owner's decision): the day to do it. D, except on a waiting item, where D is the follow-up.
-      <PickField key="doon" label="Do on" k={waiting ? undefined : "D"} onOpen={() => ed.date([a.id], "defer")}>
+      // The one date (owner's decision): the day to do it. S sets the date everywhere: on a waiting item, the follow-up.
+      <PickField key="doon" label="Do on" k={waiting ? undefined : "S"} onOpen={() => ed.date([a.id], "defer")}>
         {a.defer ? kind === "next" ? <DueLong date={a.defer} done={done} /> : formatLong(a.defer) : none}
       </PickField>,
     ],
@@ -517,7 +517,7 @@ function ActionDetail({ a }: { a: Action }) {
     ],
     [
       "followup",
-      <PickField key="followup" label="Follow up" k={waiting ? "D" : undefined} onOpen={() => ed.date([a.id], "followup")}>
+      <PickField key="followup" label="Follow up" k={waiting ? "S" : undefined} onOpen={() => ed.date([a.id], "followup")}>
         {a.followup ? <DueLong date={a.followup} done={a.status !== "waiting"} /> : none}
       </PickField>,
     ],
@@ -785,7 +785,7 @@ function ProjectDetail({ p }: { p: Project }) {
         {(() => {
           const someday = p.status === "someday";
           const startF = (
-            <PickField key="start" label="Do on" k="D" onOpen={() => ed.date([p.id], "start")}>
+            <PickField key="start" label="Do on" k="S" onOpen={() => ed.date([p.id], "start")}>
               {p.start ? formatLong(p.start) : none}
             </PickField>
           );

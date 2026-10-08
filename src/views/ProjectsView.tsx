@@ -397,7 +397,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.done", row: true, label: "Complete project", group: "Projects", keys: ["e"], enabled: has, run: () => toggleDone(nav.targets()) },
     { id: "proj.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
     { id: "proj.goal", row: true, label: "Set the goal it serves", group: "Fields", keys: ["g"], enabled: has, run: () => pickGoal(ui, nav.targets()) },
-    { id: "proj.start", row: true, label: "Set the day to do it", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "start") },
+    { id: "proj.start", row: true, label: "Set the day to do it", group: "Fields", keys: ["s"], enabled: has, run: () => ed.date(nav.targets(), "start") },
     { id: "proj.back", row: true, label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: has && s.projects.find((p) => p.id === focusId)?.status === "someday", run: () => ed.date(nav.targets(), "bring_back") },
     { id: "proj.move", row: true, label: "Move or merge", group: "Projects", keys: ["v"], enabled: has, run: () => ed.move(nav.targets()) },
     { id: "proj.trash", row: true, label: "Trash project", group: "Projects", keys: ["backspace", "delete"], enabled: has, run: () => ed.trash(nav.targets(), false) },
