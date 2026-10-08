@@ -38,7 +38,7 @@ const SearchView = lazy(() => import("./views/SearchSettings.tsx").then((m) => (
 const SettingsView = lazy(() => import("./views/SearchSettings.tsx").then((m) => ({ default: m.SettingsView })));
 import { isEditable } from "./keys.ts";
 import { isDark, setTheme, useTheme } from "./theme.ts";
-import { daysBetween, today } from "../shared/dates.ts";
+import { today } from "../shared/dates.ts";
 
 /**
  * Views with their own address (/inbox, /projects, /reference…), so the browser's Back and Forward move between
@@ -647,11 +647,7 @@ export default function App() {
   const nextShown = s.actions.filter((a) => (a.status === "next" && !onHold(a, s) && !isDeferred(a, t)) || isChase(a, t));
   // A count says how many there are; none is said by the list's empty state, so the heading carries no "0 items".
   const some = (n: number, noun: string) => (n ? plural(n, noun) : "");
-  // Where today stands in the year (owner's request): its day of the year, and the days left after it ("281 | 84").
-  const yearDay = daysBetween(`${t.slice(0, 4)}-01-01`, t) + 1;
-  const yearLeft = daysBetween(t, `${t.slice(0, 4)}-12-31`);
   const counts: Partial<Record<ViewId, string>> = {
-    calendar: `${yearDay} | ${yearLeft}`,
     inbox: some(inboxCount, "item"),
     // Clarifying, what is still to decide: it counts down as the list under the item empties.
     clarify: inboxCount ? `${inboxCount} left` : "",
@@ -806,25 +802,7 @@ export default function App() {
             ) : (
               <h1 className="viewtitle" id="view-title">{VIEW_TITLES[view]}</h1>
             )}
-            {counts[view] && (
-              <span
-                className={`viewcount ${openList?.repeats && checklistDay ? "is-past" : ""}`}
-                title={view === "calendar" ? `Day ${yearDay} of the year, ${yearLeft} ${yearLeft === 1 ? "day" : "days"} left` : undefined}
-                aria-label={view === "calendar" ? `Day ${yearDay} of the year, ${yearLeft} ${yearLeft === 1 ? "day" : "days"} left` : undefined}
-              >
-                {view === "calendar" ? (
-                  <>
-                    {yearDay}
-                    <span className="viewcount-sep" aria-hidden="true">
-                      |
-                    </span>
-                    {yearLeft}
-                  </>
-                ) : (
-                  counts[view]
-                )}
-              </span>
-            )}
+            {counts[view] && <span className={`viewcount ${openList?.repeats && checklistDay ? "is-past" : ""}`}>{counts[view]}</span>}
             <span className="viewtools">
               {/* What fits now, in sight where it is used; while it is on, the line above the list takes over. On a phone
                   it is in the View menu, with every other way of looking at the list: one button, not a row of links. */}

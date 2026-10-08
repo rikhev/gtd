@@ -344,11 +344,6 @@ a:hover {
   text-decoration-color: var(--rule-strong);
   text-underline-offset: 4px;
 }
-/* The Calendar's "281 | 84": the divider with room either side, a step quieter than the numbers. */
-.viewcount-sep {
-  margin: 0 6px;
-  color: var(--rule-strong);
-}
 .viewcrumb-sep {
   align-self: center;
   color: var(--ink-3);
