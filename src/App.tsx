@@ -103,6 +103,9 @@ function homeOf(t: Target): ViewId {
 if (typeof window !== "undefined") {
   const engage = (e: Event) => {
     if (e.type === "pointerdown" && window.matchMedia("(max-width: 820px)").matches) return;
+    // Typing in a field (a phone's on-screen keyboard sends keys too) isn't using the list.
+    const t = e.target as HTMLElement | null;
+    if (e.type === "keydown" && t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
     document.documentElement.classList.add("engaged");
     window.removeEventListener("keydown", engage, true);
     window.removeEventListener("pointerdown", engage, true);

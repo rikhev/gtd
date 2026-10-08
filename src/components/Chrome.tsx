@@ -7,6 +7,9 @@ import { useCommands, keyLabel, keyAria, IS_MAC, activeCommands, layersVersion, 
 import { Kbd } from "./bits.tsx";
 import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
+import { phoneAdder, type PhoneAdder } from "../phoneAdd.ts";
+import { useOpenChecklist } from "../checklists.ts";
+import { useOpenRefList } from "../refList.ts";
 
 /**
  * The go-to keys follow the rail from the top, counted per group so every key sits under one hand (owner's request:
@@ -381,8 +384,9 @@ function RailKey({ k }: { k?: string }) {
 /**
  * The phone (owner's request: content first, there is so little room): no bar across the foot and no standing capture
  * field. Two round buttons float where a thumb rests. Bottom left, the menu: the rail as a sheet, with the pond, search,
- * every list and its signal (the Inbox's count rides on the button), Done and the Trash. Bottom right, +: a sheet to
- * capture into the Inbox, holding the list's own add (what N does there) as a quiet line under the field. The Weekly
+ * every list and its signal (the Inbox's count rides on the button), Done and the Trash. Bottom right, +: on a list,
+ * what N does there, named in the sheet's field (owner's request), with the Inbox a tab beside it; elsewhere, capture
+ * into the Inbox. The Weekly
  * Review, Settings and the system check stay on the desktop (the phone is slimmer).
  */
 const PHONE_GROUPS: ViewId[][] = [
@@ -424,6 +428,13 @@ export function PhoneChrome() {
   const addBtn = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const keyboard = useKeyboardInset(sheet === "capture");
+  // What + adds on this list, and where the sheet's field sends it: the list's own, or the Inbox (a tab away).
+  const inChecklist = useOpenChecklist();
+  const inRefList = useOpenRefList();
+  const [adder, setAdder] = useState<PhoneAdder | null>(null);
+  const [dest, setDest] = useState<"list" | "inbox">("inbox");
+  const [listText, setListText] = useState("");
+  const listRef = useRef<HTMLTextAreaElement>(null);
 
   const close = (back = true) => {
     const was = sheet;
@@ -441,10 +452,25 @@ export function PhoneChrome() {
 
   const openMenu = () => setSheet("menu");
   const openCapture = () => {
-    setListAdd(activeCommands().find((c) => c.keys?.includes("n") && c.enabled !== false && !c.row && c.id !== "inbox.new") ?? null);
+    const a = phoneAdder(ui.view, inChecklist, inRefList);
+    setAdder(a);
+    setDest(a ? "list" : "inbox");
+    setListAdd(a ? null : (activeCommands().find((c) => c.keys?.includes("n") && c.enabled !== false && !c.row && c.id !== "inbox.new") ?? null));
     // Rendered first, then focused within the tap itself: a phone raises its keyboard only for a focus the tap made.
     flushSync(() => setSheet("capture"));
-    captureRef.current?.focus();
+    (a ? listRef : captureRef).current?.focus();
+  };
+  /** A tab of the sheet: the list's own, or the Inbox. The field it shows takes the focus, keeping the keyboard up. */
+  const toDest = (d: "list" | "inbox") => {
+    flushSync(() => setDest(d));
+    (d === "list" ? listRef : captureRef).current?.focus();
+  };
+  const addToList = () => {
+    const text = listText.trim();
+    if (!text || !adder) return;
+    setListText("");
+    close(false);
+    adder.run(ui, text);
   };
   const go = (v: ViewId) => {
     close(false);
@@ -532,7 +558,19 @@ export function PhoneChrome() {
       {/* Kept while closed (hidden), so a draft stays where it was typed until it is sent. */}
       <div className="phone-sheet phone-capture" role="dialog" aria-modal="true" aria-label="Capture to the Inbox" hidden={sheet !== "capture"} style={{ bottom: keyboard }}>
         <div className="phone-capture-head">
-          <h2 className="phone-capture-title">Capture to the Inbox</h2>
+          {adder ? (
+            // Where the field sends what is written: the list's own (the default on a list), or the Inbox. Tabs, as
+            // every switch between the parts of a page is drawn.
+            <div className="cal-modes phone-dest" role="tablist" aria-label="Add to">
+              {(["list", "inbox"] as const).map((d) => (
+                <button key={d} type="button" role="tab" aria-selected={dest === d} className={dest === d ? "is-current" : ""} onPointerDown={(e) => e.preventDefault()} onClick={() => toDest(d)}>
+                  {d === "list" ? adder.tab : "Inbox"}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <h2 className="phone-capture-title">Capture to the Inbox</h2>
+          )}
           <button
             type="button"
             className="phone-close"
@@ -545,7 +583,30 @@ export function PhoneChrome() {
             <X size={20} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
-        <CaptureBar ref={captureRef} sheet onDraft={setDraft} onDone={() => close()} />
+        <div hidden={Boolean(adder) && dest !== "inbox"}>
+          <CaptureBar ref={captureRef} sheet onDraft={setDraft} onDone={() => close()} />
+        </div>
+        {adder && (
+          <div className="capture" hidden={dest !== "list"}>
+            <textarea
+              ref={listRef}
+              className="capture-input"
+              rows={Math.min(6, listText.split("\n").length)}
+              value={listText}
+              aria-label={`Add to ${adder.tab}`}
+              onChange={(e) => setListText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  addToList();
+                }
+              }}
+            />
+            <button type="button" className="capture-send" aria-label={`Add to ${adder.tab}`} disabled={!listText.trim()} onPointerDown={(e) => e.preventDefault()} onClick={addToList}>
+              <ArrowUp size={18} strokeWidth={2.25} aria-hidden="true" />
+            </button>
+          </div>
+        )}
         {listAdd && (
           <button
             type="button"

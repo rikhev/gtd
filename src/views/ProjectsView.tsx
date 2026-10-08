@@ -31,9 +31,12 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         onPick: (v) => {
           const title = (v ?? "").trim();
           if (!title) return;
-          askArea(title);
+          api.createNamed(title);
         },
       });
+    },
+    /** The rest of ⌥N once the project is named (the phone's + names it in its own sheet): its area, then its first next action. */
+    createNamed(title: string) {
       const askArea = (title: string) => {
         const make = (area_id: ID | null, extra: Op[] = []) => {
           const p = newProject({ title, area_id });
@@ -56,6 +59,7 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
           onPick: (id) => make(id),
         });
       };
+      askArea(title);
     },
     /** Give a project something it waits on: what, then who or what (required, as everywhere in Waiting For). */
     addWaiting(projectId: ID) {

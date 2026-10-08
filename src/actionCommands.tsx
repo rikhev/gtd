@@ -176,11 +176,16 @@ export function quickAddNextAction(ui: UI, words = "", project: ID | null = null
     onPick: (v) => {
       const title = (v ?? "").trim();
       if (!title) return;
-      askContext(ui, `Context for “${title}”`, (context_id, extra) =>
-        askProjectThenCreate(ui, title, extra, (project_id) => newAction({ title, context_id, project_id, status: "next" }), "Next action", project),
-      );
+      addNextActionNamed(ui, title, project);
     },
   });
+}
+
+/** The rest of ⌥T once the action is named (the phone's + names it in its own sheet): its context, then its project. */
+export function addNextActionNamed(ui: UI, title: string, project: ID | null = null) {
+  askContext(ui, `Context for “${title}”`, (context_id, extra) =>
+    askProjectThenCreate(ui, title, extra, (project_id) => newAction({ title, context_id, project_id, status: "next" }), "Next action", project),
+  );
 }
 
 /**
@@ -195,16 +200,21 @@ export function quickAddWaiting(ui: UI) {
     onPick: (v) => {
       const title = (v ?? "").trim();
       if (!title) return;
-      window.setTimeout(
-        () =>
-          askWaitingOn(ui, null, (who) =>
-            askProjectThenCreate(ui, title, [], (project_id) => newAction({ title, project_id, status: "waiting", waiting_who: who, waiting_since: today() }), `Waiting on ${who}`),
-            `Waiting on, for “${title}”`,
-          ),
-        0,
-      );
+      addWaitingNamed(ui, title);
     },
   });
+}
+
+/** The rest of ⌥W once it is named: who or what it waits on, then its project. */
+export function addWaitingNamed(ui: UI, title: string) {
+  window.setTimeout(
+    () =>
+      askWaitingOn(ui, null, (who) =>
+        askProjectThenCreate(ui, title, [], (project_id) => newAction({ title, project_id, status: "waiting", waiting_who: who, waiting_since: today() }), `Waiting on ${who}`),
+        `Waiting on, for “${title}”`,
+      ),
+    0,
+  );
 }
 
 export function projectItems() {

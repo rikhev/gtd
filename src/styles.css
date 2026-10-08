@@ -6552,6 +6552,22 @@ body.is-cal-dragging {
     background: none;
     box-shadow: none;
   }
+  /* The sheet's tabs on a list: the list's own add first, the Inbox beside it; 44px to the thumb, the close button
+     after them. */
+  /* The field of the tab not shown keeps its words (a draft stays), out of sight. */
+  .phone-capture [hidden] {
+    display: none;
+  }
+  .phone-dest {
+    flex: 1;
+    margin-right: 6px;
+  }
+  .phone-dest button {
+    min-height: 44px;
+  }
+  .phone-capture-head:has(.phone-dest) {
+    margin-bottom: 10px;
+  }
   .phone-list-add {
     display: flex;
     align-items: center;
