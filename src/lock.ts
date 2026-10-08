@@ -95,7 +95,7 @@ function shut(idle: boolean) {
 
 /**
  * Takes the lock password away, when nothing is locked with it any more (the server checks too): the key goes, and
- * L on Reference asks for a new password the next time.
+ * ⇧L on Reference asks for a new password the next time.
  */
 export async function removeLockPassword() {
   const was = getMeta().lock;

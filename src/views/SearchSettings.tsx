@@ -341,7 +341,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
       enabled: Boolean(meta.lock),
       run: () =>
         sealedCount
-          ? notify(`${plural(sealedCount, "reference")} still locked: remove their locks first (L on Reference)`, { tone: "error" })
+          ? notify(`${plural(sealedCount, "reference")} still locked: remove their locks first (⇧L on Reference)`, { tone: "error" })
           : void removeLockPassword(),
     },
     {
@@ -677,7 +677,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Lock password</span>
             <span className="subject-more">
               {!meta.lock
-                ? "Encrypts the references you lock (L on Reference). A forgotten password can't be reset."
+                ? "Encrypts the references you lock (⇧L on Reference). A forgotten password can't be reset."
                 : `${sealedCount ? plural(sealedCount, "reference") : "Nothing"} locked${lock.unlocked ? ", open now (⌘K › Lock now)" : ""}. A forgotten password can't be reset.`}
             </span>
           </span>
