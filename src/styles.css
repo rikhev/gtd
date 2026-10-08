@@ -4691,7 +4691,16 @@ textarea.field-text {
 /* The calendar on a phone (it carries .is-phone only below 820px, so nothing here reaches the desktop). The toolbar is
    three short lines instead of a wrapped row: the period with ‹ Today › at the thumb's side; the four views as equal
    tabs across the width; what's shown (soft dates, each calendar, sync) as one line that scrolls sideways. */
+/* On a phone the Calendar's head (the period, its arrows, the views, the calendars and sync) stays at the top while the
+   days scroll under it (owner's request: no scrolling back up to change the view or the week). It takes the page's
+   paper across the gutters, so nothing shows through, and a rule marks its edge once the days pass beneath. */
 .calendar.is-phone .cal-bar-top {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin-inline: -16px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
@@ -4700,7 +4709,7 @@ textarea.field-text {
     "legend sync";
   align-items: center;
   gap: var(--sp-sm) var(--sp-md);
-  padding: 0 0 var(--sp-lg);
+  padding: 0 16px var(--sp-lg);
 }
 .calendar.is-phone .cal-title-period {
   grid-area: title;
