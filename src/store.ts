@@ -596,7 +596,9 @@ export function nextAppointment(s: State, p: Project, t = today()): Appointment 
 export function stallReason(s: State, p: Project): "no-next" | "idle" | null {
   if (p.status !== "active") return null;
   const t = today();
-  if (p.start && p.start >= t) return null; // not begun, or begins today: nothing to be stalled yet
+  // Not begun yet: nothing to be stalled. A project that starts today has begun (owner's decision, 8 October: with no
+  // next action on its first day it is stalled, red, like any other).
+  if (p.start && p.start > t) return null;
   const mine = s.actions.filter((a) => a.project_id === p.id);
   // A next action deferred past today isn't current yet (it is hidden from Next Actions): it doesn't move the project.
   if (!mine.some((a) => isCurrentStep(a, t))) return nextAppointment(s, p, t) ? null : "no-next";
@@ -644,7 +646,7 @@ export function projectHealth(s: State, p: Project): ProjectHealth {
   const open = s.actions.filter((a) => a.project_id === p.id);
   if (open.some((a) => a.status === "next" && isCurrentStep(a))) return "ok";
   if (open.some((a) => a.status === "waiting")) return "waiting";
-  return startsToday(p) || nextAppointment(s, p) ? "scheduled" : "stalled";
+  return nextAppointment(s, p) ? "scheduled" : "stalled";
 }
 
 export function lastReview(s: State): string | null {

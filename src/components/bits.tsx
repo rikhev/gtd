@@ -96,9 +96,7 @@ export function Lamp({ health, start, appt }: { health: keyof typeof HEALTH_LABE
         ? `Not started yet: starts ${formatLong(start)}`
         : appt
           ? `Next: ${appt.title}, ${appt.date === today() ? "today" : formatLong(appt.date)}${appt.time ? ` ${appt.time}` : ""}`
-          : start === today()
-            ? "Starts today: add a next action"
-            : HEALTH_LABEL.scheduled;
+          : HEALTH_LABEL.scheduled;
   return (
     <svg className={`lamp ${health}`} viewBox="0 0 12 12" role="img" aria-label={label}>
       <title>{label}</title>
