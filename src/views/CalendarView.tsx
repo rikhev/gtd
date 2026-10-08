@@ -643,7 +643,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       <div
         key={i.key}
         className={cls}
-        // What has focus, so a picker opened from the keyboard (P, D, S…) opens at it.
+        // What has focus, so a picker opened from the keyboard (P, S…) opens at it.
         data-focused={itemKey === i.key || undefined}
         style={{ gridColumn: `${p.col} / span ${p.span}`, gridRow: p.lane + 1, ...(i.color ? { ["--feed" as string]: i.color } : {}) }}
         title={`${label}\n${dates}${i.overdue ? (i.role === "followup" ? " · to chase" : " · late") : ""}`}

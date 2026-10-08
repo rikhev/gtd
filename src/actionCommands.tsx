@@ -630,7 +630,7 @@ export function useActionCommands(opts: {
   const has = () => targets().length > 0;
 
   const commands: Command[] = [
-    { id: "act.new", label: "New action", group: "Actions", keys: ["n"], run: create },
+    { id: "act.new", label: status === "waiting" ? "New waiting for" : status === "someday" ? "New someday action" : "New next action", group: "Actions", keys: ["n"], run: create },
     // T and W add, as on Projects and Agendas: a next action or a waiting for in the focused row's project (or on its own).
     {
       id: "act.addnext",

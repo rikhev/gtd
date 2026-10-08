@@ -29,10 +29,10 @@ const STEPS = [
   // (owner's decision): paper is captured as it comes, like everything else.
   { id: "sweep", phase: "Get clear", title: "Mind sweep", note: "Empty your head: read down the list and capture whatever it brings to mind. It all lands in the Inbox, clarified next." },
   { id: "clear", phase: "Get clear", title: "Inbox to zero", note: "Clarify everything in the Inbox, what you just collected included, so nothing is left undecided." },
-  { id: "next", phase: "Get current", title: "Next actions", note: "Mark what's done. Rewrite anything vague." },
+  { id: "next", phase: "Get current", title: "Next Actions", note: "Mark what's done. Rewrite anything vague." },
   { id: "lookback", phase: "Get current", title: "Look back", note: "What the last two weeks finished. Anything it left behind? Add the follow-up now." },
-  { id: "upcoming", phase: "Get current", title: "Upcoming", note: "Due, starting, follow-ups and tickler dates in the next two weeks." },
-  { id: "waiting", phase: "Get current", title: "Waiting for", note: "Chase what's overdue. Close what arrived." },
+  { id: "upcoming", phase: "Get current", title: "Upcoming", note: "What is to be done on a day, follow-ups and bring-back days in the next two weeks." },
+  { id: "waiting", phase: "Get current", title: "Waiting For", note: "Chase what is due a follow-up. Close what arrived." },
   { id: "projects", phase: "Get current", title: "Projects", note: "Every active project needs a next action. Complete, defer or drop the rest." },
   // GTD's last "get current" check: review any relevant checklists, as a trigger for new actions.
   { id: "checklists", phase: "Get current", title: "Checklists", note: "Look over the checklists that bear on the weeks ahead. Anything one brings to mind becomes a next action." },
@@ -260,7 +260,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           .sort((a, b) => Number(Boolean(actionNote(b))) - Number(Boolean(actionNote(a))) || a.sort - b.sort)
           .map((a) => ({ key: a.id, kind: "action", id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.defer, note: actionNote(a) }));
       case "waiting":
-        // "Chase what's overdue": items to chase first, then by follow-up date.
+        // Items to chase first, then by follow-up date.
         return s.actions
           .filter((a) => a.status === "waiting" && !onHold(a, s))
           .sort((a, b) => Number(isChase(b, t)) - Number(isChase(a, t)) || (a.followup ?? "9999").localeCompare(b.followup ?? "9999"))
@@ -546,7 +546,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       },
     },
     // Checklists: a checklist is a trigger for new actions (GTD); its items stay as they are.
-    { id: "rv.checkaction", row: true, label: "New next action", group: "Add", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui, "", focusRow?.kind === "checklist" ? (s.checklists.find((c) => c.id === focusRow.id)?.project_id ?? null) : null) },
+    { id: "rv.checkaction", row: true, label: "Add a next action", group: "Add", keys: ["t"], enabled: step.id === "checklists", run: () => quickAddNextAction(ui, "", focusRow?.kind === "checklist" ? (s.checklists.find((c) => c.id === focusRow.id)?.project_id ?? null) : null) },
     ...notClear.slice(0, 10).map((x, n) => ({
       id: `rv.jump${n + 1}`,
       label: `Go to step: ${x.st.title}`,
@@ -607,10 +607,10 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     {
       id: "rv.done",
       row: true,
-      label: step.id === "someday" ? "Activate" : "Mark done",
+      label: step.id === "someday" ? "Make it current" : "Mark done",
       group: "Row",
-      // E is Done everywhere; bringing a someday item back to life is A (Activate).
-      keys: [step.id === "someday" ? "a" : "e"],
+      // E is Done everywhere; bringing a someday item back to life is ⇧A, as on Someday (A sets the area).
+      keys: [step.id === "someday" ? "shift+a" : "e"],
       enabled: Boolean(focusRow) && !["lookback", "creative", "checklists"].includes(step.id),
       run: () => {
         const a = targetsOf("action");
@@ -652,7 +652,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       enabled: step.id === "creative" && (focusRow?.kind === "area" || focusRow?.kind === "goal"),
       run: () => focusRow && (focusRow.kind === "goal" ? newProjectFor(focusRow.id) : newProjectIn(focusRow.id)),
     },
-    // An action in a step takes the keys it takes on its list (V, C, D, S, M, G, B, H, ⇧P, ⇧F, ⇧Delete); R stays
+    // An action in a step takes the keys it takes on its list (V, C, S, M, G, B, H, ⇧P, ⇧F, ⇧Delete); R stays
     // "still current" here (owner's decision), and Enter, J, F2, P and Delete are the review's own, for every kind of row.
     ...actionRowCommands(ui, {
       targets: () => targetsOf("action"),
@@ -827,9 +827,9 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
-            ...(step.id === "checklists" ? [...(rows.length > 0 ? [{ k: "enter", label: "Open" }] : []), { k: "t", label: "New next action" }] : []),
+            ...(step.id === "checklists" ? [...(rows.length > 0 ? [{ k: "enter", label: "Open" }] : []), { k: "t", label: "Add a next action" }] : []),
             ...(step.id !== "finish" ? [{ k: "mod+enter", label: step.id === "sweep" ? "Head empty" : "Reviewed", primary: true }] : []),
-            ...(!["finish", "lookback", "sweep", "creative", "checklists"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "a" : "e", label: step.id === "someday" ? "Activate" : "Done" }] : []),
+            ...(!["finish", "lookback", "sweep", "creative", "checklists"].includes(step.id) && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: step.id === "someday" ? "shift+a" : "e", label: step.id === "someday" ? "Make it current" : "Done" }] : []),
           ]}
         />
       )}

@@ -18,7 +18,16 @@ export function viewKind(mime: string): "page" | "pdf" | "image" | null {
 const isCsv = (name: string, mime: string) => mime === "text/csv" || mime === "text/tab-separated-values" || /\.(csv|tsv)$/i.test(name);
 
 /** An email's date in the owner's time zone ("7 Oct 2026, 14:05"). */
-const when = (d: Date | undefined, zone?: string) => (d && !Number.isNaN(d.getTime()) ? d.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: zone }) : undefined);
+/** An email's date as the app writes every date (owner's rule: ISO): "Tue 2026-10-06 10:27", in the owner's zone. */
+const when = (d: Date | undefined, zone?: string) => {
+  if (!d || Number.isNaN(d.getTime())) return undefined;
+  const at = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", { timeZone: zone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value]),
+  );
+  return `${at.weekday} ${at.year}-${at.month}-${at.day} ${at.hour}:${at.minute}`;
+};
 
 /** `zone` is the owner's time zone, as their browser reports it: an email's date is never in the server's. */
 export async function renderPage(name: string, mime: string, buf: Buffer, dark: boolean, zone?: string): Promise<string> {

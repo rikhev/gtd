@@ -127,7 +127,7 @@ export function Rail({ active }: { active: boolean }) {
       start: true,
       label: `Weekly Review, ${reviewAge === null ? "not done yet" : reviewAge === 0 ? "done today" : `last done ${reviewAge} days ago`}${reviewDue ? ", due" : ""}`,
     },
-    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} days`}${sig.oldestDays >= 7 ? ", due" : ""}. Clarify` }] : []),
+    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} ${sig.oldestDays === 1 ? "day" : "days"}`}${sig.oldestDays >= 7 ? ", due" : ""}. Clarify` }] : []),
   ];
   const entries: Entry[] = [
     ...LISTS.flat().map((id) => {

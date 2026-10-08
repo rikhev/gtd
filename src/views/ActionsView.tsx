@@ -197,7 +197,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         key = "chase";
         label = "To chase";
         order = "!";
-        meta = "follow-up due";
+        meta = "to chase";
       } else if (groupBy === "context") {
         const c = a.context_id ? ctxById.get(a.context_id) : undefined;
         key = c?.id ?? "none";
@@ -310,7 +310,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   const openViewMenu = () => {
     const items = [
       ...(mode === "done" ? [] : groupOptions(mode).map((g) => ({ id: `g:${g}`, label: g === "none" ? "No grouping" : `Group by ${GROUPS[g].toLowerCase()}`, hint: groupBy === g ? "Current" : "", section: "group" }))),
-      ...(mode === "done" ? [] : SORTS.map(([k, name]) => ({ id: `s:${k ?? ""}`, label: `Sort by ${name.toLowerCase()}`, hint: (sort?.key ?? null) === k ? "Current" : "", section: "sort" }))),
+      ...(mode === "done" ? [] : SORTS.map(([k, name]) => ({ id: `s:${k ?? ""}`, label: `Sort by ${name === "Do on" ? name : name.toLowerCase()}`, hint: (sort?.key ?? null) === k ? "Current" : "", section: "sort" }))),
       ...(mode === "next"
         ? [
             { id: "fit", label: fit ? `What fits now: ${fitLabel(fit)}` : "What fits now…", hint: fit ? "On" : "", section: "show" },
@@ -560,15 +560,12 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     ];
   }
 
+  // Only Next Actions and Waiting For are drawn here; Someday and Done have views of their own.
   const empty =
     mode === "next" ? (
-      <EmptyState title="No next actions yet" lines={["Add an action here, or capture to the Inbox and clarify what you have captured."]} action={{ label: "New action", run: act.create }} />
-    ) : mode === "waiting" ? (
-      <EmptyState title="Nothing delegated" lines={["Delegate any action and it waits here, with who and since when."]} action={{ label: "New waiting for", run: act.create }} />
-    ) : mode === "someday" ? (
-      <EmptyState title="No someday items" lines={["Move any action or project here when it can wait."]} action={{ label: "New someday action", run: act.create }} />
+      <EmptyState title="No next actions yet" lines={["Add an action here, or capture to the Inbox and clarify what you have captured."]} action={{ label: "New next action", run: act.create }} />
     ) : (
-      <EmptyState title="Nothing done yet" lines={["Completed actions are logged here by day."]} />
+      <EmptyState title="Nothing delegated" lines={["Delegate any action and it waits here, with who and since when."]} action={{ label: "New waiting for", run: act.create }} />
     );
 
   const grid = (

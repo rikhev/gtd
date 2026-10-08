@@ -671,7 +671,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     } },
     // Trash is one of the answers to "no", so the question is answered first (owner's request).
     { id: "cl.trash", label: "Trash this item", group: "Clarify", keys: ["backspace", "delete"], enabled: Boolean(current) && !reminder && !orphan && !asking, run: trashItem },
-    { id: "cl.done", label: "Mark it done now", group: "Clarify", keys: ["e"], enabled: ready && !onProject && draft?.disposition === "actionable", run: () => {
+    { id: "cl.done", label: "Mark done", group: "Clarify", keys: ["e"], enabled: ready && !onProject && draft?.disposition === "actionable", run: () => {
       const i = rowOfFocus();
       if (draft?.actions[i]) updateRow(i, { done: !draft.actions[i].done });
     } },

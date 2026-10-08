@@ -146,14 +146,16 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
     },
     { id: "some.open", row: true, label: "Open details", group: "Someday", keys: ["enter"], enabled: Boolean(focusRow), run: () => focusRow && ui.openDetail({ kind: focusRow.kind, id: focusRow.id }, true) },
     { id: "some.rename", row: true, label: "Rename", group: "Someday", keys: ["f2"], enabled: Boolean(focusRow), run: () => focusRow && setEditing(focusRow.key) },
-    // A activates, as on the Weekly Review's Someday step; E is Done, as everywhere.
-    { id: "some.activate", row: true, label: "Activate", group: "Someday", keys: ["a"], enabled: has, run: activate },
+    // ⇧A makes it current (activates), as on the Weekly Review's Someday step; A sets a project's area, as everywhere;
+    // E is Done, as everywhere.
+    { id: "some.activate", row: true, label: "Make it current", group: "Someday", keys: ["shift+a"], enabled: has, run: activate },
+    { id: "some.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: pick("project").length > 0, run: () => pEd.area(pick("project")) },
     { id: "some.done", row: true, label: "Mark done", group: "Someday", keys: ["e"], enabled: has, run: done },
     { id: "some.back", row: true, label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: has, run: () => (pick("action").length ? aEd.date(pick("action"), "bring_back") : pEd.date(pick("project"), "bring_back")) },
     { id: "some.move", row: true, label: "Move", group: "Someday", keys: ["v"], enabled: has, run: () => (pick("action").length ? aEd.move(pick("action")) : pEd.move(pick("project"))) },
     { id: "some.trash", row: true, label: "Trash", group: "Someday", keys: ["backspace", "delete"], enabled: has, run: () => trash(false) },
     { id: "some.delete", row: true, label: "Delete permanently", group: "Someday", keys: ["shift+backspace", "shift+delete"], enabled: has, run: () => trash(true) },
-    // A someday action takes the same field keys as anywhere else (C, P, D, S, M, G, R, H, ⇧P, ⇧F).
+    // A someday action takes the same field keys as anywhere else (C, P, S, M, G, R, H, ⇧P, ⇧F).
     ...actionRowCommands(ui, {
       targets: () => pick("action"),
       focusId: focusRow?.kind === "action" ? focusRow.id : null,
@@ -361,7 +363,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     },
     { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", row: true, label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
-    { id: "ref.jump", row: true, label: "Jump to its project", group: "Reference", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
+    { id: "ref.jump", row: true, label: "Jump to the project it supports", group: "Reference", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {
       id: "ref.project",
       row: true,

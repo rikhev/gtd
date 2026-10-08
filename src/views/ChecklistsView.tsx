@@ -150,7 +150,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     { id: "cl.open", row: true, label: "Open checklist", group: "Checklists", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && openChecklist(focusId) },
     { id: "cl.rename", row: true, label: "Rename", group: "Checklists", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing({ id: focusId, fresh: false }) },
     { id: "cl.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: Boolean(focusId), run: () => setArea(ui, targets()) },
-    { id: "cl.jump", row: true, label: "Jump to its project", group: "Checklists", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
+    { id: "cl.jump", row: true, label: "Jump to the project it supports", group: "Checklists", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
     { id: "cl.project", row: true, label: "Set project", group: "Fields", keys: ["p"], enabled: Boolean(focusId), run: () => setChecklistProject(ui, targets()) },
     { id: "cl.repeat", row: true, label: "Set repeat", group: "Fields", keys: ["r"], enabled: Boolean(focusId), run: () => pickRepeats(ui, targets()) },
     { id: "cl.over", row: true, label: "Start over", group: "Checklists", enabled: anyTicked(targets()), run: () => startOver(targets()) },
@@ -527,7 +527,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.open", row: true, label: "Open details", group: "Checklist", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: "checkitem", id: focus.id }, true) },
     { id: "ci.rename", row: true, label: "Rename", group: "Checklist", keys: ["f2"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
     // GTD: a checklist is a trigger for new actions. The item stays as it is; ticking still only ticks.
-    { id: "ci.action", row: true, label: "New next action from this item", group: "Checklist", keys: ["t"], enabled: Boolean(focus && !focus.section), run: () => focus && quickAddNextAction(ui, focus.title, list.project_id ?? null) },
+    { id: "ci.action", row: true, label: "Add a next action", group: "Checklist", keys: ["t"], enabled: Boolean(focus && !focus.section), run: () => focus && quickAddNextAction(ui, focus.title, list.project_id ?? null) },
     { id: "ci.remove", row: true, label: "Remove", group: "Checklist", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => remove(targets()) },
     { id: "ci.up", row: true, label: focus?.section ? "Move the section up" : "Move row up", group: "Checklist", keys: ["alt+arrowup"], enabled: Boolean(focus), run: () => reorder(-1) },
     { id: "ci.down", row: true, label: focus?.section ? "Move the section down" : "Move row down", group: "Checklist", keys: ["alt+arrowdown"], enabled: Boolean(focus), run: () => reorder(1) },

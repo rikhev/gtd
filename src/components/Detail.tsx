@@ -219,7 +219,7 @@ const PANE_STOPS = ".detail-body .field .field-text, .detail-body .event-title, 
 /** Whether the detail pane is the active region: its fields' letter keys only work then. */
 const DetailActive = createContext(false);
 
-/** A pane field's key reads as the same command does on the lists ("Set context", "Set due date"), in ⌘K: a command says what it does. */
+/** A pane field's key reads as the same command does on the lists ("Set context", "Set the day to do it"), in ⌘K: a command says what it does. */
 const FIELD_COMMAND: Record<string, string> = {
   Context: "Set context",
   Project: "Set project",
@@ -236,10 +236,10 @@ const FIELD_COMMAND: Record<string, string> = {
 };
 
 function PickField({ label, children, onOpen, k }: { label: string; children: ReactNode; onOpen: () => void; k?: string }) {
-  // The key shown beside a field (D for Due, P for Project…) opens its picker while the pane has focus.
+  // The key shown beside a field (S for Do on, P for Project…) opens its picker while the pane has focus.
   const active = useContext(DetailActive);
   useCommands(`detail-field:${label}`, k ? [{ id: `detail.field.${label}`, label: FIELD_COMMAND[label] ?? `Set ${label.toLowerCase()}`, group: "Fields", keys: [k.toLowerCase()], run: () => open() }] : [], { priority: 21, active: active && Boolean(k) });
-  // Screen readers hear the field, its value and its key: "Due, Fri 25 Sep 2026, D".
+  // Screen readers hear the field, its value and its key: "Do on, Fri 2026-09-25, S".
   const id = useId();
   // Opening from the key or a click first puts focus on this field, so the picker anchors under it.
   const btn = useRef<HTMLButtonElement>(null);
