@@ -224,6 +224,20 @@ if (getSetting("outcomeMoved", "0") !== "1") {
   setSetting("outcomeMoved", "1");
 }
 
+// One date, "Do on" (owner's decision, 8 October): the day to do something, kept in an action's defer and a project's
+// start. Due dates are gone. Once, for what is still open: a day-specific action (start and due the same day) keeps
+// its day, late if it has passed; any other start date still ahead becomes the Do on day; a start date already past
+// has done its job (the item is in its list) and is cleared, rather than every old start turning red; due dates go.
+if (getSetting("doOnDates", "0") !== "1") {
+  const t = new Date().toISOString().slice(0, 10);
+  db.prepare(`UPDATE actions SET defer = NULL WHERE status NOT IN ('done', 'trashed') AND defer IS NOT NULL AND defer < ?
+    AND NOT (due IS NOT NULL AND due = defer)`).run(t);
+  db.exec(`UPDATE actions SET due = NULL WHERE status NOT IN ('done', 'trashed')`);
+  db.prepare(`UPDATE projects SET start = NULL WHERE status NOT IN ('done', 'trashed') AND start IS NOT NULL AND start < ?`).run(t);
+  db.exec(`UPDATE projects SET due = NULL WHERE status NOT IN ('done', 'trashed')`);
+  setSetting("doOnDates", "1");
+}
+
 // Actions back on Next or Someday no longer wait on anyone; clear what earlier versions left behind.
 db.exec(`UPDATE actions SET waiting_who = NULL, waiting_since = NULL, followup = NULL
   WHERE status IN ('next', 'someday') AND (waiting_who IS NOT NULL OR waiting_since IS NOT NULL OR followup IS NOT NULL)`);

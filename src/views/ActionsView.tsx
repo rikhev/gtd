@@ -8,15 +8,15 @@ import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups
 import { AreaName, ContextCode, DateCell, DoneBox, Energy, Marker, TimeCell, titleOr } from "../components/bits.tsx";
 import { useActionCommands } from "../actionCommands.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
-import { addDays, today, daysBetween, formatDate, formatLong, parseRecurrence, recurrenceLabel } from "../../shared/dates.ts";
+import { today, daysBetween, formatDate, formatLong, parseRecurrence, recurrenceLabel } from "../../shared/dates.ts";
 import type { Action, ActionStatus, State, ID, Op } from "../../shared/types.ts";
 
 type Mode = "next" | "waiting" | "someday" | "done";
-type GroupBy = "project" | "who" | "context" | "due" | "none";
+type GroupBy = "project" | "who" | "context" | "none";
 
-const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", due: "Due date", none: "No grouping" };
+const GROUPS: Record<GroupBy, string> = { project: "Project", who: "Waiting on", context: "Context", none: "No grouping" };
 /** The View menu's sorts: the same state the column headings set (null is the list's own, manual order). */
-const SORTS: [string | null, string][] = [[null, "Manual order"], ["due", "Due date"], ["subject", "Subject"], ["ctx", "Context"], ["time", "Time estimate"], ["energy", "Energy"]];
+const SORTS: [string | null, string][] = [[null, "Manual order"], ["defer", "Do on"], ["subject", "Subject"], ["ctx", "Context"], ["time", "Time estimate"], ["energy", "Energy"]];
 
 /**
  * A subject edited in place. `onPasteLines` gets a pasted text of several lines (and what the field held): when it
@@ -81,9 +81,9 @@ export function InlineEdit({
 
 /** Grouping choices per list: no project grouping where the Projects list already does that job. */
 function groupOptions(mode: Mode): GroupBy[] {
-  if (mode === "next") return ["context", "project", "due", "none"];
-  if (mode === "waiting") return ["who", "project", "context", "due", "none"];
-  if (mode === "someday") return ["project", "context", "due", "none"];
+  if (mode === "next") return ["context", "project", "none"];
+  if (mode === "waiting") return ["who", "project", "context", "none"];
+  if (mode === "someday") return ["project", "context", "none"];
   return ["none"];
 }
 
@@ -98,17 +98,6 @@ function rowsFor(s: State, mode: Mode, showDeferred: boolean, showDone: boolean)
     return s.actions.filter((a) => (a.status === "next" && !onHold(a, s) && (showDeferred || !isDeferred(a, t))) || isChase(a, t) || (showDone && doneHere(a, mode)));
   }
   return s.actions.filter((a) => (a.status === mode && !(mode === "waiting" && onHold(a, s))) || (showDone && doneHere(a, mode)));
-}
-
-function dueBucket(a: Action): [number, string] {
-  if (!a.due) return [9, "No due date"];
-  const d = daysBetween(today(), a.due);
-  if (d < 0) return [0, "Overdue"];
-  if (d === 0) return [1, "Today"];
-  if (d === 1) return [2, "Tomorrow"];
-  if (d < 7) return [3, "This week"];
-  if (d < 31) return [4, "Within a month"];
-  return [5, "Later"];
 }
 
 export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: boolean }) {
@@ -155,7 +144,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       subject: (a) => a.title,
       ctx: (a) => ctxById.get(a.context_id ?? "")?.name,
       proj: (a) => (a.project_id ? projById.get(a.project_id)?.title : undefined),
-      due: (a) => a.due,
       defer: (a) => a.defer,
       time: (a) => a.time_min,
       energy: (a) => a.energy,
@@ -217,10 +205,9 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         order = c ? `0${String(c.sort).padStart(4, "0")}` : "9";
         color = c?.color;
       } else {
-        const [o, l] = dueBucket(a);
-        key = l;
-        label = l;
-        order = String(o);
+        key = "all";
+        label = "";
+        order = "0";
       }
       const g = map.get(key) ?? { label, order, color, meta, rows: [] };
       g.rows.push(a);
@@ -331,7 +318,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
             { id: "fit-energy", label: fit?.energy ? "How is your energy? (change)…" : "How is your energy?…", hint: "What fits now", section: "show" },
           ]
         : []),
-      ...(mode === "next" ? [{ id: "deferred", label: showDeferred ? "Hide deferred actions" : `Show deferred actions (${deferredCount})`, section: "show" }] : []),
+      ...(mode === "next" ? [{ id: "deferred", label: showDeferred ? "Hide actions for later days" : `Show actions for later days (${deferredCount})`, section: "show" }] : []),
       ...(mode === "done" ? [] : [{ id: "showdone", label: showDone ? `Hide done actions${doneCount ? ` (${doneCount})` : ""}` : `Show done actions${doneCount ? ` (${doneCount})` : ""}`, section: "done" }]),
       ...(mode === "done" || !doneCount ? [] : [{ id: "archive", label: `Archive done actions to Done (${doneCount})`, section: "done" }]),
       ...(mode === "done" ? [{ id: "g:none", label: "Group by day", hint: groupBy === "none" ? "Current" : "", section: "group" }, { id: "g:project", label: "Group by project", hint: groupBy === "project" ? "Current" : "", section: "group" }] : []),
@@ -357,9 +344,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
   // Drag to reorder while the list is in its own (manual) order: the row takes a sort value between its new
   // neighbours, so nothing else moves. Done rows stay put at the bottom.
   // Dropped into another group, an action takes on what that group stands for (its context, who it waits on, its
-  // project, its importance or a due date). null refuses the drop: a next action needs a context, and "Overdue" has no date to give.
+  // or project). null refuses the drop: a next action needs a context.
   const groupPatch = (groupKey: string): Partial<Action> | null => {
-    const t = today();
     switch (groupBy) {
       case "context":
         // Nothing is dropped into "To chase": an item gets there by its follow-up date, not by being moved.
@@ -369,10 +355,6 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
         return groupKey === "none" ? { waiting_who: null } : { waiting_who: groups.find((g) => g.key === groupKey)?.label ?? null };
       case "project":
         return { project_id: groupKey === "none" ? null : groupKey };
-      case "due":
-        return (
-          ({ Today: { due: t }, Tomorrow: { due: addDays(t, 1) }, "This week": { due: addDays(t, 2) }, "Within a month": { due: addDays(t, 7) }, Later: { due: addDays(t, 31) }, "No due date": { due: null } } as Record<string, Partial<Action>>)[groupKey] ?? null
-        );
       default:
         return {};
     }
@@ -427,7 +409,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
           { id: "view.fit", label: fit ? "Change what fits now" : "Show what fits where you are", group: "View", keys: ["f"], run: () => openFit(ui) },
           // Allen's next two questions, there when wanted (no key: F asks only where you are).
           { id: "view.fittime", label: "Show what fits your time", group: "View", run: () => askTime(ui) },
-          { id: "view.deferred", label: showDeferred ? "Hide deferred actions" : "Show deferred actions", group: "View", run: () => setShowDeferred(!showDeferred) },
+          { id: "view.deferred", label: showDeferred ? "Hide actions for later days" : "Show actions for later days", group: "View", run: () => setShowDeferred(!showDeferred) },
           { id: "view.fitenergy", label: "Show what fits your energy", group: "View", run: () => askEnergy(ui) },
           ...(fit ? [{ id: "view.fitoff", label: "Show every next action", group: "View", run: () => setFit(null) }] : []),
         ]
@@ -482,7 +464,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
             {a.recurrence && <Repeat size={12} strokeWidth={2} aria-label="Repeats" />}
             {a.notes && <AlignLeft className="ind-notes" size={12} strokeWidth={2} aria-label="Has notes" />}
             {filesByOwner.has(a.id) && <Paperclip className="ind-files" size={12} strokeWidth={2} aria-label="Has files" />}
-            {a.defer && a.defer > t && <Clock size={12} strokeWidth={2} aria-label={`Starts ${formatLong(a.defer)}`} />}
+            {a.defer && a.defer > t && <Clock size={12} strokeWidth={2} aria-label={`Do on ${formatLong(a.defer)}`} />}
             {a.status === "someday" && a.bring_back && (
               <span className="back-on" title={`Comes back to the Inbox on ${formatLong(a.bring_back)}`}>
                 <CalendarClock size={12} strokeWidth={2} aria-hidden /> {formatDate(a.bring_back)}
@@ -530,7 +512,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
     },
   };
   const backCol: Column<Action> = { key: "back", label: "Bring back", width: "100px", blank: (a) => !a.bring_back, render: (a) => <DateCell date={a.bring_back} kind="plain" /> };
-  const dueCol: Column<Action> = { key: "due", label: "Due", width: "100px", render: (a) => <DateCell date={a.due} /> };
+  // The one date (owner's decision): the day to do it; a day passed with the action still open is late, in red.
+  const doOnCol: Column<Action> = { key: "defer", label: "Do on", width: "100px", blank: (a) => !a.defer, render: (a) => <DateCell date={a.defer} kind={a.status === "next" ? "doon" : "plain"} /> };
   let columns: Column<Action>[];
   if (mode === "waiting") {
     columns = [
@@ -542,13 +525,12 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       { key: "follow", label: "Follow up", width: "100px", blank: (a) => !a.followup, render: (a) => <DateCell date={a.followup} /> },
       projCol,
       { ...ctxCol, optional: true },
-      { ...dueCol, optional: true },
       areaCol,
       createdCol,
       updatedCol,
     ];
   } else if (mode === "someday") {
-    columns = [marker, doneCol, subject, ...(groupBy === "project" ? [] : [projCol]), ctxCol, backCol, { ...dueCol, optional: true }, areaCol, createdCol, updatedCol];
+    columns = [marker, doneCol, subject, ...(groupBy === "project" ? [] : [projCol]), ctxCol, backCol, areaCol, createdCol, updatedCol];
   } else if (mode === "done") {
     columns = [
       marker,
@@ -568,8 +550,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       subject,
       ...(groupBy === "context" ? [] : [ctxCol]),
       ...(groupBy === "project" ? [] : [projCol]),
-      dueCol,
-      { key: "defer", label: "Start", width: "100px", drop: 1, blank: (a) => !a.defer, render: (a) => <DateCell date={a.defer} kind="defer" /> },
+      doOnCol,
       { key: "time", label: "Time", width: "52px", align: "end", drop: 3, render: (a) => <TimeCell min={a.time_min} /> },
       { key: "energy", label: "Energy", width: "62px", drop: 2, render: (a) => <Energy level={a.energy} /> },
       areaCol,

@@ -52,7 +52,7 @@ export interface Project {
   sort: number;
   created_at: string;
   completed_at: string | null;
-  /** The day work on it starts; with a due date the calendar draws it as a bar between them. */
+  /** "Do on": the day to begin it; off Projects until then (owner's decision, 8 October). Due dates are no longer used. */
   start?: string | null;
   /** Natural planning (GTD): why it matters (its purpose) and the ideas for it (the brainstorm). "Done looks like" is `outcome`. */
   purpose?: string;

@@ -59,7 +59,7 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
 
   const [sort, setSort] = useSort("agendas");
   const sorters: Sorters<Row> = useMemo(
-    () => ({ subject: (r) => r.a.title, what: (r) => (r.side === "theirs" ? "~" : (ctxById.get(r.a.context_id ?? "")?.name ?? "")), project: (r) => projById.get(r.a.project_id ?? "")?.title ?? "", date: (r) => (r.side === "theirs" ? r.a.followup : r.a.due) }),
+    () => ({ subject: (r) => r.a.title, what: (r) => (r.side === "theirs" ? "~" : (ctxById.get(r.a.context_id ?? "")?.name ?? "")), project: (r) => projById.get(r.a.project_id ?? "")?.title ?? "", date: (r) => (r.side === "theirs" ? r.a.followup : r.a.defer) }),
     [ctxById, projById],
   );
   const groups: GridGroup<Row>[] = useMemo(
@@ -168,8 +168,8 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
       render: (r) => (r.side === "theirs" ? <span className="muted-text">Waiting{r.a.waiting_since ? ` since ${formatDate(r.a.waiting_since)}` : ""}</span> : <ContextCode ctx={ctxById.get(r.a.context_id ?? "")} />),
     },
     { key: "project", label: "Project", width: "minmax(120px, 1fr)", drop: 1, blank: (r) => !r.a.project_id, render: (r) => <span className="muted-text">{projById.get(r.a.project_id ?? "")?.title ?? ""}</span> },
-    // Yours by its due date; theirs by when to follow up.
-    { key: "date", label: "Due / follow up", width: "112px", render: (r) => <DateCell date={r.side === "theirs" ? r.a.followup : r.a.due} /> },
+    // Yours by the day to do it; theirs by when to follow up.
+    { key: "date", label: "Do on / follow up", width: "120px", render: (r) => <DateCell date={r.side === "theirs" ? r.a.followup : r.a.defer} kind={r.side === "theirs" ? "due" : "doon"} /> },
   ];
 
   return (

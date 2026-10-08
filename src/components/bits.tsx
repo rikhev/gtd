@@ -93,7 +93,7 @@ export function Lamp({ health, start, appt }: { health: keyof typeof HEALTH_LABE
     health !== "scheduled"
       ? HEALTH_LABEL[health]
       : start && start > today()
-        ? `Not started yet: starts ${formatLong(start)}`
+        ? `Not started yet: do on ${formatLong(start)}`
         : appt
           ? `Next: ${appt.title}, ${appt.date === today() ? "today" : formatLong(appt.date)}${appt.time ? ` ${appt.time}` : ""}`
           : HEALTH_LABEL.scheduled;
@@ -162,16 +162,21 @@ export function AreaName({ name, color }: { name: string; color?: string | null 
   return <Named mark="#" name={name} color={color} />;
 }
 
-export function DateCell({ date, kind = "due" }: { date: string | null; kind?: "due" | "defer" | "plain" }) {
+/**
+ * A date in a list cell. "doon", a next action's day to do it: passed, it is late (red); today, it reads in ink. "due",
+ * a follow-up: passed, it is to chase. "plain" is just the date.
+ */
+export function DateCell({ date, kind = "due" }: { date: string | null; kind?: "due" | "doon" | "plain" }) {
   if (!date) return <span className="dash" aria-hidden="true">–</span>;
   const d = daysBetween(today(), date);
-  const overdue = kind === "due" && d < 0;
-  const soon = kind === "due" && d >= 0 && d <= 1;
+  const past = kind !== "plain" && d < 0;
+  const word = kind === "doon" ? "late" : "to chase";
+  const soon = kind !== "plain" && d >= 0 && d <= (kind === "doon" ? 0 : 1);
   return (
-    <span className={`date ${overdue ? "is-overdue" : ""} ${soon ? "is-soon" : ""}`} title={overdue ? `${formatLong(date)}, overdue` : formatLong(date)}>
+    <span className={`date ${past ? "is-overdue" : ""} ${soon ? "is-soon" : ""}`} title={past ? `${formatLong(date)}, ${word}` : formatLong(date)}>
       {formatDate(date)}
       {/* Colour alone doesn't reach a screen reader. */}
-      {overdue && <span className="visually-hidden">, overdue</span>}
+      {past && <span className="visually-hidden">, {word}</span>}
     </span>
   );
 }

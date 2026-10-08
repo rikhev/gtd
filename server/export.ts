@@ -14,8 +14,7 @@ function actionLine(s: State, a: Action): string {
   const proj = s.projects.find((p) => p.id === a.project_id)?.title;
   if (ctx) bits.push(ctx);
   if (proj) bits.push(`project: ${proj}`);
-  if (a.due) bits.push(`due ${a.due}`);
-  if (a.defer) bits.push(`start ${a.defer}`);
+  if (a.defer) bits.push(`do on ${a.defer}`);
   if (a.time_min) bits.push(formatTime(a.time_min));
   if (a.energy) bits.push(["", "low", "medium", "high"][a.energy] + " energy");
   if (a.waiting_who) bits.push(`waiting on ${a.waiting_who} since ${a.waiting_since ?? "?"}`);

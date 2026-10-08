@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { Search, Check, LogOut, Plus, Menu, X, ArrowUp } from "lucide-react";
-import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, onHold } from "../store.ts";
+import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, isLate, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { useCommands, keyLabel, keyAria, IS_MAC, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
 import { Kbd } from "./bits.tsx";
@@ -70,7 +70,8 @@ function useRailSignals() {
   const sig = useMemo(() => {
     const inboxItems = s.stuff.filter((x) => x.status === "inbox");
     const nextActs = s.actions.filter((a) => a.status === "next" && !onHold(a, s));
-    const overdue = nextActs.filter((a) => a.due && a.due < t).length;
+    // Late: next actions whose day to do them has passed (owner's decision: one date, Do on).
+    const late = nextActs.filter((a) => isLate(a, t)).length;
     const chase = s.actions.filter((a) => isChase(a, t)).length;
     const stalled = s.projects.filter((p) => isStalled(s, p)).length;
     const doneToday = s.actions.filter((a) => a.status === "done" && a.completed_at && a.completed_at.slice(0, 10) === t).length;
@@ -79,23 +80,22 @@ function useRailSignals() {
     // The oldest thing in the whole system: a review is only "due" once there is a week's worth to review.
     const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
     const systemAge = firstDay ? daysBetween(firstDay.slice(0, 10), t) : 0;
-    // The hard landscape only, as the Calendar shows it by default: what is due today (day-specific actions included)
-    // and follow-ups due today; starts are soft dates (GTD audit).
+    // What the Calendar holds for today: actions and projects to do today, and follow-ups to make today.
     const scheduled =
-      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && !onHold(a, s) && (a.due === t || (a.status === "waiting" && a.followup === t))).length +
-      s.projects.filter((p) => p.status === "active" && p.due === t).length;
-    return { inbox: inboxItems.length, overdue, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
+      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && !onHold(a, s) && ((a.status === "next" && a.defer === t) || (a.status === "waiting" && a.followup === t))).length +
+      s.projects.filter((p) => p.status === "active" && p.start === t).length;
+    return { inbox: inboxItems.length, late, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);
   const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
     if (id === "inbox") return sig.inbox ? { text: String(sig.inbox) } : null;
-    if (id === "next") return sig.overdue ? { text: `${sig.overdue} overdue`, tone: "due" } : null;
+    if (id === "next") return sig.late ? { text: `${sig.late} late`, tone: "due" } : null;
     if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
     if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
-    // What today's landscape holds: things due or starting today.
+    // What today holds: what is to be done today (actions and projects on their day, follow-ups).
     // What the hard landscape asks of today; "today" stays Done's word for what was finished (rail critique).
-    if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} due`, tone: "quiet" } : null;
+    if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} to do`, tone: "quiet" } : null;
     return null;
   };
 
@@ -481,8 +481,8 @@ export function PhoneChrome() {
   // The buttons step aside while a details sheet, a picker or the viewer has the screen.
   const covered = ui.detail || ui.pickerOpen || ui.viewer;
   const inboxLabel = sig.inbox ? `, ${sig.inbox} in the Inbox` : "";
-  // Something asks for attention elsewhere (overdue, to chase, stalled): a small red dot, when the Inbox has no count.
-  const asks = sig.overdue + sig.chase + sig.stalled > 0;
+  // Something asks for attention elsewhere (late, to chase, stalled): a small red dot, when the Inbox has no count.
+  const asks = sig.late + sig.chase + sig.stalled > 0;
 
   return (
     <>

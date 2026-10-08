@@ -54,7 +54,7 @@ function runTickler() {
 
 app.get("/api/state", (c) => {
   runTickler();
-  return c.json({ state: loadState(), meta: { today: today(), stallWeeks: stallWeeks(), scheduledHide: scheduledHide(), trashDays: trashDays(), weekStart: weekStart(), calendars: feedInfo(), dayHours: dayHours(), lock: lockKey() } });
+  return c.json({ state: loadState(), meta: { today: today(), stallWeeks: stallWeeks(), trashDays: trashDays(), weekStart: weekStart(), calendars: feedInfo(), dayHours: dayHours(), lock: lockKey() } });
 });
 
 app.post("/api/ops", async (c) => {
@@ -291,19 +291,6 @@ app.put("/api/settings/stall", async (c) => {
   if (!(w >= 1 && w <= 52)) return c.json({ error: "Choose between 1 and 52 weeks" }, 400);
   setSetting("stallWeeks", String(w));
   return c.json({ stallWeeks: w });
-});
-
-/** How far ahead a project's start date must be before "Hide scheduled projects" hides it: past today, this week (the default), next week or this month. */
-const HORIZONS = ["day", "week", "nextweek", "month"] as const;
-const scheduledHide = () => {
-  const v = getSetting("scheduledHide", "week");
-  return (HORIZONS as readonly string[]).includes(v) ? v : "week";
-};
-app.put("/api/settings/scheduled", async (c) => {
-  const { after } = (await c.req.json().catch(() => ({}))) as { after?: string };
-  if (!after || !(HORIZONS as readonly string[]).includes(after)) return c.json({ error: "Choose today, this week, next week or this month" }, 400);
-  setSetting("scheduledHide", after);
-  return c.json({ scheduledHide: after });
 });
 
 /** The calendar's first day of the week: 1 Monday (the default), 0 Sunday. */

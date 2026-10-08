@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { quote, archiveProjects, getState, isCurrentStep, scheduledBeyond, useMeta, HORIZON_LABEL, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, startsToday, useStore } from "../store.ts";
+import { quote, archiveProjects, getState, isCurrentStep, scheduledBeyond, isStalled, mutate, named, newAction, newProject, nextAppointment, notStarted, patchMany, plural, projectHealth, stamp, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -126,10 +126,10 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         onPick: (id) => patchMany("projects", ids, { area_id: id }, `${n(ids)} → ${areaName(getState().areas.find((a) => a.id === id)?.name) ?? "no area"}`),
       });
     },
-    date(ids: ID[], field: "due" | "start" | "bring_back") {
+    date(ids: ID[], field: "start" | "bring_back") {
       if (!ids.length) return;
-      const title = { due: "Project due date", start: "Project starts on", bring_back: "Bring back to the Inbox on" }[field];
-      const what = { due: "due", start: "starts", bring_back: "bring back" }[field];
+      const title = { start: "Do on", bring_back: "Bring back to the Inbox on" }[field];
+      const what = { start: "do on", bring_back: "bring back" }[field];
       ui.openPicker({
         type: "date",
         title,
@@ -246,12 +246,10 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
   // A completed project stays here, struck through at the bottom of its area, until archived to Done (⇧E), as on every list.
   const [showDone, setShowDone] = usePersisted("showdone:projects", true);
   const doneHere = useMemo(() => s.projects.filter((p) => p.status === "done" && !p.archived_at).map((p) => p.id), [s.projects]);
-  // Scheduled projects can be hidden (owner's request): those starting after the horizon set in Settings (this week by
-  // default; owner's decision: one starting this week should stay in sight). Once its start comes within it, it is back.
-  const [showScheduled, setShowScheduled] = usePersisted("projects:scheduled", true);
-  // Only projects starting beyond the horizon set in Settings (this week by default) count: one starting soon stays in sight.
-  const { scheduledHide } = useMeta();
-  const scheduledCount = useMemo(() => s.projects.filter((p) => (p.status === "active" || (filter !== "active" && p.status === "someday")) && scheduledBeyond(p)).length, [s.projects, filter, scheduledHide]);
+  // A project with a day still ahead (Do on) is off the list until then (owner's decision, 8 October: it isn't there to
+  // work on yet); the View menu shows them.
+  const [showScheduled, setShowScheduled] = usePersisted("projects:later", false);
+  const scheduledCount = useMemo(() => s.projects.filter((p) => (p.status === "active" || (filter !== "active" && p.status === "someday")) && scheduledBeyond(p)).length, [s.projects, filter]);
   const [striking, setStriking] = useState<Set<ID>>(new Set());
   const rows = useMemo(
     () =>
@@ -260,7 +258,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         .filter((p) => showScheduled || !scheduledBeyond(p))
         .filter((p) => !areas || inAreas(p.area_id, areas))
         .sort((a, b) => a.sort - b.sort),
-    [s.projects, filter, showScheduled, showDone, areas, scheduledHide],
+    [s.projects, filter, showScheduled, showDone, areas],
   );
   const openCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -280,7 +278,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       if (a.project_id && a.status === "waiting" && !m.has(a.project_id)) m.set(a.project_id, `Waiting · ${a.waiting_who ?? "someone"}`);
     });
     sorted.forEach((a) => {
-      if (a.project_id && a.status === "next" && a.defer && !m.has(a.project_id)) m.set(a.project_id, `Starts ${formatLong(a.defer)}: ${a.title}`);
+      if (a.project_id && a.status === "next" && a.defer && !m.has(a.project_id)) m.set(a.project_id, `Do on ${formatLong(a.defer)}: ${a.title}`);
     });
     return m;
   }, [s.actions]);
@@ -300,7 +298,6 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       area: (p) => (p.area_id ? areaById.get(p.area_id)?.name : undefined),
       next: (p) => firstNext.get(p.id),
       open: (p) => openCount.get(p.id) ?? 0,
-      due: (p) => p.due,
       start: (p) => p.start,
       back: (p) => p.bring_back,
       created: (p) => p.created_at,
@@ -400,8 +397,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.done", row: true, label: "Complete project", group: "Projects", keys: ["e"], enabled: has, run: () => toggleDone(nav.targets()) },
     { id: "proj.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
     { id: "proj.goal", row: true, label: "Set the goal it serves", group: "Fields", keys: ["g"], enabled: has, run: () => pickGoal(ui, nav.targets()) },
-    { id: "proj.due", row: true, label: "Set due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },
-    { id: "proj.start", row: true, label: "Set start date", group: "Fields", keys: ["s"], enabled: has, run: () => ed.date(nav.targets(), "start") },
+    { id: "proj.start", row: true, label: "Set the day to do it", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "start") },
     { id: "proj.back", row: true, label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: has && s.projects.find((p) => p.id === focusId)?.status === "someday", run: () => ed.date(nav.targets(), "bring_back") },
     { id: "proj.move", row: true, label: "Move or merge", group: "Projects", keys: ["v"], enabled: has, run: () => ed.move(nav.targets()) },
     { id: "proj.trash", row: true, label: "Trash project", group: "Projects", keys: ["backspace", "delete"], enabled: has, run: () => ed.trash(nav.targets(), false) },
@@ -420,11 +416,11 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           items: [
             { id: "area", label: groupByArea ? "Don't group by area" : "Group by area", section: "group" },
             { id: "s:mark", label: "Sort by status", hint: sort?.key === "mark" ? "Current" : "", section: "sort" },
-            { id: "s:due", label: "Sort by due date", hint: sort?.key === "due" ? "Current" : "", section: "sort" },
+            { id: "s:start", label: "Sort by Do on", hint: sort?.key === "start" ? "Current" : "", section: "sort" },
             { id: "s:", label: "Manual order", hint: !sort ? "Current" : "", section: "sort" },
             { id: "areas", label: areas ? `Areas: ${areaFilterLabel(areas)}` : "Filter by area…", hint: areas ? "On" : "", section: "show" },
             { id: "filter", label: filter === "active" ? "Show someday projects too" : "Show active projects only", section: "show" },
-            { id: "scheduled", label: showScheduled ? `Hide scheduled projects${scheduledCount ? ` (${scheduledCount})` : ""}` : `Show scheduled projects${scheduledCount ? ` (${scheduledCount})` : ""}`, section: "show" },
+            { id: "scheduled", label: showScheduled ? "Hide projects for later days" : `Show projects for later days${scheduledCount ? ` (${scheduledCount})` : ""}`, section: "show" },
             { id: "showdone", label: `${showDone ? "Hide" : "Show"} completed projects${doneHere.length ? ` (${doneHere.length})` : ""}`, section: "done" },
             ...(doneHere.length ? [{ id: "archive", label: `Archive completed projects to Done (${doneHere.length})`, section: "done" }] : []),
           ],
@@ -441,7 +437,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     },
     { id: "proj.archive", label: `Archive completed projects to Done${doneHere.length ? ` (${doneHere.length})` : ""}`, group: "Projects", enabled: doneHere.length > 0, run: () => archiveProjects(doneHere) },
     { id: "proj.showdone", label: showDone ? "Hide completed projects" : "Show completed projects", group: "View", run: () => setShowDone(!showDone) },
-    { id: "proj.scheduled", label: showScheduled ? "Hide scheduled projects" : "Show scheduled projects", group: "View", run: () => setShowScheduled(!showScheduled) },
+    { id: "proj.scheduled", label: showScheduled ? "Hide projects for later days" : "Show projects for later days", group: "View", run: () => setShowScheduled(!showScheduled) },
     { id: "proj.areas", label: areas ? "Filter by area (change or clear)" : "Filter by area", group: "View", keys: ["f"], run: () => openAreaFilter(ui) },
     ...(areas ? [{ id: "proj.areasoff", label: "Show every area", group: "View", run: () => setAreaFilter([]) }] : []),
   ];
@@ -503,26 +499,22 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       label: "Next action",
       width: "minmax(160px, 1fr)",
       drop: 3,
-      // A project that hasn't begun says when it does instead of an empty cell; on its start day, without a next
-      // action, it asks for one.
+      // A project whose day is still ahead says when instead of an empty cell.
       render: (p) =>
         firstNext.get(p.id) ? (
           <span className="muted-text">{firstNext.get(p.id)}</span>
         ) : notStarted(p) ? (
-          <span className="muted-text">Starts {formatLong(p.start!)}</span>
+          <span className="muted-text">Do on {formatLong(p.start!)}</span>
         ) : nextAppointment(s, p) ? (
           // With no next action, a linked appointment is the next step: what, and when.
           <span className="muted-text">{apptLine(nextAppointment(s, p)!)}</span>
-        ) : startsToday(p) && p.status === "active" ? (
-          <span className="starts-today">Starts today: add a next action</span>
         ) : (
           <span className="dash" aria-hidden="true">–</span>
         ),
     },
     { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
-    { key: "due", label: "Due", width: "100px", render: (p) => <DateCell date={p.due} /> },
     // Offered but hidden until shown (right-click a heading, or ⌘K › Show or hide columns…).
-    { key: "start", label: "Start", width: "100px", optional: true, render: (p) => <DateCell date={p.start ?? null} kind="plain" /> },
+    { key: "start", label: "Do on", width: "100px", optional: true, render: (p) => <DateCell date={p.start ?? null} kind="plain" /> },
     { key: "back", label: "Bring back", width: "100px", optional: true, render: (p) => <DateCell date={p.bring_back} kind="plain" /> },
     { key: "created", label: "Created", width: "100px", optional: true, render: (p) => <DateCell date={p.created_at.slice(0, 10)} kind="plain" /> },
   ];
@@ -584,7 +576,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         areas ? (
           <EmptyState title={`No projects in ${areaFilterLabel(areas)}`} lines={["Choose other areas, or show every area."]} action={{ label: "Show every area", run: () => setAreaFilter([]) }} />
         ) : !showScheduled && scheduledCount ? (
-          <EmptyState title="Nothing to act on yet" lines={[`${plural(scheduledCount, "scheduled project")} hidden: ${scheduledCount === 1 ? "it starts" : "they start"} after ${HORIZON_LABEL[scheduledHide].toLowerCase()}.`]} action={{ label: "Show scheduled projects", run: () => setShowScheduled(true) }} />
+          <EmptyState title="Nothing to act on yet" lines={[`${plural(scheduledCount, "project")} for later days, hidden until ${scheduledCount === 1 ? "its day" : "their days"}.`]} action={{ label: "Show projects for later days", run: () => setShowScheduled(true) }} />
         ) : (
           <EmptyState title="No projects yet" lines={["Start one here, or make one when you clarify your Inbox."]} action={{ label: "New project", run: create }} />
         )

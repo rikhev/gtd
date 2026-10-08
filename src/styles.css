@@ -267,11 +267,6 @@ a:hover {
 .dash {
   color: var(--ink-3);
 }
-/* A project on its start day with no next action yet: a prompt, not an alarm. */
-.starts-today {
-  color: var(--ink);
-  font-weight: 600;
-}
 /* In a list an empty cell is just empty: a column of dashes drowns the few values that matter. Fields in the
    detail pane and Clarify keep their dash, where it marks a value that can be set. */
 .row .cell .dash {
@@ -4505,9 +4500,6 @@ textarea.field-text {
   background: none;
   box-shadow: inset 0 0 0 1.25px var(--ink-2);
 }
-.cal-dots i.is-deadline {
-  background: var(--ink);
-}
 .cal-dots i.is-due {
   background: var(--alert);
 }
@@ -5115,80 +5107,31 @@ textarea.field-text {
 .cal-bar.is-overdue.is-quiet {
   border-color: transparent;
 }
-/* A due date is a deadline and must be seen at once: an item with only a due date is inked solid (red when overdue),
-   and every due end, alone or at the end of a span, carries the planner's milestone mark: a solid diamond. An item
-   with only a start date is a plain bar. */
-.cal-bar.has-due-end {
-  padding-right: 18px;
-}
-.cal-bar.has-due-end::after {
-  content: "";
-  position: absolute;
-  right: 7px;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  margin-top: -3.5px;
-  transform: rotate(45deg);
-  border-radius: 1px;
-  background: var(--ink);
-  pointer-events: none;
-}
-.cal-bar.has-due-end.is-overdue::after {
-  background: var(--alert);
-}
-.cal-bar.role-due::after,
-.cal-bar.role-due.is-overdue::after {
-  background: var(--sheet);
-}
-.cal-bar.role-due {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--sheet);
-}
-.cal-bar.role-due.is-overdue {
-  background: var(--alert);
-  border-color: var(--alert);
-  color: var(--sheet);
-}
-.cal-bar.role-due .cal-sub {
-  color: color-mix(in srgb, var(--sheet) 72%, transparent);
-}
-.cal-bar.role-due:hover {
-  border-color: var(--ink);
-}
-/* Focused, a due item keeps its diamond so the deadline never disappears under the selection. */
-.cal-bar.role-due.is-focus {
-  background: var(--select);
-  border-color: var(--cursor-edge);
-  color: var(--select-ink);
-}
-.cal-bar.role-due.is-focus::after {
-  background: var(--ink);
-}
-.cal-bar.role-due.is-focus.is-overdue::after {
-  background: var(--alert);
-}
-
-/* A day-specific action (start and due the same day) is the day's plan, not a deadline: outlined in ink on the sheet,
-   no diamond, so a day with three planned calls doesn't read as three deadlines. */
-.cal-bar.role-due.is-dayspecific {
+/* A Do on day is the day's plan, not a deadline (owner's decision, 8 October: one date, no due dates): outlined in
+   ink on the sheet, so a day with three planned calls doesn't read as three deadlines; red when the day has passed
+   with the action still open (late); the cursor's blue when focused. */
+.cal-bar.role-day {
   background: var(--sheet);
   border-color: var(--ink-2);
   color: var(--ink);
 }
-.cal-bar.role-due.is-dayspecific .cal-sub {
+.cal-bar.role-day .cal-sub {
   color: var(--ink-2);
 }
-.cal-bar.role-due.is-dayspecific::after {
-  display: none;
+.cal-bar.role-day:hover {
+  border-color: var(--ink);
 }
-.cal-bar.role-due.is-dayspecific.is-overdue {
+.cal-bar.role-day.is-overdue {
   background: var(--sheet);
   border-color: var(--alert);
   color: var(--alert);
 }
-/* Today's cell says what is overdue, in Week and Month: a small alert count that opens the Day tab. */
+.cal-bar.role-day.is-focus {
+  background: var(--select);
+  border-color: var(--cursor-edge);
+  color: var(--select-ink);
+}
+/* Today's cell says what is late, in Week and Month: a small alert count that opens the Day tab. */
 .cal-overdue {
   position: absolute;
   right: 6px;
@@ -5331,9 +5274,6 @@ body.is-cal-dragging {
 }
 .cal-row.is-week .cal-sub {
   font-size: var(--fs-tag);
-}
-.cal-row.is-week .cal-bar.has-due-end {
-  padding-right: 22px;
 }
 .cal-dayhead {
   display: flex;
@@ -6011,9 +5951,6 @@ body.is-cal-dragging {
   gap: var(--sp-sm);
   padding: 0 7px;
   font-size: var(--fs-small);
-}
-.cal-row.is-week.is-band .cal-bar.has-due-end {
-  padding-right: 20px;
 }
 .cal-row.is-week.is-band {
   flex: none;

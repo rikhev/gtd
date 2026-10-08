@@ -641,8 +641,9 @@ export default function App() {
   const deferredNext = s.actions.filter((a) => a.status === "next" && !onHold(a, s) && isDeferred(a, t)).length;
   const fitNow = useFit();
   const areaFilter = useAreaFilter();
-  const activeProjects = s.projects.filter((p) => p.status === "active");
-  const scheduledProjects = activeProjects.filter((p) => notStarted(p, t) && (!areaFilter || inAreas(p.area_id, areaFilter))).length;
+  // Projects on the list now: active, and not waiting for a day still ahead (those are off it, counted as "later").
+  const activeProjects = s.projects.filter((p) => p.status === "active" && !notStarted(p, t));
+  const scheduledProjects = s.projects.filter((p) => p.status === "active" && notStarted(p, t) && (!areaFilter || inAreas(p.area_id, areaFilter))).length;
   const nextShown = s.actions.filter((a) => (a.status === "next" && !onHold(a, s) && !isDeferred(a, t)) || isChase(a, t));
   // A count says how many there are; none is said by the list's empty state, so the heading carries no "0 items".
   const some = (n: number, noun: string) => (n ? plural(n, noun) : "");
@@ -650,23 +651,23 @@ export default function App() {
     inbox: some(inboxCount, "item"),
     // Clarifying, what is still to decide: it counts down as the list under the item empties.
     clarify: inboxCount ? `${inboxCount} left` : "",
-    // Deferred actions stay out of the count; the suffix says how many wait for their start date (⌥V shows them).
+    // Actions for a later day stay out of the count; the suffix says how many wait for their day (⌥V shows them).
     next: [
       // While What fits now is on, the count says how many of them fit.
       fitNow
         ? `${nextShown.filter((a) => fits(a, fitNow) === "fits").length} of ${plural(nextShown.length, "action")} fit`
         : some(nextShown.length, "action"),
-      ...(deferredNext ? [`${deferredNext} deferred`] : []),
+      ...(deferredNext ? [`${deferredNext} later`] : []),
     ]
       .filter(Boolean)
       .join(" · "),
     // While Projects is narrowed to areas, the count says how many of them are shown.
-    // A standing fact, as "· 1 deferred" on Next Actions: how many haven't started yet (they can be hidden).
+    // A standing fact, as "· 1 later" on Next Actions: how many wait for a day still ahead (off the list until then).
     projects: [
       areaFilter
         ? `${activeProjects.filter((p) => inAreas(p.area_id, areaFilter)).length} of ${plural(activeProjects.length, "active project")}`
         : some(activeProjects.length, "active project"),
-      ...(scheduledProjects ? [`${scheduledProjects} scheduled`] : []),
+      ...(scheduledProjects ? [`${scheduledProjects} later`] : []),
     ]
       .filter(Boolean)
       .join(" · "),

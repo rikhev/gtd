@@ -1,6 +1,6 @@
 import { clearEvents, type FeedInfo } from "../calendarFeed.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LIST_NAMES, quote, getMeta, mutate, notify, plural, refUpdated, updateMeta, useMeta, useStore, bareArea, HORIZON_LABEL, type Horizon } from "../store.ts";
+import { LIST_NAMES, quote, getMeta, mutate, notify, plural, refUpdated, updateMeta, useMeta, useStore, bareArea } from "../store.ts";
 import { formatDate, today } from "../../shared/dates.ts";
 import { excerpt } from "../notes.ts";
 import { importNotes } from "../noteImport.ts";
@@ -244,12 +244,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         ],
       },
       {
-        key: "projects",
-        label: "Projects",
-        hideCount: true,
-        rows: [{ key: "scheduled", kind: "scheduled" as const, id: "scheduled", text: "Hide scheduled starting after" }],
-      },
-      {
         key: "review",
         label: "Weekly Review",
         hideCount: true,
@@ -298,7 +292,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         rows: [...s.contexts].sort((a, b) => a.sort - b.sort).map((c) => ({ key: `c:${c.id}`, kind: "context" as const, id: c.id, text: c.name, color: c.color })),
       },
     ],
-    [s.contexts, s.areas, meta.stallWeeks, meta.scheduledHide, meta.trashDays, meta.weekStart, meta.calendars, meta.dayHours],
+    [s.contexts, s.areas, meta.stallWeeks, meta.trashDays, meta.weekStart, meta.calendars, meta.dayHours],
   );
   const shown = useMemo(() => groups.filter((g) => TAB_OF[g.key] === tab), [groups, tab]);
   // No group headings: the tab already says what the list is (owner's decision); each tab is one plain list.
@@ -388,22 +382,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             return { ok: true, text: `Idle after ${plural(n, "week")} untouched` };
           },
           onPick: (v) => void saveStallWeeks(Number(v.trim())),
-        }),
-    },
-    {
-      id: "set.scheduled",
-      row: true,
-      label: "Choose which scheduled projects to hide",
-      group: "Settings",
-      keys: ["enter", "f2"],
-      enabled: cur?.kind === "scheduled",
-      run: () =>
-        ui.openPicker({
-          type: "list",
-          title: "Hide scheduled projects starting after",
-          items: (Object.keys(HORIZON_LABEL) as Horizon[]).map((h) => ({ id: h, label: HORIZON_LABEL[h] })),
-          current: meta.scheduledHide,
-          onPick: (v) => v && void saveScheduledHide(v as Horizon),
         }),
     },
     {
@@ -758,11 +736,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
             <span className="subject-text strong">Keep deleted items</span>
             <span className="subject-more">How long the Trash keeps things before they are gone for good.</span>
           </span>
-        ) : r.kind === "scheduled" ? (
-          <span className="subject">
-            <span className="subject-text strong">Hide scheduled starting after</span>
-            <span className="subject-more">With Hide scheduled projects on, one starting later than this stays out of sight.</span>
-          </span>
         ) : r.kind === "stall" ? (
           <span className="subject">
             <span className="subject-text strong">Idle after</span>
@@ -785,8 +758,6 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
           valueBtn(r, <span>{theme.pref === "system" ? `System (${theme.dark ? "dark" : "light"})` : theme.pref === "dark" ? "Dark" : "Light"}</span>)
         ) : r.kind === "stall" ? (
           valueBtn(r, <span className="num">{plural(meta.stallWeeks, "week")}</span>)
-        ) : r.kind === "scheduled" ? (
-          valueBtn(r, <span>{HORIZON_LABEL[meta.scheduledHide]}</span>)
         ) : r.kind === "trash" ? (
           valueBtn(r, <span className="num">{plural(meta.trashDays, "day")}</span>)
         ) : r.kind === "week" ? (
@@ -932,15 +903,6 @@ async function saveTrashDays(days: number) {
   if (j.trashDays) {
     updateMeta({ trashDays: j.trashDays });
     notify(`Deleted items are now kept ${plural(j.trashDays, "day")}.`);
-  } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
-}
-
-async function saveScheduledHide(after: Horizon) {
-  const res = await fetch("/api/settings/scheduled", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ after }) });
-  const j = (await res.json()) as { scheduledHide?: Horizon; error?: string };
-  if (j.scheduledHide) {
-    updateMeta({ scheduledHide: j.scheduledHide });
-    notify(`Hide scheduled projects now hides those starting after ${HORIZON_LABEL[j.scheduledHide].toLowerCase()}.`);
   } else notify(j.error ?? "Couldn't save that.", { tone: "error" });
 }
 

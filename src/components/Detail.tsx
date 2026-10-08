@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Rea
 import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock, StickyNote } from "lucide-react";
 import { linesOf, noteAsList, openRefList, setForm, textOf, useRefText } from "../refList.ts";
 import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes } from "../lock.ts";
-import { type MutateOpts, getState, quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, startsToday, uid, upload, useMeta, useStore } from "../store.ts";
+import { type MutateOpts, getState, quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, uid, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
 import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
@@ -222,8 +222,7 @@ const DetailActive = createContext(false);
 const FIELD_COMMAND: Record<string, string> = {
   Context: "Set context",
   Project: "Set project",
-  Due: "Set due date",
-  Start: "Set start date",
+  "Do on": "Set the day to do it",
   Time: "Set time estimate",
   Energy: "Set energy",
   Repeat: "Set repeat",
@@ -269,13 +268,13 @@ function PickField({ label, children, onOpen, k }: { label: string; children: Re
   );
 }
 
-/** A due or follow-up date in the pane, styled and spoken like the list does when it has passed. */
-function DueLong({ date, done }: { date: string; done?: boolean }) {
-  const overdue = !done && date < today();
+/** A Do on or follow-up date in the pane, styled and spoken like the list does when it has passed (late, or a chase). */
+function DueLong({ date, done, word = "late" }: { date: string; done?: boolean; word?: string }) {
+  const past = !done && date < today();
   return (
-    <span className={`date ${overdue ? "is-overdue" : ""}`}>
+    <span className={`date ${past ? "is-overdue" : ""}`}>
       {formatLong(date)}
-      {overdue && <span className="visually-hidden">, overdue</span>}
+      {past && <span className="visually-hidden">, {word}</span>}
     </span>
   );
 }
@@ -436,17 +435,17 @@ function ActionDetail({ a }: { a: Action }) {
   // What kind of item this is decides its fields: a done or trashed item keeps the kind it had.
   const kind = (done ? a.done_from : a.status === "trashed" ? a.trashed_from : a.status) ?? "next";
   const waiting = kind === "waiting";
-  // Each kind shows only the fields it needs (owner's request): a next action is planned (context, dates, time,
-  // energy, repeat), a waiting item is chased (who, follow up, since, due), a someday item is parked (context, when to
-  // look at it again). Done, nothing is planned any more, so start, repeat and bring back go. A field a kind doesn't
-  // need still shows while it holds something, so nothing set is hidden.
+  // Each kind shows only the fields it needs (owner's request): a next action is planned (context, the day to do it,
+  // time, energy, repeat), a waiting item is chased (who, follow up, since), a someday item is parked (context, when
+  // to look at it again). Done, nothing is planned any more, so Do on, repeat and bring back go. A field a kind
+  // doesn't need still shows while it holds something, so nothing set is hidden.
   const NEEDS: Record<string, string[]> = {
-    next: ["context", "due", "start", "time", "energy", "repeat", "person"],
-    waiting: ["who", "followup", "since", "due"],
+    next: ["context", "doon", "time", "energy", "repeat", "person"],
+    waiting: ["who", "followup", "since"],
     someday: ["context", "back"],
   };
-  const needs = new Set((NEEDS[kind] ?? NEEDS.next).filter((f) => !(done && ["start", "repeat", "back"].includes(f))));
-  const has: Record<string, unknown> = { context: a.context_id, due: a.due, start: a.defer, time: a.time_min, energy: a.energy, repeat: a.recurrence, back: a.bring_back, person: a.person, who: a.waiting_who, followup: a.followup, since: a.waiting_since };
+  const needs = new Set((NEEDS[kind] ?? NEEDS.next).filter((f) => !(done && ["doon", "repeat", "back"].includes(f))));
+  const has: Record<string, unknown> = { context: a.context_id, doon: a.defer, time: a.time_min, energy: a.energy, repeat: a.recurrence, back: a.bring_back, person: a.person, who: a.waiting_who, followup: a.followup, since: a.waiting_since };
   const shown = (f: string) => needs.has(f) || Boolean(has[f]);
   const fields: [string, ReactNode][] = [
     [
@@ -462,16 +461,10 @@ function ActionDetail({ a }: { a: Action }) {
       </PickField>,
     ],
     [
-      "due",
-      // D is the follow-up on a waiting item, as on Waiting For's rows; its due date is a click or Tab away.
-      <PickField key="due" label="Due" k={waiting ? undefined : "D"} onOpen={() => ed.date([a.id], "due")}>
-        {a.due ? <DueLong date={a.due} done={done} /> : none}
-      </PickField>,
-    ],
-    [
-      "start",
-      <PickField key="start" label="Start" k="S" onOpen={() => ed.date([a.id], "defer")}>
-        {a.defer ? formatLong(a.defer) : none}
+      "doon",
+      // The one date (owner's decision): the day to do it. D, except on a waiting item, where D is the follow-up.
+      <PickField key="doon" label="Do on" k={waiting ? undefined : "D"} onOpen={() => ed.date([a.id], "defer")}>
+        {a.defer ? kind === "next" ? <DueLong date={a.defer} done={done} /> : formatLong(a.defer) : none}
       </PickField>,
     ],
     [
@@ -537,14 +530,14 @@ function ActionDetail({ a }: { a: Action }) {
     ],
   );
   // One grid for every kind (owner's request): a field keeps its place whatever the item is. Row by row: what it
-  // belongs to and who or where; when it comes up for you (start, follow up, or bring back) beside when it is due;
-  // time and energy; how it recurs (or, waiting, since when) beside who it is with. A row keeps an empty cell rather than letting a field
-  // slide across, so Due is always on the right. Fields this kind doesn't need but that hold a value follow.
-  const rows: [string, string | null][] = [
+  // belongs to and who or where; when it comes up for you (the day to do it, follow up, or bring back) beside how it
+  // recurs (or, waiting, since when); time and energy; who it is with. A row keeps an empty cell rather than letting a
+  // field slide across. Fields this kind doesn't need but that hold a value follow.
+  const rows: [string | null, string | null][] = [
     ["project", waiting ? "who" : "context"],
-    [waiting ? "followup" : kind === "someday" ? "back" : "start", "due"],
+    [waiting ? "followup" : kind === "someday" ? "back" : "doon", waiting ? "since" : "repeat"],
     ["time", "energy"],
-    [waiting ? "since" : "repeat", waiting ? null : "person"],
+    [waiting ? null : "person", null],
   ];
   const byKey = new Map(fields);
   const visible = (f: string | null): f is string => f !== null && (f === "project" || shown(f));
@@ -553,7 +546,7 @@ function ActionDetail({ a }: { a: Action }) {
   const layout: ReactNode[] = [];
   rows.forEach(([l, r], i) => {
     if (!visible(l) && !visible(r)) return;
-    layout.push(visible(l) ? byKey.get(l) : gap(`gl${i}`), r && visible(r) ? byKey.get(r) : gap(`gr${i}`));
+    layout.push(l && visible(l) ? byKey.get(l) : gap(`gl${i}`), r && visible(r) ? byKey.get(r) : gap(`gr${i}`));
   });
   for (const [f, el] of fields) if (!placed.has(f) && visible(f)) layout.push(el);
   return (
@@ -787,13 +780,12 @@ function ProjectDetail({ p }: { p: Project }) {
         <PickField label="Status" k="V" onOpen={() => ed.move([p.id])}>
           {{ active: "Active", someday: "Someday", done: "Done", trashed: "Trash" }[p.status]}
         </PickField>
-        {/* The same grid as an action's: when it comes up for you (start, or for a someday project when to look at it
-            again) on the left, Due always on the right. Each status shows the dates it needs; any date already set
-            still shows, after them, except bring back, which only a someday project has. */}
+        {/* The same grid as an action's: the day to do it (or, for a someday project, when to look at it again) on
+            the left. A someday project's Do on, if it has one, still shows after it. */}
         {(() => {
           const someday = p.status === "someday";
           const startF = (
-            <PickField key="start" label="Start" k="S" onOpen={() => ed.date([p.id], "start")}>
+            <PickField key="start" label="Do on" k="D" onOpen={() => ed.date([p.id], "start")}>
               {p.start ? formatLong(p.start) : none}
             </PickField>
           );
@@ -802,18 +794,12 @@ function ProjectDetail({ p }: { p: Project }) {
               {p.bring_back ? formatLong(p.bring_back) : none}
             </PickField>
           );
-          const dueF = (
-            <PickField key="due" label="Due" k="D" onOpen={() => ed.date([p.id], "due")}>
-              {p.due ? <DueLong date={p.due} done={p.status === "done"} /> : none}
-            </PickField>
-          );
           const left = someday ? backF : p.status === "active" || p.start ? startF : null;
-          const right = !someday || p.due ? dueF : null;
           const extra = someday && p.start ? startF : null;
           return (
             <>
-              {(left || right) && (left ?? <span key="gl" className="field-gap" aria-hidden="true" />)}
-              {(left || right) && (right ?? <span key="gr" className="field-gap" aria-hidden="true" />)}
+              {left}
+              {left && <span key="gr" className="field-gap" aria-hidden="true" />}
               {extra}
             </>
           );
@@ -847,8 +833,8 @@ function ProjectDetail({ p }: { p: Project }) {
           Actions <span className="count">{open.length}</span>
           {doneCount > 0 && <span className="detail-h-note">{doneCount} done</span>}
         </h3>
-        {p.status === "active" && !open.length && (notStarted(p) || startsToday(p)) && (
-          <p className="badge-line is-quiet">{notStarted(p) ? `Starts ${formatLong(p.start!)}. No next action needed before then.` : "Starts today: add a next action below."}</p>
+        {p.status === "active" && !open.length && notStarted(p) && (
+          <p className="badge-line is-quiet">{`Do on ${formatLong(p.start!)}. No next action needed before then.`}</p>
         )}
         {p.status === "active" && !open.some((a) => a.status === "next" || a.status === "waiting") && nextAppt && !notStarted(p) && (
           <p className="badge-line is-quiet">

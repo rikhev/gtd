@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, ListChecks, Mail, Paperclip, StickyNote, Target } from "lucide-react";
-import { quote, capture, uid, mutate, newProject, completeActions, isChase, isCurrentStep, onHold, isStale, lastReview, nextAppointment, notStarted, startsToday, projectHealth, patchMany, named, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { quote, capture, uid, mutate, newProject, completeActions, isChase, isCurrentStep, onHold, isStale, lastReview, nextAppointment, notStarted, isLate, projectHealth, patchMany, named, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
@@ -161,22 +161,20 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     const waiting = mine.find((a) => a.status === "waiting");
     if (waiting) return `Waiting · ${waiting.waiting_who ?? "someone"}`;
     const later = mine.find((a) => a.status === "next" && a.defer);
-    return later ? `Starts ${formatLong(later.defer!)}: ${later.title}` : "";
+    return later ? `Do on ${formatLong(later.defer!)}: ${later.title}` : "";
   };
   // The review's checks are built in: each returns a short note, or nothing when all is well.
   const weeks = meta.stallWeeks;
   const projectNote = (p: (typeof s.projects)[number]) => {
     const r = stallReason(s, p);
-    // A project that hasn't begun is listed every week all the same, with the day it begins, so a start date can't
-    // quietly park it for good; on that day it asks for its first next action.
-    const hasNext = s.actions.some((a) => a.project_id === p.id && (a.status === "next" || a.status === "waiting"));
-    if (notStarted(p, t)) return `Starts ${formatLong(p.start!)}`;
-    if (startsToday(p, t) && !hasNext) return "Starts today: add a next action";
+    // A project whose day is still ahead is listed every week all the same, with its day, so a date can't quietly
+    // park it for good.
+    if (notStarted(p, t)) return `Do on ${formatLong(p.start!)}`;
     // The red lamp already says stalled; the note says why.
     return r === "no-next" ? "No next action" : r === "idle" ? `Nothing touched in ${weeks}+ weeks` : undefined;
   };
   const actionNote = (a: Action) => {
-    if (a.status === "next" && a.due && a.due < t) return "Overdue";
+    if (isLate(a, t)) return "Late";
     if (a.status === "waiting" && isChase(a, t)) return "Follow-up due";
     if (isStale(a)) return a.status === "waiting" ? `Waiting ${weeks}+ weeks without change` : `Untouched for ${weeks}+ weeks`;
     return undefined;
@@ -253,14 +251,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             // The GTD question for each project: what is its next action? (A waiting-only project names who.)
             // Its current step, or (stalled behind a deferred one) when that starts.
             info: projectNext(p.id),
-            date: p.due,
+            date: p.start ?? null,
             note: projectNote(p),
           }));
       case "next":
         return s.actions
           .filter((a) => a.status === "next" && !onHold(a, s))
           .sort((a, b) => Number(Boolean(actionNote(b))) - Number(Boolean(actionNote(a))) || a.sort - b.sort)
-          .map((a) => ({ key: a.id, kind: "action", id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.due, note: actionNote(a) }));
+          .map((a) => ({ key: a.id, kind: "action", id: a.id, title: a.title, info: projectTitle(a.project_id), date: a.defer, note: actionNote(a) }));
       case "waiting":
         // "Chase what's overdue": items to chase first, then by follow-up date.
         return s.actions
@@ -324,15 +322,14 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         const out: Row[] = [];
         for (const a of s.actions.filter((a) => ["next", "waiting", "someday"].includes(a.status))) {
           const pairs: [string, string | null][] = [
-            ["Due", a.due],
-            ["Starts", a.defer],
+            ["Do on", a.status === "next" ? a.defer : null],
             ["Follow up", a.status === "waiting" ? a.followup : null],
             ["Comes back", a.status === "someday" ? a.bring_back : null],
           ];
           for (const [label, d] of pairs) if (within(d)) out.push({ key: `${a.id}:${label}`, kind: "action", id: a.id, title: a.title, info: label, date: d });
         }
         for (const p of s.projects.filter((p) => p.status === "active" || p.status === "someday")) {
-          if (within(p.due)) out.push({ key: `${p.id}:due`, kind: "project", id: p.id, title: p.title, info: "Project due", date: p.due });
+          if (p.status === "active" && within(p.start ?? null)) out.push({ key: `${p.id}:start`, kind: "project", id: p.id, title: p.title, info: "Project: do on", date: p.start ?? null });
           if (p.status === "someday" && within(p.bring_back)) out.push({ key: `${p.id}:back`, kind: "project", id: p.id, title: p.title, info: "Comes back", date: p.bring_back });
         }
         for (const e of events.filter((e) => e.date >= t)) out.push(eventRow(e));
@@ -396,10 +393,10 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       case "someday":
         return [...s.projects, ...s.actions].filter((x) => x.status === "someday" && dueBack(x.id, x.bring_back)).length;
       case "upcoming": {
-        // Anything whose date has already passed is open: a missed due date, follow-up, start or tickler.
+        // Anything whose date has already passed is open: a missed day (late), a follow-up or a tickler.
         const past = (d: string | null) => Boolean(d && d < t);
-        const acts = s.actions.filter((a) => ["next", "waiting", "someday"].includes(a.status) && (past(a.due) || (a.status === "waiting" && past(a.followup)) || (a.status === "someday" && past(a.bring_back))));
-        const projs = s.projects.filter((p) => (p.status === "active" || p.status === "someday") && (past(p.due) || (p.status === "someday" && past(p.bring_back))));
+        const acts = s.actions.filter((a) => ["next", "waiting", "someday"].includes(a.status) && (isLate(a, t) || (a.status === "waiting" && past(a.followup)) || (a.status === "someday" && past(a.bring_back))));
+        const projs = s.projects.filter((p) => p.status === "someday" && past(p.bring_back));
         return acts.length + projs.length;
       }
       default:
@@ -443,7 +440,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       return Boolean(p && stallReason(s, p) === "idle");
     });
     if (!acts.length && !projs.length) {
-      notify("Nothing here is flagged as untouched: R clears that flag only. Overdue and follow-ups are cleared by acting on them.");
+      notify("Nothing here is flagged as untouched: R clears that flag only. Late actions and follow-ups are cleared by acting on them.");
       return;
     }
     // A stale project always has open actions (one with none is stalled for want of a next action, not staleness):
@@ -716,7 +713,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     },
     { key: "info", blank: (r) => !r.info, label: ({ clear: "Files", projects: "Next action", next: "Project", waiting: "Waiting on", someday: "Project", lookback: "Project", upcoming: "What", creative: "Projects", checklists: "Progress" } as Record<string, string>)[step.id] ?? "", width: "minmax(120px, 1fr)", render: (r) => (r.info ? <span className="muted-text">{r.kind === "stuff" && <Paperclip size={12} strokeWidth={2} aria-hidden />} {r.info}</span> : <span className="dash" aria-hidden="true">–</span>) },
     // Name the date each step shows, rather than a generic "Date".
-    { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Due", next: "Due", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date", checklists: "Last finished" } as Record<string, string>)[step.id] ?? "Date", width: "100px", render: (r) => <DateCell date={r.date} kind={["someday", "clear", "lookback", "checklists"].includes(step.id) ? "plain" : "due"} /> },
+    { key: "date", blank: (r) => !r.date, label: ({ clear: "Captured", projects: "Do on", next: "Do on", waiting: "Follow up", someday: "Comes back", lookback: "Done", upcoming: "Date", checklists: "Last finished" } as Record<string, string>)[step.id] ?? "Date", width: "100px", render: (r) => <DateCell date={r.date} kind={["someday", "clear", "lookback", "checklists"].includes(step.id) ? "plain" : "due"} /> },
   ];
   /** A project's next linked appointment, which its lamp names. */
   function apptOf(id: ID) {

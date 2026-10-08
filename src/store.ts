@@ -1,7 +1,7 @@
 import type { FeedInfo } from "./calendarFeed.ts";
 import { useMemo, useSyncExternalStore } from "react";
 import type { Action, Appointment, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
-import { addDays, addMonths, fromIso, nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
+import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
 import { uploadSealed } from "./lock.ts";
 
 const empty: State = {
@@ -29,8 +29,6 @@ let meta: {
   authConfigured: boolean;
   /** Weeks without progress before a project counts as stalled (Settings). */
   stallWeeks: number;
-  /** How far ahead a start date must be before "Hide scheduled projects" hides the project (Settings). */
-  scheduledHide: Horizon;
   trashDays: number;
   /** The calendar's first day of the week: 1 Monday, 0 Sunday. */
   weekStart: 0 | 1;
@@ -40,7 +38,7 @@ let meta: {
   dayHours: [number, number];
   /** The lock for references: the random key, wrapped with the lock password (see lock.ts); null until a password is set. */
   lock: { v: 1; salt: string; iter: number; wrapped: string } | null;
-} = { today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, scheduledHide: "week", trashDays: 7, weekStart: 1, calendars: [], dayHours: [7, 19], lock: null };
+} = { today: today(), loaded: false, authRequired: false, signedIn: true, authConfigured: true, stallWeeks: 3, trashDays: 7, weekStart: 1, calendars: [], dayHours: [7, 19], lock: null };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -439,19 +437,15 @@ export function completeActions(ids: ID[]) {
     ops.push({ type: "patch", table: "actions", id, data: { status: "done", completed_at: stamp(), flagged: 0, done_from: from, archived_at: null } });
     const r = a.recurrence ? parseRecurrence(a.recurrence) : null;
     if (r) {
+      // The next one is done on its next day: the day after its own Do on (or today) by the rule, never in the past
+      // when catching up late. Until then it stays off Next Actions.
       const t = today();
-      const anchor = a.due ?? a.defer ?? t;
-      let nextDue = a.due ? nextOccurrence(anchor, r) : null;
-      let nextDefer = a.defer ? nextOccurrence(a.defer, r) : null;
-      if (!a.due && !a.defer) nextDefer = nextOccurrence(t, r);
-      // Never schedule into the past when catching up late.
-      while (nextDue && nextDue < t) nextDue = nextOccurrence(nextDue, r);
-      while (nextDefer && nextDefer < t && !nextDue) nextDefer = nextOccurrence(nextDefer, r);
-      if (nextDue && a.defer && a.due) nextDefer = nextOccurrence(a.defer, r);
+      let nextDay = nextOccurrence(a.defer ?? t, r);
+      while (nextDay < t) nextDay = nextOccurrence(nextDay, r);
       ops.push({
         type: "create",
         table: "actions",
-        row: { ...newAction({ ...a, id: uid(), status: "next", completed_at: null, due: nextDue, defer: nextDefer, created_at: stamp(), flagged: 0 }) },
+        row: { ...newAction({ ...a, id: uid(), status: "next", completed_at: null, due: null, defer: nextDay, created_at: stamp(), flagged: 0 }) },
       });
       spawned++;
     }
@@ -553,27 +547,15 @@ export function patchMany(table: TableName, ids: ID[], data: Record<string, unkn
  * touched (edited or completed) for the stall threshold.
  */
 /**
- * A project with a start date hasn't begun until that day is over (owner's decision, GTD's "a calendar entry is a
- * next step"): it can't be stalled before then. Set the start to the day of the meeting it waits for, and it is only
- * flagged from the day after, if the meeting left no next action behind.
+ * A project with a Do on day still ahead hasn't begun (owner's decision, GTD's "a calendar entry is a next step"): it
+ * is off Projects and can't be stalled before then. On its day it has begun.
  */
 export function notStarted(p: Project, t = today()): boolean {
   return Boolean(p.start && p.start > t);
 }
-export type Horizon = "day" | "week" | "nextweek" | "month";
-export const HORIZON_LABEL: Record<Horizon, string> = { day: "Today", week: "This week", nextweek: "Next week", month: "This month" };
-
-/** The last day a horizon reaches: today, the end of this week or next (by the week's first day), or the end of this month. */
-export function horizonEnd(h: Horizon, t = today(), weekStart: 0 | 1 = meta.weekStart): string {
-  if (h === "day") return t;
-  if (h === "month") return addDays(addMonths(`${t.slice(0, 8)}01`, 1), -1);
-  const endOfWeek = addDays(t, 6 - ((fromIso(t).getDay() - weekStart + 7) % 7));
-  return h === "week" ? endOfWeek : addDays(endOfWeek, 7);
-}
-
-/** Hidden by "Hide scheduled projects": it starts after the horizon set in Settings (this week by default), so nothing is due from it soon. */
+/** Off Projects until its day (owner's decision, 8 October: a project with a Do on day isn't there to work on yet). */
 export function scheduledBeyond(p: Project, t = today()): boolean {
-  return Boolean(p.start && p.start > horizonEnd(meta.scheduledHide, t));
+  return notStarted(p, t);
 }
 
 export function startsToday(p: Project, t = today()): boolean {
@@ -658,8 +640,16 @@ export function daysSinceReview(s: State): number | null {
   return r ? daysBetween(r.slice(0, 10), today()) : null;
 }
 
+/**
+ * "Do on" (owner's decision, 8 October: one date, the day to do it; start and due dates are gone). An action with a
+ * day still ahead is off Next Actions until then (it shows on the Calendar on its day); one whose day has passed
+ * undone is late, in red.
+ */
 export function isDeferred(a: Action, t = today()) {
   return Boolean(a.defer && a.defer > t);
+}
+export function isLate(a: Pick<Action, "status" | "defer">, t = today()) {
+  return a.status === "next" && Boolean(a.defer && a.defer < t);
 }
 
 /**
