@@ -107,6 +107,7 @@ rounded:
   md: "4px"
   lg: "5px"
   round: "50%"
+  pill: "999px"
 spacing:
   xs: "4px"
   sm: "6px"
@@ -184,6 +185,14 @@ components:
     rounded: "{rounded.xs}"
     height: "28px"
     padding: "0 8px"
+  phone-badge:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.sheet}"
+    fontSize: "11.5px"
+    fontWeight: 650
+    rounded: "{rounded.pill}"
+    height: "20px"
+    padding: "0 5px"
   lamp:
     backgroundColor: "{colors.go}"
     rounded: "{rounded.round}"

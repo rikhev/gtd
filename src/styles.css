@@ -6310,10 +6310,10 @@ body.is-cal-dragging {
     min-width: 20px;
     height: 20px;
     padding: 0 5px;
-    border-radius: 10px;
+    border-radius: 999px; /* DESIGN.md rounded.pill: round ends at any count */
     background: var(--ink);
     color: var(--sheet);
-    font-size: 11.5px;
+    font-size: var(--fs-tag);
     font-weight: 650;
     line-height: 20px;
     text-align: center;
