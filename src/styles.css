@@ -1773,7 +1773,9 @@ body.is-col-resizing * {
   color: var(--select-ink);
 }
 /* A habit's last four weeks: small squares, oldest first, filled in the done-mark ink where it was done and empty
-   (a hairline box) where not; the current day or week sits outlined at the end. No colour: green is project health. */
+   (a hairline box) where not. No colour: green is project health. The current day or week (or the one stepped back
+   to) carries a dot inside its square, ink in an open box, a hole in a filled one: it marks the place without growing
+   past the square, so it never crowds the square before it. */
 .hstrip {
   display: inline-flex;
   align-items: center;
@@ -1792,23 +1794,43 @@ body.is-col-resizing * {
   width: 8px;
   height: 8px;
 }
+/* The strip always ends on the current day or week: it stands a step apart, the open slot after the record. */
+.hstrip i:last-child {
+  margin-left: var(--sp-hair);
+}
 .hstrip i.is-on {
   background: var(--mark);
   box-shadow: none;
 }
-.hstrip i.is-now {
-  outline: 1px solid var(--ink-3);
-  outline-offset: 1px;
+.hstrip i.is-now,
+.habit-year i.is-now {
+  --now-dot: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+  background-image: radial-gradient(circle, var(--now-dot) 0 1.5px, transparent 2px);
+}
+.hstrip i.is-now.is-on,
+.habit-year i.is-now.is-on {
+  box-shadow: none;
+  background-image: none;
+  /* A true hole, so whatever the row sits on (white, the cursor's blue, the pane) shows through. */
+  mask-image: radial-gradient(circle, transparent 0 1.5px, #000 2px);
 }
 .is-focus .hstrip i.is-on {
-  background: var(--select-ink);
+  background-color: var(--select-ink);
 }
 .is-focus .hstrip i {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--select-ink) 35%, transparent);
 }
+.is-focus .hstrip i.is-now {
+  --now-dot: var(--select-ink);
+  box-shadow: inset 0 0 0 1px var(--select-ink);
+}
+.is-focus .hstrip i.is-now.is-on {
+  box-shadow: none;
+}
 /* A habit done today greys like a ticked item, but its history doesn't: the record stays full strength. */
 .row.is-done .hstrip i.is-on {
-  background: var(--mark);
+  background-color: var(--mark);
 }
 /* A habit's record in the details pane: plain lines, the weekdays as seven small ink bars, and half a year of the
    strip's squares (week by week in columns on a daily habit). Ink only, as on the row: green is project health. */
@@ -1875,10 +1897,6 @@ body.is-col-resizing * {
 .habit-year i.is-on {
   background: var(--mark);
   box-shadow: none;
-}
-.habit-year i.is-now {
-  outline: 1px solid var(--ink-3);
-  outline-offset: 1px;
 }
 .habit-year i.is-future {
   visibility: hidden;

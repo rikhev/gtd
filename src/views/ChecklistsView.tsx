@@ -697,12 +697,12 @@ function pickRepeats(ui: UI, ids: ID[]) {
 
 /**
  * A habit's last four weeks as a strip of small squares, oldest first: filled in ink where it was done, empty where
- * not, the current day or week outlined. No colour: green belongs to project health.
+ * not, the current day or week set a step apart and dotted. No colour: green belongs to project health.
  */
 function Strip({ s, item, repeats, viewing }: { s: Parameters<typeof history>[0]; item: ChecklistItem; repeats: Repeats; viewing: string | null }) {
   const cells = history(s, item, repeats);
   const n = cells.filter((c) => c.done).length;
-  // A square opens its day (or week), to tick there; the day being ticked for is outlined in place of today.
+  // A square opens its day (or week), to tick there; the day being ticked for takes the dot in place of today.
   return (
     <span className={`hstrip is-${repeats}`} role="img" aria-label={`Done ${n} of the last ${cells.length} ${repeats === "day" ? "days" : "weeks"}`}>
       {cells.map((c) => (
