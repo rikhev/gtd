@@ -349,6 +349,8 @@ export default function App() {
       setDetailPinned: (on) => {
         setDetailPinned(on);
         if (on) setDetail((prev) => prev ?? cursorTarget.current);
+        // Unpinned from the list, the pane goes with the pin; unpinned while working in it, it stays until Esc.
+        else if (region !== "detail") setDetail(null);
         notify(on ? "Details pinned: the pane stays open and follows the cursor" : "Details unpinned");
       },
       followDetail: (t) => {
