@@ -1107,7 +1107,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
 }
 
 const WEEKDAY = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
-const WEEKDAY_LETTER = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
  * A checklist item. On a routine it is a habit, and the pane gives its record (owner's request): how often it was done
@@ -1189,24 +1189,30 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
                 <span className="muted-text"> · now {plural(stats.current, unit)}</span>
               </p>
             )}
-            {stats.weekdays.length > 0 && (
-              <>
-                <div className="habit-weekdays" role="img" aria-label={stats.weekdays.map((d) => `${WEEKDAY[d.wd]} ${d.done} of ${d.of}`).join(", ")}>
-                  {stats.weekdays.map((d) => (
-                    <span key={d.wd} className={slip?.wd === d.wd ? "is-slip" : ""}>
-                      <i style={{ height: `${d.of ? Math.max(2, Math.round((18 * d.done) / d.of)) : 0}px` }} />
-                      <b>{WEEKDAY_LETTER[d.wd]}</b>
-                    </span>
-                  ))}
-                </div>
-                {slip && (
-                  <p className="muted-text">
-                    Slips most on {WEEKDAY[slip.wd]} ({slip.done} of {slip.of})
-                  </p>
-                )}
-              </>
-            )}
           </section>
+          {stats.weekdays.length > 0 && (
+            <section className="habit-record" aria-label="By weekday">
+              <h3 className="detail-h">By weekday</h3>
+              {/* Each weekday's rate against a full track, so a habit kept every day reads as full, not as seven
+                  blocks of no particular size; the count under it says how many of that weekday there have been. */}
+              <div className="habit-weekdays" role="img" aria-label={stats.weekdays.map((d) => `${WEEKDAY[d.wd]} ${d.done} of ${d.of}`).join(", ")}>
+                {stats.weekdays.map((d) => (
+                  <span key={d.wd} className={slip?.wd === d.wd ? "is-slip" : ""}>
+                    <i>
+                      <u style={{ height: `${d.of ? (100 * d.done) / d.of : 0}%` }} />
+                    </i>
+                    <b>{WEEKDAY_SHORT[d.wd]}</b>
+                    <small>{d.of ? `${d.done}/${d.of}` : "–"}</small>
+                  </span>
+                ))}
+              </div>
+              {slip && (
+                <p className="muted-text">
+                  Slips most on {WEEKDAY[slip.wd]} ({slip.done} of {slip.of})
+                </p>
+              )}
+            </section>
+          )}
           <section className="habit-record" aria-label="Half a year">
             <h3 className="detail-h">Half a year</h3>
             <span className={`habit-year is-${repeats}`} role="img" aria-label={`Done ${stats.recent.kept} of the last ${stats.recent.of} ${unit}s; each square opens its ${unit}`}>

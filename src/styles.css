@@ -1832,8 +1832,8 @@ body.is-col-resizing * {
 .row.is-done .hstrip i.is-on {
   background-color: var(--mark);
 }
-/* A habit's record in the details pane: plain lines, the weekdays as seven small ink bars, and half a year of the
-   strip's squares (week by week in columns on a daily habit). Ink only, as on the row: green is project health. */
+/* A habit's record in the details pane: plain lines, the weekdays as seven ink bars on their tracks, and half a
+   year of the strip's squares (week by week in columns on a daily habit). Ink only, as on the row: green is project health. */
 .habit-record {
   margin: 14px 0 0;
 }
@@ -1847,29 +1847,49 @@ body.is-col-resizing * {
 }
 .habit-weekdays {
   display: flex;
-  gap: var(--sp-sm);
-  margin: var(--sp-md) 0 var(--sp-xs);
+  /* Centred columns would start the row inside the head's edge: it steps back so "Mon" lines up with the text. */
+  margin: 0 0 var(--sp-md) -9px;
 }
+/* A column per weekday: the track, its name, its count. Equal columns, so the counts never jostle. */
 .habit-weekdays span {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--sp-hair);
-  width: 14px;
-  height: 34px;
+  width: 40px;
 }
+/* The track is the whole of that weekday's days; the fill, from the foot, the share kept. */
 .habit-weekdays i {
-  width: 8px;
-  background: var(--ink-3);
-  border-radius: 1px;
+  display: flex;
+  align-items: flex-end;
+  width: 12px;
+  height: 28px;
+  margin-bottom: var(--sp-hair);
+  border-radius: 1.5px;
+  background: var(--rule);
+  overflow: hidden;
 }
-.habit-weekdays span.is-slip i {
-  background: var(--ink);
+.habit-weekdays u {
+  display: block;
+  width: 100%;
+  background: var(--ink-3);
 }
 .habit-weekdays b {
   font: 600 var(--fs-key) var(--font-ui);
   color: var(--ink-3);
+}
+.habit-weekdays small {
+  font: 400 var(--fs-key) var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+/* The weekday it slips on is the one thing here in full ink. */
+.habit-weekdays span.is-slip u {
+  background: var(--ink);
+}
+.habit-weekdays span.is-slip b,
+.habit-weekdays span.is-slip small {
+  color: var(--ink);
 }
 .habit-year {
   display: grid;
