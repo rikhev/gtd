@@ -29,7 +29,7 @@ const HOME: Record<Kind, string> = { action: "next", project: "active", stuff: "
 /** Checklists have no details pane: in the Trash they are restored or deleted, not opened. */
 const opens = (k: Kind): k is Exclude<Kind, "checklist" | "horizon"> => k !== "checklist" && k !== "horizon";
 
-function rowsOf(s: State, keepDays: number): Row[] {
+export function rowsOf(s: State, keepDays: number): Row[] {
   const now = Date.now();
   const leftOf = (at: string) => Math.max(0, Math.ceil((new Date(at).getTime() + keepDays * 86_400_000 - now) / 86_400_000));
   const alive = (at: string | null | undefined): at is string => Boolean(at) && leftOf(at!) > 0;

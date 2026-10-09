@@ -1,11 +1,11 @@
 import { useEffect, useMemo } from "react";
-import { Circle, Layers } from "lucide-react";
 import { LIST_NAMES, quote, mutate, plural, reopenActions, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { setProject } from "../actionCommands.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
+import { DoneBox } from "../components/bits.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
 import { clockOf, dayHeading, formatDate, localDay } from "../../shared/dates.ts";
 import type { ID, Op, State } from "../../shared/types.ts";
@@ -167,12 +167,8 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
   useCommands("list:done", commands, { priority: 10, active: regionActive });
 
   const columns: Column<Row>[] = [
-    {
-      key: "kind",
-      label: "",
-      width: "30px",
-      render: (r) => <span className="kind-icon">{r.kind === "project" ? <Layers size={14} strokeWidth={1.75} aria-label="Project" /> : <Circle size={12} strokeWidth={1.75} aria-label="Action" />}</span>,
-    },
+    // The same ticked box as a done row on any list; a click brings it back, as E does.
+    { key: "done", label: "", width: "30px", render: (r) => <DoneBox done title={r.title || "Untitled"} onToggle={() => reopen([r])} /> },
     { key: "subject", label: "Item", width: "minmax(220px, 1.3fr)", render: (r) => <span className={`subject-text ${r.kind === "project" ? "strong" : ""}`}>{r.title}</span> },
     { key: "from", label: "Was in", width: "minmax(140px, 1fr)", drop: 2, render: (r) => <span className="muted-text">{groupBy === "project" ? r.place : r.from}</span> },
     {
@@ -196,6 +192,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
       nav={nav}
       active={regionActive}
       showHeaders={multi}
+      rowClass={() => "is-done"}
       swipe={{ right: { label: "Not done", run: (k) => reopen(all.filter((r) => r.key === k)) } }}
       onOpen={(k) => {
         const r = all.find((x) => x.key === k);

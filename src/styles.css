@@ -4516,8 +4516,22 @@ textarea.field-text {
   display: flex;
   flex-direction: column;
   gap: var(--sp-gutter);
-  max-width: 760px;
   padding: 4px 0 24px;
+}
+/* On the desktop the Day tab's rows are list rows (consistency critique): 30px, the list's full width. The phone's
+   agenda keeps its 44px rows, sized for a thumb. */
+.calendar:not(.is-phone) .cal-agenda-row {
+  min-height: 30px;
+}
+/* …in the lists' order too: the mark, then the Complete box, then the title, on the same x as Next Actions. */
+.calendar:not(.is-phone) .cal-agenda .cal-agenda-row {
+  padding-left: 4px;
+}
+.calendar:not(.is-phone) .cal-agenda-mark {
+  margin-right: 28px;
+}
+.calendar:not(.is-phone) .cal-agenda-done {
+  left: 30px;
 }
 .cal-day-h {
   display: flex;
@@ -4657,7 +4671,7 @@ textarea.field-text {
 }
 .cal-agenda-none {
   margin: 0;
-  padding: 4px 4px 6px 72px;
+  padding: 4px 4px 6px 64px;
   color: var(--ink-3);
   font-size: var(--fs-head);
 }

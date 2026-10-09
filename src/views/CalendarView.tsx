@@ -721,7 +721,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
             {i.kind === "project" && i.health ? <Lamp health={i.health} start={i.projectStart} appt={i.projectAppt} /> : i.role === "followup" ? <Hourglass size={13} strokeWidth={2} /> : i.role === "tickler" ? <CalendarClock size={13} strokeWidth={2} /> : i.kind === "event" ? (
               <EventMark color={i.color} />
             ) : (
-              <Marker quiet={phone} />
+              // Beside the Complete box the plain ring is quiet, as on Next Actions.
+              <Marker quiet={phone || doable} />
             )}
           </span>
           <span className={`cal-agenda-title ${i.kind === "project" ? "strong" : ""}`}>{i.title}</span>

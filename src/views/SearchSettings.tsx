@@ -751,7 +751,7 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
     },
     {
       key: "state",
-      label: "",
+      label: tab === "areas" ? "Projects" : tab === "contexts" ? "Actions" : "",
       width: "160px",
       render: (r) =>
         r.kind === "theme" ? (
@@ -845,7 +845,8 @@ export function SettingsView({ regionActive }: { regionActive: boolean }) {
         nav={nav}
         active={regionActive}
         showHeaders={heads}
-        head={false}
+        // Areas and Contexts are lists of things, so they carry column heads; the other tabs are settings, one per row.
+        head={tab === "areas" || tab === "contexts"}
         // Areas and Contexts are filled here, so an empty one offers its first step (General and Data are never empty).
         empty={
           tab === "areas" ? (

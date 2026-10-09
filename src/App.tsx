@@ -12,7 +12,7 @@ import { Rail, RAIL, PhoneChrome, CaptureBar, SearchBox, Toast, Palette, palette
 import { DropZone } from "./components/DropZone.tsx";
 import { endPrint, preparePrint } from "./print.ts";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
-import { TrashView } from "./views/TrashView.tsx";
+import { TrashView, rowsOf as trashRows } from "./views/TrashView.tsx";
 import { DoneView } from "./views/DoneView.tsx";
 import { AgendasView } from "./views/AgendasView.tsx";
 import { Picker } from "./components/Picker.tsx";
@@ -693,7 +693,8 @@ export default function App() {
       : some(s.checklists.filter((c) => c.status === "active").length, "checklist"),
     horizons: some(s.horizons.filter((h) => h.kind === "goal" && h.status === "active").length, "goal"),
     done: some(s.actions.filter((a) => a.status === "done" && a.archived_at).length + s.projects.filter((p) => p.status === "done").length, "item"),
-    trash: `Kept ${plural(meta.trashDays, "day")}, then gone for good`,
+    // A count, as on every list; each day's heading says when its items are gone for good.
+    trash: some(trashRows(s, meta.trashDays).length, "item"),
   };
 
   let body;

@@ -644,8 +644,8 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
       getKey={(i) => i.id}
       nav={nav}
       active={regionActive}
-      // A checklist needs no column heads; a routine's name its strip and its run.
-      head={Boolean(repeats)}
+      // Column heads on every list, as everywhere else; a routine's also name its strip and its run.
+      head
       showHeaders={false}
       rowClass={(i) => [i.section ? "is-section" : "", done(i) ? "is-done" : "", striking.has(i.id) ? "is-striking" : ""].join(" ")}
       // A tap on a phone ticks (running the list is what a phone is for); Enter or a double-click opens the item's

@@ -512,7 +512,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           <span className="dash" aria-hidden="true">–</span>
         ),
     },
-    { key: "open", label: "Open", width: "52px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
+    { key: "open", label: "Open", width: "60px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
     // Offered but hidden until shown (right-click a heading, or ⌘K › Show or hide columns…).
     { key: "start", label: "Do on", width: "100px", optional: true, render: (p) => <DateCell date={p.start ?? null} kind="plain" /> },
     { key: "back", label: "Bring back", width: "100px", optional: true, render: (p) => <DateCell date={p.bring_back} kind="plain" /> },
