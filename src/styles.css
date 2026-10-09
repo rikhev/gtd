@@ -3825,10 +3825,20 @@ textarea.field-text {
   }
   .list-region {
     padding-bottom: 88px;
+    /* Whatever is scrolled into view (Clarify's next answer, a field) stops clear of the two round buttons. */
+    scroll-padding-bottom: 88px;
   }
-  /* Toasts rise above the two buttons at the foot. */
+  /* Clarify's answers are touch targets (44px), as a phone's rows are. */
+  .key-choices button {
+    height: 44px;
+  }
+  /* Toasts rise above the two buttons at the foot, but never over an open sheet or picker (consistency critique: the
+     swipe note hid the View sheet's options); they sit under it until it closes. */
   .toast {
     bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.picker, .phone-sheet:not([hidden])) .toast {
+    z-index: 45;
   }
   /* Content first (owner's request): the heading and the list take the whole screen. There is no standing capture
      field and no bar across the foot; the top bar comes back only while searching, as one full-width field. */

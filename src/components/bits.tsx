@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
+import { isPhone } from "../phone.ts";
 import { formatDate, formatLong, formatTime, daysBetween, today } from "../../shared/dates.ts";
 import type { Action, Appointment, Context } from "../../shared/types.ts";
 import { keyLabel, keySpoken, runKey } from "../keys.ts";
@@ -211,14 +212,32 @@ export function Kbd({ k }: { k: string }) {
 export function KeyChoices({ choices, autoFocus = true, current }: { choices: { k: string; label: string; run: () => void }[]; autoFocus?: boolean; current?: string | null }) {
   // The first way forward takes focus, so a screen reader lands on the choices rather than on nothing.
   const first = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     const el = document.activeElement;
     if (autoFocus && (!el || el === document.body)) first.current?.focus({ preventScroll: true });
+    // On a phone the answers come up just clear of the two round buttons at the foot, the least scroll that does it,
+    // and stay there while what is above them settles (an email's preview grows as it loads) until the first touch.
+    const ul = list.current;
+    const region = ul?.closest(".list-region");
+    if (!isPhone() || !ul || !region) return;
+    const keep = () => ul.scrollIntoView({ block: "nearest" });
+    keep();
+    const ro = new ResizeObserver(keep);
+    [...region.children].forEach((c) => ro.observe(c));
+    const stop = () => ro.disconnect();
+    region.addEventListener("touchstart", stop, { once: true });
+    const timer = window.setTimeout(stop, 2000);
+    return () => {
+      stop();
+      window.clearTimeout(timer);
+      region.removeEventListener("touchstart", stop);
+    };
   }, [autoFocus]);
   return (
     // A choice already made stays in sight, marked as a picker marks the current option (its label in 650), so it can
     // be changed by choosing another.
-    <ul className={`key-choices ${current ? "is-answered" : ""}`}>
+    <ul ref={list} className={`key-choices ${current ? "is-answered" : ""}`}>
       {choices.map((c, i) => (
         <li key={c.k} className={current === c.k ? "is-current" : undefined}>
           <button type="button" ref={i === 0 ? first : undefined} onClick={c.run} aria-pressed={current === undefined ? undefined : current === c.k}>

@@ -45,7 +45,7 @@ import { today } from "../shared/dates.ts";
  * them and a reload or bookmark lands on the same list. Search is a query, not a place, and gets no entry.
  */
 /** Lists with a View menu (⌥V), which touch reaches by a button in the heading. */
-const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "done", "agendas", "checklists"];
+const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "someday", "reference", "done", "agendas", "checklists"];
 const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "checklists", "horizons", "done", "trash", "review", "settings", "clarify"];
 /** The address of the checklist open in Checklists, if one is. */
 /**
@@ -832,6 +832,7 @@ export default function App() {
               {/* Touch has no ⌥V: the list's View menu (group, sort, show, and on a phone what fits, areas and starting
                   over) as a button; on a phone one icon button the thumb can hit. */}
               {LISTS_WITH_VIEW.includes(view) &&
+                !(view === "reference" && openRef) &&
                 (phone ? (
                   <button type="button" className="icon-btn view-btn" aria-label="View" onClick={() => runKey("alt+v")}>
                     <SlidersHorizontal size={20} strokeWidth={1.75} aria-hidden />

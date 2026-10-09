@@ -171,7 +171,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
             { id: "area", label: byArea ? "Don't group by area" : "Group by area", section: "group" },
             { id: "s:subject", label: "Sort by name", hint: sort?.key === "subject" ? "Current" : "", section: "sort" },
             { id: "s:finished", label: "Sort by last finished", hint: sort?.key === "finished" ? "Current" : "", section: "sort" },
-            { id: "s:", label: "Manual order", hint: !sort ? "Current" : "", section: "sort" },
+            { id: "s:", label: "Sort by manual order", hint: !sort ? "Current" : "", section: "sort" },
             ...(focusId && anyTicked(targets()) ? [{ id: "over", label: `Start over ${checklistNamed(targets())}`, section: "run" }] : []),
           ],
           onPick: (id) => {

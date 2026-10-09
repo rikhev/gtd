@@ -162,6 +162,25 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       group: "Someday",
       skip: ["row.open", "row.jump", "row.rename", "row.move", "row.bringback", "row.trash", "row.delete"],
     }),
+    // Its sorts, as the column heads give them, for a phone (which has no heads) and the keyboard.
+    {
+      id: "some.view",
+      label: "Open the View menu",
+      group: "View",
+      keys: ["alt+v"],
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "View",
+          items: [
+            { id: "s:subject", label: "Sort by item", hint: sort?.key === "subject" ? "Current" : "", section: "sort" },
+            { id: "s:proj", label: "Sort by project", hint: sort?.key === "proj" ? "Current" : "", section: "sort" },
+            { id: "s:back", label: "Sort by bring back", hint: sort?.key === "back" ? "Current" : "", section: "sort" },
+            { id: "s:", label: "Sort by manual order", hint: !sort ? "Current" : "", section: "sort" },
+          ],
+          onPick: (id) => id?.startsWith("s:") && setSort(id === "s:" ? null : { key: id.slice(2), dir: 1 }),
+        }),
+    },
   ];
   useCommands("list:someday", commands, { priority: 10, active: regionActive });
 
@@ -407,6 +426,26 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       keys: ["shift+backspace", "shift+delete"],
       enabled: Boolean(focusId),
       run: () => mutate(`${named("refs", nav.targets(), "reference")} deleted permanently`, nav.targets().map((id): Op => ({ type: "delete", table: "refs", id }))),
+    },
+    // Its sorts, as the column heads give them, for a phone (which has no heads) and the keyboard.
+    {
+      id: "ref.view",
+      label: "Open the View menu",
+      group: "View",
+      keys: ["alt+v"],
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "View",
+          items: [
+            { id: "s:", label: "Sort by title", hint: !sort ? "Current" : "", section: "sort" },
+            { id: "s:proj", label: "Sort by project", hint: sort?.key === "proj" ? "Current" : "", section: "sort" },
+            { id: "s:files", label: "Sort by files", hint: sort?.key === "files" ? "Current" : "", section: "sort" },
+            { id: "s:created", label: "Sort by created", hint: sort?.key === "created" ? "Current" : "", section: "sort" },
+            { id: "s:updated", label: "Sort by updated", hint: sort?.key === "updated" ? "Current" : "", section: "sort" },
+          ],
+          onPick: (id) => id?.startsWith("s:") && setSort(id === "s:" ? null : { key: id.slice(2), dir: 1 }),
+        }),
     },
   ];
   useCommands("list:reference", commands, { priority: 10, active: regionActive });

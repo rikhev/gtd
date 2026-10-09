@@ -417,7 +417,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             { id: "area", label: groupByArea ? "Don't group by area" : "Group by area", section: "group" },
             { id: "s:mark", label: "Sort by status", hint: sort?.key === "mark" ? "Current" : "", section: "sort" },
             { id: "s:start", label: "Sort by Do on", hint: sort?.key === "start" ? "Current" : "", section: "sort" },
-            { id: "s:", label: "Manual order", hint: !sort ? "Current" : "", section: "sort" },
+            { id: "s:", label: "Sort by manual order", hint: !sort ? "Current" : "", section: "sort" },
             { id: "areas", label: areas ? `Areas: ${areaFilterLabel(areas)}` : "Filter by area…", hint: areas ? "On" : "", section: "show" },
             { id: "filter", label: filter === "active" ? "Show someday projects too" : "Show active projects only", section: "show" },
             { id: "scheduled", label: showScheduled ? "Hide projects for later days" : `Show projects for later days${scheduledCount ? ` (${scheduledCount})` : ""}`, section: "show" },
@@ -509,7 +509,8 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
           // With no next action, a linked appointment is the next step: what, and when.
           <span className="muted-text">{apptLine(nextAppointment(s, p)!)}</span>
         ) : (
-          <span className="dash" aria-hidden="true">–</span>
+          // Words, not a dash: on a phone this is all the second line says beside the red lamp (the Review's wording).
+          <span className="muted-text">No next action</span>
         ),
     },
     { key: "open", label: "Open", width: "60px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
