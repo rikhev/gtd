@@ -33,6 +33,33 @@ export function createAreaOp(name: string): { id: ID; op: Op } {
   return { id, op: { type: "create", table: "areas", row: { id, name: bareArea(name), sort: getState().areas.length, color: nextAreaColor() } } };
 }
 
+/**
+ * A new project's area, asked wherever a project is made (⌥N, and "New project" in every project picker), so a project
+ * never starts outside its area unasked. Next tick, so the picker that named it has closed; with no areas yet, nothing
+ * is asked. `make` runs next tick too, so it can open a picker of its own (a first next action).
+ */
+export function askProjectArea(ui: UI, title: string, make: (areaId: ID | null, extra: Op[]) => void) {
+  const then = (areaId: ID | null, extra: Op[] = []) => window.setTimeout(() => make(areaId, extra), 0);
+  if (!getState().areas.length) return then(null);
+  window.setTimeout(
+    () =>
+      ui.openPicker({
+        type: "list",
+        title: `Area for “${title}”`,
+        items: areaItems(),
+        current: null,
+        noneLabel: "No area",
+        createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
+        onCreate: (q) => {
+          const { id, op } = createAreaOp(q);
+          then(id, [op]);
+        },
+        onPick: (id) => then(id),
+      }),
+    0,
+  );
+}
+
 /** Everyone and everything the Waiting For list is waiting on right now, most recent first. */
 export function waitingNames(): string[] {
   const waiting = getState().actions.filter((a) => a.status === "waiting");
@@ -151,10 +178,11 @@ function askProjectThenCreate(ui: UI, title: string, extra: Op[], make: (project
         current: project && getState().projects.some((p) => p.id === project && p.status !== "trashed") ? project : null,
         noneLabel: "No project",
         createLabel: (q) => `New project “${q}”`,
-        onCreate: (q) => {
-          const p = newProject({ title: q });
-          mutate(`${what} in new project “${q}”`, [...extra, { type: "create", table: "projects", row: { ...p } }, { type: "create", table: "actions", row: { ...make(p.id) } }]);
-        },
+        onCreate: (q) =>
+          askProjectArea(ui, q, (area_id, areaOps) => {
+            const p = newProject({ title: q, area_id });
+            mutate(`${what} in new project “${q}”`, [...extra, ...areaOps, { type: "create", table: "projects", row: { ...p } }, { type: "create", table: "actions", row: { ...make(p.id) } }]);
+          }),
         onPick: (project_id) => {
           const name = project_id ? getState().projects.find((p) => p.id === project_id)?.title : null;
           mutate(name ? `${what} added to “${name}”` : `${what} added: “${title}”`, [...extra, { type: "create", table: "actions", row: { ...make(project_id) } }]);
@@ -245,10 +273,11 @@ export function linkAppointment(ui: UI, e: Pick<CalEvent, "key" | "title" | "dat
     current: cur?.project_id ?? null,
     noneLabel: "No project",
     createLabel: (q) => `New project “${q}”`,
-    onCreate: (q) => {
-      const p = newProject({ title: q });
-      link(p.id, [{ type: "create", table: "projects", row: { ...p } }], q);
-    },
+    onCreate: (q) =>
+      askProjectArea(ui, q, (area_id, areaOps) => {
+        const p = newProject({ title: q, area_id });
+        link(p.id, [...areaOps, { type: "create", table: "projects", row: { ...p } }], q);
+      }),
     onPick: (id) => {
       if (id) return link(id);
       if (cur) mutate(`${name} no longer linked`, [{ type: "delete", table: "appointments", id: e.key }]);
@@ -433,13 +462,15 @@ export function editors(ui: UI) {
             : []),
         ],
         createLabel: (q) => `New project “${q}”, and move there`,
-        onCreate: (q) => {
-          const p = newProject({ title: q });
-          mutate(`${n(ids)} → new project “${q}”`, [
-            { type: "create", table: "projects", row: { ...p } },
-            ...ids.map((a) => ({ type: "patch" as const, table: "actions" as const, id: a, data: { project_id: p.id } })),
-          ]);
-        },
+        onCreate: (q) =>
+          askProjectArea(ui, q, (area_id, areaOps) => {
+            const p = newProject({ title: q, area_id });
+            mutate(`${n(ids)} → new project “${q}”`, [
+              ...areaOps,
+              { type: "create", table: "projects", row: { ...p } },
+              ...ids.map((a) => ({ type: "patch" as const, table: "actions" as const, id: a, data: { project_id: p.id } })),
+            ]);
+          }),
         onPick: (target) => {
           if (!target) return;
           if (target === "convert") return api.convert(ids);
@@ -725,10 +756,11 @@ export function setProject(ui: UI, table: "actions" | "refs" | "checklists", ids
     current: rows.length === 1 ? (rows[0].project_id ?? null) : null,
     noneLabel: "No project",
     createLabel: (q) => `New project “${q}”`,
-    onCreate: (q) => {
-      const p = newProject({ title: q });
-      mutate(`${what} → new project “${q}”`, [{ type: "create", table: "projects", row: { ...p } }, ...patch(p.id)]);
-    },
+    onCreate: (q) =>
+      askProjectArea(ui, q, (area_id, areaOps) => {
+        const p = newProject({ title: q, area_id });
+        mutate(`${what} → new project “${q}”`, [...areaOps, { type: "create", table: "projects", row: { ...p } }, ...patch(p.id)]);
+      }),
     onPick: (id) => mutate(`${what} → ${id ? (getState().projects.find((p) => p.id === id)?.title ?? "project") : "no project"}`, patch(id)),
   });
 }

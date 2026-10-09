@@ -1,6 +1,6 @@
 import { getState, mutate, named, newAction, newProject, notify, stamp, uid } from "./store.ts";
 import type { UI } from "./ui.tsx";
-import { askContext, askWaitingOn, destinationItems } from "./actionCommands.tsx";
+import { askContext, askProjectArea, askWaitingOn, destinationItems } from "./actionCommands.tsx";
 import { splitStuff, stuffTitle } from "./views/InboxView.tsx";
 import { itemsFromText, newChecklist } from "./checklists.ts";
 import { reminderChoices, reminderOf } from "./reminders.ts";
@@ -107,11 +107,12 @@ export function fileStuff(ui: UI, ids: ID[]) {
       ...destinationItems().filter((it) => it.section === "projects"),
     ],
     createLabel: (q) => `New project “${q}”, with this as its first action`,
-    onCreate: (q) => {
-      const p = newProject({ title: q });
-      // The project is made with its first action, which is worded like any next action.
-      oneByOne(p.id, [{ type: "create", table: "projects", row: { ...p } }], q);
-    },
+    onCreate: (q) =>
+      // The project is made with its first action, which is worded like any next action; its area is asked first.
+      askProjectArea(ui, q, (area_id, areaOps) => {
+        const p = newProject({ title: q, area_id });
+        oneByOne(p.id, [...areaOps, { type: "create", table: "projects", row: { ...p } }], q);
+      }),
     onPick: (target) => {
       if (!target) return;
       if (target === "__done") doneNow(ids);

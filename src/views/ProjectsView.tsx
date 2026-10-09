@@ -6,7 +6,7 @@ import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups
 import { AreaName, DateCell, DoneBox, Lamp } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
-import { areaItems, areaName, askContext, askWaitingOn, createAreaOp } from "../actionCommands.tsx";
+import { areaItems, areaName, askContext, askProjectArea, askWaitingOn, createAreaOp } from "../actionCommands.tsx";
 import { formatLong, today } from "../../shared/dates.ts";
 import { pickGoal } from "../horizons.ts";
 import { supportLabel } from "../support.ts";
@@ -37,29 +37,11 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
     },
     /** The rest of ⌥N once the project is named (the phone's + names it in its own sheet): its area, then its first next action. */
     createNamed(title: string) {
-      const askArea = (title: string) => {
-        const make = (area_id: ID | null, extra: Op[] = []) => {
-          const p = newProject({ title, area_id });
-          mutate(`New project “${title}”`, [...extra, { type: "create", table: "projects", row: { ...p } }]);
-          // Next tick, so the area picker has closed before the next-action prompt opens.
-          window.setTimeout(() => api.addNextAction(p.id), 0);
-        };
-        if (!getState().areas.length) return make(null);
-        ui.openPicker({
-          type: "list",
-          title: `Area for “${title}”`,
-          items: areaItems(),
-          current: null,
-          noneLabel: "No area",
-          createLabel: (q) => `New area “#${q.replace(/^#+\s*/, "")}”`,
-          onCreate: (q) => {
-            const { id, op } = createAreaOp(q);
-            make(id, [op]);
-          },
-          onPick: (id) => make(id),
-        });
-      };
-      askArea(title);
+      askProjectArea(ui, title, (area_id, extra) => {
+        const p = newProject({ title, area_id });
+        mutate(`New project “${title}”`, [...extra, { type: "create", table: "projects", row: { ...p } }]);
+        api.addNextAction(p.id);
+      });
     },
     /** Give a project something it waits on: what, then who or what (required, as everywhere in Waiting For). */
     addWaiting(projectId: ID) {
