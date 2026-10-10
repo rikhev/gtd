@@ -1774,8 +1774,8 @@ body.is-col-resizing * {
 }
 /* A habit's last four weeks: small squares, oldest first, filled in the done-mark ink where it was done and empty
    (a hairline box) where not. No colour: green is project health. The current day or week (or the one stepped back
-   to) carries a dot inside its square, ink in an open box, a hole in a filled one: it marks the place without growing
-   past the square, so it never crowds the square before it. */
+   to) is underlined (below); in the pane's half year it carries a dot instead, ink in an open box, a hole in a
+   filled one. Neither grows past the square, so it never crowds the square before it. */
 .hstrip {
   display: inline-flex;
   align-items: center;
@@ -1802,27 +1802,36 @@ body.is-col-resizing * {
   background: var(--mark);
   box-shadow: none;
 }
-.hstrip i.is-now,
 .habit-year i.is-now {
   --now-dot: var(--ink);
   box-shadow: inset 0 0 0 1px var(--ink-3);
   background-image: radial-gradient(circle, var(--now-dot) 0 1.5px, transparent 2px);
 }
-.hstrip i.is-now.is-on,
 .habit-year i.is-now.is-on {
   box-shadow: none;
   background-image: none;
   /* A true hole, so whatever the row sits on (white, the cursor's blue, the pane) shows through. */
   mask-image: radial-gradient(circle, transparent 0 1.5px, #000 2px);
 }
-/* On the row the marked day also stands taller, a caret reaching a step above and below the strip, so it reads from
-   across the room: height carries further than a dot, and it still never widens past its square. */
+/* On the row the marked day is underlined: its square stays as the record has it, filled or open (open in a full
+   `ink` hairline), and a bar sits under it, the one mark below the strip's line, so it reads from across the room
+   without changing the squares' shape. */
 .hstrip i.is-now {
-  height: 13px;
+  position: relative;
   box-shadow: inset 0 0 0 1px var(--ink);
 }
-.hstrip.is-week i.is-now {
-  height: 14px;
+.hstrip i.is-now.is-on {
+  box-shadow: none;
+}
+.hstrip i.is-now::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ink);
 }
 .is-focus .hstrip i.is-on {
   background-color: var(--select-ink);
@@ -1831,8 +1840,10 @@ body.is-col-resizing * {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--select-ink) 35%, transparent);
 }
 .is-focus .hstrip i.is-now {
-  --now-dot: var(--select-ink);
   box-shadow: inset 0 0 0 1px var(--select-ink);
+}
+.is-focus .hstrip i.is-now::after {
+  background: var(--select-ink);
 }
 .is-focus .hstrip i.is-now.is-on {
   box-shadow: none;
