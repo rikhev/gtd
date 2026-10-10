@@ -1815,6 +1815,15 @@ body.is-col-resizing * {
   /* A true hole, so whatever the row sits on (white, the cursor's blue, the pane) shows through. */
   mask-image: radial-gradient(circle, transparent 0 1.5px, #000 2px);
 }
+/* On the row the marked day also stands taller, a caret reaching a step above and below the strip, so it reads from
+   across the room: height carries further than a dot, and it still never widens past its square. */
+.hstrip i.is-now {
+  height: 13px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.hstrip.is-week i.is-now {
+  height: 14px;
+}
 .is-focus .hstrip i.is-on {
   background-color: var(--select-ink);
 }
