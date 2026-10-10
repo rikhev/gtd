@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { setRoute } from "../route.ts";
 import { FileText, List, Lock, Paperclip, StickyNote } from "lucide-react";
-import { itemCount, openRefList, setForm, useOpenRefList } from "../refList.ts";
+import { itemCount, openRefList, useOpenRefList } from "../refList.ts";
 import { RefListView } from "./RefListView.tsx";
 import { byTitle, firstLine, openTodayNote, renameNote, showNote } from "../notes.ts";
 import { fileKind } from "../components/Viewer.tsx";
 import { lockNow, lockWithPassword, removeLock, useLock } from "../lock.ts";
-import { quote, completeActions, getState, mutate, named, newAction, notify, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
+import { quote, completeActions, getState, mutate, named, newAction, patchMany, plural, refUpdated, stamp, uid, upload, useStore } from "../store.ts";
 import { useUI, type UI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, useListNav, useSort, sortGroups, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
@@ -348,20 +348,6 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     { id: "ref.newlist", label: "New list", group: "Reference", keys: ["l"], run: () => create("list") },
     { id: "ref.today", label: "Open today's note", group: "Reference", keys: ["d"], run: () => openTodayNote(ui) },
     {
-      // A note's lines become a list's items, and back; nothing is lost either way.
-      id: "ref.form",
-      row: true,
-      label: focusId && s.refs.find((r) => r.id === focusId)?.form === "list" ? "Show as a note" : "Show as a list",
-      group: "Reference",
-      enabled: Boolean(focusId),
-      run: () => {
-        const ids = nav.targets();
-        const toList = s.refs.find((r) => r.id === focusId)?.form !== "list";
-        if (ids.some((id) => s.refs.find((r) => r.id === id)?.sealed) && !lock.unlocked) return notify("Unlock first: a locked reference is changed only while it is open", { tone: "error" });
-        void setForm(ids, toList ? "list" : null);
-      },
-    },
-    {
       // Typing finds a note by its title or its words (the list's letters are its commands, so the typing happens in
       // a picker), and opens it. ⌥Q searches everything, files and other lists too.
       id: "ref.find",
@@ -374,13 +360,15 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     {
       id: "ref.open",
       row: true,
-      label: focusRef?.form === "list" ? "Open the list" : focusRef && kindOf(focusRef) === "document" ? "View the document" : "Open the note",
+      // A note is read and written in the pane, so Enter on one is Open details, as on every list.
+      label: focusRef?.form === "list" ? "Open the list" : focusRef && kindOf(focusRef) === "document" ? "View the document" : "Open details",
       group: "Reference",
       keys: ["enter"],
       enabled: Boolean(focusId),
       run: () => focusId && open(focusId),
     },
-    { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusId), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
+    // Its own command only where Enter goes elsewhere (a list opens across the width, a document in the viewer).
+    { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusRef && (focusRef.form === "list" || kindOf(focusRef) === "document")), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", row: true, label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
     { id: "ref.jump", row: true, label: "Jump to the project it supports", group: "Reference", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {

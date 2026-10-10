@@ -1,7 +1,7 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, forwardRef, useContext, useEffect, useId, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode } from "react";
 import { X, Plus, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock, StickyNote } from "lucide-react";
-import { linesOf, noteAsList, openRefList, setForm, textOf, useRefText } from "../refList.ts";
+import { linesOf, noteAsList, openRefList, textOf, useRefText } from "../refList.ts";
 import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes } from "../lock.ts";
 import { type MutateOpts, getState, quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, uid, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
@@ -1453,7 +1453,6 @@ function RefDetail({ r }: { r: Ref }) {
     "detail-ref",
     [
       { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+j"], run: () => ui.jumpFromSupport("ref", r.id) },
-      ...(!r.sealed || lock.unlocked ? [{ id: "detail.r.form", label: r.form === "list" ? "Show as a note" : "Show as a list", group: "Details", run: () => void setForm([r.id], r.form === "list" ? null : "list") }] : []),
       // ⇧L and Delete, as on the Reference row (the pane is the row, bigger).
       r.sealed
         ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", keys: ["shift+l"], run: () => removeLock(ui, [r.id]) }

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { routePath, routeView, setRoute } from "./route.ts";
-import { getState, mutate } from "./store.ts";
-import { isUnlocked, readSealedNotes, saveSealedNotes, useOpenedNotes } from "./lock.ts";
+import { mutate } from "./store.ts";
+import { saveSealedNotes, useOpenedNotes } from "./lock.ts";
 import type { ID, Ref } from "../shared/types.ts";
 
 /*
@@ -63,21 +63,6 @@ export function useRefText(r: Ref): { text: string | null; save: (next: string, 
   const opened = useOpenedNotes(r);
   if (r.sealed) return { text: opened, save: (next, label = "Saved") => void saveSealedNotes(r, next, label) };
   return { text: r.notes, save: (next, label = "Saved") => mutate(label, [{ type: "patch", table: "refs", id: r.id, data: { notes: next } }]) };
-}
-
-/** Show a reference as a list, or as a note again. A note's lines become items; a list's items read as lines. */
-export async function setForm(ids: ID[], form: "list" | null) {
-  const refs = getState().refs.filter((r) => ids.includes(r.id) && (r.form ?? null) !== form);
-  if (!refs.length) return;
-  const name = refs.length === 1 ? `“${refs[0].title || "Untitled"}”` : `${refs.length} references`;
-  const label = form ? `${name} shown as a list` : `${name} shown as a note`;
-  for (const r of refs) {
-    if (r.sealed && !isUnlocked()) continue;
-    const text = r.sealed ? await readSealedNotes(r) : r.notes;
-    const next = form ? noteAsList(text) : text;
-    if (r.sealed) await saveSealedNotes(r, next, label, { form });
-    else mutate(label, [{ type: "patch", table: "refs", id: r.id, data: { form, notes: next } }]);
-  }
 }
 
 /* ---------------- which list is open ---------------- */
