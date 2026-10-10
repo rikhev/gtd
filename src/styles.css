@@ -2957,6 +2957,19 @@ textarea.field-text {
 .add-action {
   margin-top: 8px;
 }
+/* The + link under a pane's list stands in the rows' marker column, centred on their Complete boxes, its words
+   where their titles start. */
+.attach-btn.add-action {
+  display: grid;
+  grid-template-columns: 22px auto;
+  justify-content: start;
+  justify-items: start;
+  gap: var(--sp-sm);
+  padding: 0 2px;
+}
+.attach-btn.add-action svg {
+  justify-self: center;
+}
 .badge-line {
   display: flex;
   align-items: center;
