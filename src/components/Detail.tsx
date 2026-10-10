@@ -1,6 +1,6 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { X, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock, StickyNote } from "lucide-react";
+import { createContext, forwardRef, useContext, useEffect, useId, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode } from "react";
+import { X, Plus, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock, StickyNote } from "lucide-react";
 import { linesOf, noteAsList, openRefList, setForm, textOf, useRefText } from "../refList.ts";
 import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes } from "../lock.ts";
 import { type MutateOpts, getState, quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, uid, upload, useMeta, useStore } from "../store.ts";
@@ -715,6 +715,57 @@ function EventDetail({ e }: { e: CalEvent }) {
   );
 }
 
+type AddLineHandle = { focus: () => void };
+/**
+ * The way to add a row under a pane's list (owner's request): a + link under the last row, as Files has "Attach a file",
+ * not a bare field. A click, or the list's key (T, N), opens the field in its place; Enter adds and keeps it open for
+ * the next one; left empty (Esc, a click elsewhere) it folds back to the link, which keeps the pane's cursor.
+ */
+const AddLine = forwardRef<AddLineHandle, { label: string; keys: string; value: string; onChange: (v: string) => void; onEnter: () => void; onPaste?: (e: ClipboardEvent<HTMLInputElement>) => void }>(function AddLine({ label, keys, value, onChange, onEnter, onPaste }, ref) {
+  const [open, setOpen] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const link = useRef<HTMLButtonElement>(null);
+  const hadCursor = useRef(false);
+  useImperativeHandle(ref, () => ({ focus: () => (open ? input.current?.focus() : setOpen(true)) }), [open]);
+  useEffect(() => {
+    if (open) input.current?.focus();
+    else if (hadCursor.current) {
+      hadCursor.current = false;
+      link.current?.closest(".detail")?.querySelectorAll("[data-cursor]").forEach((x) => x.removeAttribute("data-cursor"));
+      link.current?.setAttribute("data-cursor", "");
+    }
+  }, [open]);
+  if (!open)
+    return (
+      <button ref={link} type="button" className="text-btn attach-btn add-action" aria-keyshortcuts={keys} onClick={() => setOpen(true)}>
+        <Plus size={13} strokeWidth={1.75} aria-hidden />
+        {label}
+      </button>
+    );
+  return (
+    <input
+      ref={input}
+      className="field-text add-action"
+      value={value}
+      aria-label={label}
+      aria-keyshortcuts={keys}
+      onChange={(e) => onChange(e.target.value)}
+      onPaste={onPaste}
+      onBlur={(e) => {
+        if (value.trim()) return;
+        hadCursor.current = e.currentTarget.hasAttribute("data-cursor");
+        setOpen(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && value.trim()) {
+          e.preventDefault();
+          onEnter();
+        }
+      }}
+    />
+  );
+});
+
 function ProjectDetail({ p }: { p: Project }) {
   const ui = useUI();
   const ed = projectEditors(ui);
@@ -726,7 +777,8 @@ function ProjectDetail({ p }: { p: Project }) {
   // T and W, as on the Projects list: T goes straight into "Add a next action" while the pane has focus, W adds a
   // waiting for (what, then who or what it waits on).
   const active = useContext(DetailActive);
-  const addInput = useRef<HTMLInputElement>(null);
+  const addInput = useRef<AddLineHandle>(null);
+  const actionsRef = useRef<HTMLElement>(null);
   useCommands(
     "detail-addnext",
     [
@@ -743,7 +795,7 @@ function ProjectDetail({ p }: { p: Project }) {
     ],
     { priority: 21, active },
   );
-  const cursorAction = () => addInput.current?.closest(".detail")?.querySelector<HTMLElement>("[data-cursor][data-action]")?.dataset.action;
+  const cursorAction = () => actionsRef.current?.closest(".detail")?.querySelector<HTMLElement>("[data-cursor][data-action]")?.dataset.action;
   const toggleDone = (id: string | undefined) => {
     const a = id && s.actions.find((x) => x.id === id);
     if (!a) return notify("Put the cursor on an action (↑↓), then E marks it done.");
@@ -848,7 +900,7 @@ function ProjectDetail({ p }: { p: Project }) {
           </ul>
         </section>
       )}
-      <section className="detail-actions">
+      <section className="detail-actions" ref={actionsRef}>
         <h3 className="detail-h">
           Actions <span className="count">{open.length}</span>
           {doneCount > 0 && <span className="detail-h-note">{doneCount} done</span>}
@@ -891,20 +943,7 @@ function ProjectDetail({ p }: { p: Project }) {
             );
           })}
         </ul>
-        <input
-          ref={addInput}
-          className="field-text add-action"
-          value={draft}
-          aria-label="Add a next action"
-          aria-keyshortcuts="T"
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && draft.trim()) {
-              e.preventDefault();
-              addNext();
-            }
-          }}
-        />
+        <AddLine ref={addInput} label="Add a next action" keys="T" value={draft} onChange={setDraft} onEnter={addNext} />
       </section>
       <SupportMaterial projectId={p.id} />
       <NotesField label="Support notes" value={p.notes} saveKey={`projects:${p.id}:notes`} save={(v, o) => mutate("Notes saved", [{ type: "patch", table: "projects", id: p.id, data: { notes: v } }], o)} owner={{ kind: "project", id: p.id }} />
@@ -1010,7 +1049,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
   const items = itemsOf(s, c.id);
   const p = progress(s, c.id);
   const [draft, setDraft] = useState("");
-  const addInput = useRef<HTMLInputElement>(null);
+  const addInput = useRef<AddLineHandle>(null);
   const proj = s.projects.find((x) => x.id === c.project_id);
   const openFull = () => {
     ui.go("checklists");
@@ -1076,20 +1115,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
             ),
           )}
         </ul>
-        <input
-          ref={addInput}
-          className="field-text add-action"
-          value={draft}
-          aria-label={c.repeats ? "Add a habit" : "Add an item"}
-          aria-keyshortcuts="N"
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && draft.trim()) {
-              e.preventDefault();
-              addItem();
-            }
-          }}
-        />
+        <AddLine ref={addInput} label={c.repeats ? "Add a habit" : "Add an item"} keys="N" value={draft} onChange={setDraft} onEnter={addItem} />
       </section>
       <p className="checklist-pane-foot">
         <button type="button" className="text-btn" onClick={openFull}>
@@ -1334,7 +1360,7 @@ function RefListPane({ r }: { r: Ref }) {
   const lines = text === null ? [] : linesOf(text);
   const [edit, setEdit] = useState<{ key: string; v: string } | null>(null);
   const [draft, setDraft] = useState("");
-  const addInput = useRef<HTMLInputElement>(null);
+  const addInput = useRef<AddLineHandle>(null);
   useCommands("detail-reflist", [{ id: "detail.rl.add", label: "Add an item", group: "Details", keys: ["n"], run: () => addInput.current?.focus() }], { priority: 21, active });
   if (text === null) return null;
   const commitEdit = () => {
@@ -1390,24 +1416,18 @@ function RefListPane({ r }: { r: Ref }) {
           ),
         )}
       </ul>
-      <input
+      <AddLine
         ref={addInput}
-        className="field-text add-action"
+        label="Add an item"
+        keys="N"
         value={draft}
-        aria-label="Add an item"
-        aria-keyshortcuts="N"
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={setDraft}
+        onEnter={() => addItems(draft)}
         onPaste={(e) => {
           const t = e.clipboardData.getData("text");
           if (t.includes("\n")) {
             e.preventDefault();
             addItems(t);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && draft.trim()) {
-            e.preventDefault();
-            addItems(draft);
           }
         }}
       />
