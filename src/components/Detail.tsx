@@ -914,9 +914,10 @@ function ProjectDetail({ p }: { p: Project }) {
             {nextAppt.time ? ` ${nextAppt.time}` : ""}. Add a next action when it has happened.
           </p>
         )}
-        {stallReason(s, p) && (
-          <p className={`badge-line ${stallReason(s, p) === "idle" ? "is-quiet" : ""}`}>
-            {stallReason(s, p) === "no-next" ? "No next action. Add one below." : `Nothing here touched in ${meta.stallWeeks}+ weeks. Is it still current? The Weekly Review asks.`}
+        {/* No line for a missing next action: the + link under the list already offers one. */}
+        {stallReason(s, p) === "idle" && (
+          <p className="badge-line is-quiet">
+            {`Nothing here touched in ${meta.stallWeeks}+ weeks. Is it still current? The Weekly Review asks.`}
           </p>
         )}
         <ul className="timeline">
