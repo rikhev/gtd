@@ -5,7 +5,7 @@ import { inAreas, openAreaFilter, useAreaFilter } from "./areaFilter.ts";
 import { loadSession, saveSession } from "./reviewSession.ts";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, SlidersHorizontal } from "lucide-react";
-import { quote, archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, notStarted, onHold, plural, signOut } from "./store.ts";
+import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, notStarted, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
 import { Rail, RAIL, PhoneChrome, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
@@ -48,23 +48,6 @@ import { today } from "../shared/dates.ts";
 const LISTS_WITH_VIEW: ViewId[] = ["next", "waiting", "projects", "someday", "reference", "done", "agendas", "checklists"];
 const ROUTED: ViewId[] = ["inbox", "calendar", "next", "waiting", "agendas", "projects", "someday", "reference", "checklists", "horizons", "done", "trash", "review", "settings", "clarify"];
 /** The address of the checklist open in Checklists, if one is. */
-/**
- * The name of what the cursor is on, for the palette's first group ("“Launch the site”"): the item in the details
- * pane when the pane has the keys, else the focused row of the active list, else the focused calendar item.
- */
-function focusedName(): string {
-  const pane = document.querySelector<HTMLElement>(".detail .field-title");
-  if (pane && document.activeElement?.closest(".detail")) {
-    const field = pane.matches("input, textarea") ? pane : pane.querySelector<HTMLElement>("input, textarea");
-    return quote((field as HTMLInputElement | null)?.value ?? pane.textContent ?? "");
-  }
-  const row = document.querySelector<HTMLElement>(".grid.is-active .row.is-focus");
-  if (row) return quote((row.querySelector(".subject-text") ?? row.querySelector(".c-subject") ?? row).textContent ?? "");
-  const item = document.querySelector<HTMLElement>(".list-region [data-focused]");
-  if (item) return quote((item.getAttribute("title") ?? item.innerText).split("\n")[0]);
-  return "";
-}
-
 const openChecklistPath = () => (/^checklists\/.+/.test(routePath()) ? routePath() : null);
 /** The address of the reference list open in Reference, if one is. */
 /** What takes focus when the list region does: the active list. */
@@ -154,7 +137,7 @@ export default function App() {
   const viewerFrom = useRef<Region>("list");
   const [pickerSeq, setPickerSeq] = useState(0);
   // The palette, ⌘K: what it lists is taken as it opens, before it takes the keys, with where the focus is.
-  const [palette, setPalette] = useState<{ entries: LayeredCommand[]; where: string; rowName: string } | null>(null);
+  const [palette, setPalette] = useState<{ entries: LayeredCommand[]; where: string } | null>(null);
 
   // A press outside the detail pane takes the keys out of it (owner's request): on a list row the row's list becomes
   // the active region with that row under the cursor, anywhere else the list does, and a control outside (the rail,
@@ -385,7 +368,7 @@ export default function App() {
       focusCapture: () => captureRef.current?.focus(),
       openPalette: () => {
         const entries = paletteSnapshot();
-        setPalette({ entries, where: paletteScope(entries, VIEW_TITLES[viewNow.current] ?? "This screen"), rowName: focusedName() });
+        setPalette({ entries, where: paletteScope(entries, VIEW_TITLES[viewNow.current] ?? "This screen") });
       },
       openSearch: () => {
         if (view !== "search") prevView.current = view;

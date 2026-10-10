@@ -3286,13 +3286,6 @@ textarea.field-text {
 .palette-list li.is-quiet:not(.is-hi) {
   color: var(--ink-2);
 }
-/* The row's own group is headed by its name, in its own case: "“Launch the site”", not label caps. */
-.palette-list li.pal-section.is-named {
-  font: 600 var(--fs-body) var(--font-ui);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--ink);
-}
 .palette-list li.pal-section.is-quiet {
   color: var(--ink-3);
 }

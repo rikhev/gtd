@@ -806,7 +806,7 @@ export function paletteScope(entries: LayeredCommand[], viewTitle: string): stri
   return viewTitle;
 }
 
-type Row = { c: Command; layer: string; head?: string; quiet?: boolean; named?: boolean; key: string };
+type Row = { c: Command; layer: string; head?: string; quiet?: boolean; key: string };
 
 /**
  * The command palette, ⌘K. It follows focus (owner's decision after the keys critique, which folded the ⇧? cheat sheet
@@ -814,7 +814,7 @@ type Row = { c: Command; layer: string; head?: string; quiet?: boolean; named?: 
  * under its name, then the rest of the place you are in by group, moving around last; the app-wide commands follow,
  * quieter, under Everywhere. Every command shows every key it answers to. Typing searches every command, nearest first.
  */
-export function Palette({ entries, where, rowName, close }: { entries: LayeredCommand[]; where: string; rowName: string; close: () => void }) {
+export function Palette({ entries, where, close }: { entries: LayeredCommand[]; where: string; close: () => void }) {
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -848,8 +848,8 @@ export function Palette({ entries, where, rowName, close }: { entries: LayeredCo
       return true;
     });
     const out: Row[] = [];
-    const add = (list: LayeredCommand[], head: string, quiet = false, prefix = "", named = false) =>
-      list.forEach((e, i) => out.push({ c: e.command, layer: e.layer, head: i === 0 ? head : undefined, quiet, named, key: `${prefix}${e.command.id}` }));
+    const add = (list: LayeredCommand[], head: string, quiet = false, prefix = "") =>
+      list.forEach((e, i) => out.push({ c: e.command, layer: e.layer, head: i === 0 ? head : undefined, quiet, key: `${prefix}${e.command.id}` }));
     // Recent: the last five used that can run here; they stay in their own places below as well.
     add(
       recent.map((id) => live.find((e) => e.command.id === id)).filter((e): e is LayeredCommand => Boolean(e)),
@@ -857,10 +857,11 @@ export function Palette({ entries, where, rowName, close }: { entries: LayeredCo
       false,
       "recent:",
     );
-    // The row under the cursor (or the item in the details pane), under its name: one group, what you do to it
-    // first, its fields after (a second heading split a three-command appointment in two).
+    // The row under the cursor (or the item in the details pane), under one fixed heading, Focus (owner's request:
+    // a heading that changed with the row's subject read oddly): one group, what you do to it first, its fields after
+    // (a second heading split a three-command appointment in two).
     const row = live.filter(onRow);
-    add([...row.filter((e) => e.command.group !== "Fields"), ...row.filter((e) => e.command.group === "Fields")], rowName || "The row under the cursor", false, "", true);
+    add([...row.filter((e) => e.command.group !== "Fields"), ...row.filter((e) => e.command.group === "Fields")], "Focus");
     // The rest of this place, by group, moving around last.
     const page = new Map<string, LayeredCommand[]>();
     for (const e of live) if (e.layer !== "global" && !onRow(e)) page.set(e.command.group, [...(page.get(e.command.group) ?? []), e]);
@@ -880,7 +881,7 @@ export function Palette({ entries, where, rowName, close }: { entries: LayeredCo
       true,
     );
     return out;
-  }, [q, entries, where, rowName]);
+  }, [q, entries, where]);
   useEffect(() => setHi(0), [q]);
   useEffect(() => {
     document.getElementById(`pal-${hi}`)?.scrollIntoView({ block: "nearest" });
@@ -935,7 +936,7 @@ export function Palette({ entries, where, rowName, close }: { entries: LayeredCo
         <ul className="palette-list" id="palette-list" role="listbox" aria-label={`Commands: ${where}`}>
           {rows.map((r, i) => [
             r.head && (
-              <li key={`h-${i}`} className={`pal-section ${r.quiet ? "is-quiet" : ""} ${r.named ? "is-named" : ""}`} role="presentation">
+              <li key={`h-${i}`} className={`pal-section ${r.quiet ? "is-quiet" : ""}`} role="presentation">
                 {r.head}
               </li>
             ),
