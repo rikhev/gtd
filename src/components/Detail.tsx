@@ -174,7 +174,9 @@ function NotesField({
   return (
     <label className="field">
       <span className="field-head">
-        <span className="field-label">{label}</span>
+        <span className="field-label" data-keycap="n">
+          {label}
+        </span>
       </span>
       <NotesArea
         value={auto.text}
@@ -251,7 +253,7 @@ function PickField({ label, children, onOpen, k }: { label: string; children: Re
   return (
     <div className="field">
       <span className="field-head">
-        <span className="field-label" id={`${id}-l`}>
+        <span className="field-label" id={`${id}-l`} data-keycap={k?.toLowerCase()}>
           {label}
         </span>
       </span>

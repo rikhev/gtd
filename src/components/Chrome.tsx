@@ -130,7 +130,6 @@ function useRailSignals() {
 }
 
 export function Rail({ active }: { active: boolean }) {
-  useHeldModifier();
   const ui = useUI();
   const { sig, listMeta, reviewAge, reviewDue, oldestDue, worst, weather, weatherNote } = useRailSignals();
   const { authRequired } = useMeta();
@@ -369,10 +368,14 @@ function Gauge({ due, worst }: { due: boolean; worst: boolean }) {
 }
 
 /**
- * The rail's key caps rest hidden and come up while a modifier is held, as the shortcuts in macOS menus do (owner's
- * decision: twelve standing caps crowded the counts). A short hold, so a quick ⌘K doesn't flash them.
+ * Key caps rest hidden and come up while ⌃ or ⌘ is held, as the shortcuts in macOS menus do (owner's decision: twelve
+ * standing caps crowded the rail's counts). A short hold, so a quick ⌘K doesn't flash them. The rail's caps are its
+ * own; everywhere else (owner's decision, 17 October: the keys are many, and ⌘K was the only way to find them) an
+ * element names its key in `data-keycap` (a column head, a pane field, the heading's links, capture and search), and
+ * the moment the hold begins each one is given its cap only if that key works there right now, so no cap ever
+ * promises a key that does nothing. Nothing moves: a cap is drawn over or beside what it names (styles.css).
  */
-function useHeldModifier() {
+export function useHeldModifier() {
   useEffect(() => {
     let timer = 0;
     const isMod = (k: string) => k === "Control" || k === "Meta";
@@ -381,9 +384,18 @@ function useHeldModifier() {
       timer = 0;
       document.body.classList.remove("keys-held");
     };
+    const show = () => {
+      const live = new Set(activeCommands().flatMap((c) => c.keys ?? []));
+      for (const el of document.querySelectorAll<HTMLElement>("[data-keycap]")) {
+        const k = el.dataset.keycap!;
+        if (live.has(k)) el.dataset.keycapLabel = keyLabel(k);
+        else delete el.dataset.keycapLabel;
+      }
+      document.body.classList.add("keys-held");
+    };
     const down = (e: KeyboardEvent) => {
       if (!isMod(e.key)) return clear();
-      if (!timer) timer = window.setTimeout(() => document.body.classList.add("keys-held"), 220);
+      if (!timer) timer = window.setTimeout(show, 220);
     };
     const up = (e: KeyboardEvent) => isMod(e.key) && clear();
     window.addEventListener("keydown", down, true);
@@ -688,7 +700,7 @@ export const CaptureBar = forwardRef<HTMLTextAreaElement, { onDone: () => void; 
   };
 
   return (
-    <div className={`capture ${focused ? "is-open" : ""}`}>
+    <div className={`capture ${focused ? "is-open" : ""}`} data-keycap="shift+n" data-keycap-at="end">
       <textarea
         ref={ref}
         className="capture-input"
@@ -750,7 +762,7 @@ export const SearchBox = forwardRef<HTMLInputElement, { value: string; onChange:
     { priority: 50, active: focused },
   );
   return (
-    <label className={`search ${focused ? "is-open" : ""}`}>
+    <label className={`search ${focused ? "is-open" : ""}`} data-keycap="alt+q" data-keycap-at="end">
       <Search size={14} strokeWidth={2} aria-hidden />
       <input
         ref={ref}

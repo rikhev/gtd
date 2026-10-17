@@ -1053,6 +1053,56 @@ body.keys-held .rail .rail-meta .rail-key {
 body.keys-held .rail .rail-meta .num {
   opacity: 0;
 }
+/* The keys where you are (owner's decision, 17 October): while ⌃ or ⌘ is held, whatever names a working key in
+   `data-keycap` shows its cap, drawn over or beside it so nothing moves: inside a field's end ("end"), before a
+   heading's link or a right-aligned column's name ("before"), after a column's name or a pane field's label (the
+   default). The same cap as the rail's, fading in as they do. */
+[data-keycap] {
+  position: relative;
+}
+body.keys-held [data-keycap-label]::after {
+  content: attr(data-keycap-label);
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 6px);
+  translate: 0 -50%;
+  z-index: 2;
+  min-width: 18px;
+  padding: 0 4px;
+  font: 600 var(--fs-key) / 15px var(--font-ui);
+  font-stretch: 100%;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: center;
+  color: var(--ink);
+  background: var(--sheet);
+  border: 1px solid var(--rule-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: keycap-in 140ms var(--ease);
+}
+body.keys-held [data-keycap-at="end"][data-keycap-label]::after {
+  left: auto;
+  right: 6px;
+}
+body.keys-held [data-keycap-at="start"][data-keycap-label]::after {
+  left: 6px;
+}
+body.keys-held [data-keycap-at="before"][data-keycap-label]::after {
+  left: auto;
+  right: calc(100% + 6px);
+}
+/* A column head clips its label; while the caps show, a cap may stand in the gap beside it. */
+body.keys-held .gh:has([data-keycap-label]) {
+  overflow: visible;
+}
+@keyframes keycap-in {
+  from {
+    opacity: 0;
+  }
+}
 .rail-meta {
   display: flex;
   align-items: center;

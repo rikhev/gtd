@@ -95,6 +95,9 @@ const capFlexible = (w: string) => {
   const m = /^minmax\((\d+)px,\s*([\d.]+)fr\)$/.exec(w);
   return m ? `minmax(${m[1]}px, ${Math.round(Math.max(Number(m[1]) * 2, 320 * Number(m[2])))}px)` : w;
 };
+/** The key that sets each column's field on a row, as the rows' own commands have it (C context, S the day…): shown on
+ * the column's head while ⌃ or ⌘ is held, when that key works on the list (Chrome.tsx › useHeldModifier). */
+const COL_KEY: Record<string, string> = { ctx: "c", proj: "p", area: "a", defer: "s", start: "s", follow: "s", due: "d", since: "i", time: "m", energy: "g", repeat: "r", back: "b" };
 const MIN_COL = 36;
 const MAX_COL = 640;
 const clampCol = (px: number) => Math.round(Math.max(MIN_COL, Math.min(MAX_COL, px)));
@@ -1285,6 +1288,8 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                     type="button"
                     tabIndex={-1}
                     className={`gh-sort ${c.label ? "" : "is-icon"}`}
+                    data-keycap={COL_KEY[c.key]}
+                    data-keycap-at={c.align === "end" || i === columns.length - 1 ? "before" : undefined}
                     aria-label={c.label ? undefined : `Sort by ${name.toLowerCase()}`}
                     title={on === 1 ? `Sorted by ${name.toLowerCase()}, A–Z: click for Z–A` : on === -1 ? `Sorted by ${name.toLowerCase()}, Z–A: click for the list's own order` : `Sort by ${name.toLowerCase()}`}
                     onMouseDown={(e) => {
@@ -1299,7 +1304,9 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                     </svg>
                   </button>
                 ) : c.label ? (
-                  c.label
+                  <span data-keycap={COL_KEY[c.key]} data-keycap-at={c.align === "end" || i === columns.length - 1 ? "before" : undefined}>
+                    {c.label}
+                  </span>
                 ) : (
                   // The unlabelled lead columns still name themselves to screen readers.
                   <span className="visually-hidden">{LEAD_NAME[c.key] ?? c.key}</span>

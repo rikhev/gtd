@@ -8,7 +8,7 @@ import { ChevronRight, SlidersHorizontal } from "lucide-react";
 import { archiveAllDone, capture, getState, load, notify, undo, upload, useMeta, useStore, isDeferred, isChase, nextAppointment, notStarted, onHold, plural, signOut } from "./store.ts";
 import { installKeyHandler, useCommands, paletteSnapshot, keyLabel, runKey, type Command, type LayeredCommand } from "./keys.ts";
 import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type UI, type ViewId } from "./ui.tsx";
-import { Rail, RAIL, PhoneChrome, CaptureBar, SearchBox, Toast, Palette, paletteScope } from "./components/Chrome.tsx";
+import { Rail, RAIL, PhoneChrome, CaptureBar, SearchBox, Toast, Palette, paletteScope, useHeldModifier } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
 import { endPrint, preparePrint } from "./print.ts";
 import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
@@ -112,6 +112,8 @@ if (typeof window !== "undefined") {
 export default function App() {
   const meta = useMeta();
   const s = useStore((x) => x);
+  // Holding ⌃ or ⌘ shows the keys that work where you are (the rail's, the column heads', the pane's fields').
+  useHeldModifier();
   const [view, setView] = useState<ViewId>(() => viewFromPath() ?? "next");
   const [region, setRegion] = useState<Region>("list");
   const [detail, setDetail] = useState<Target | null>(null);
@@ -859,18 +861,18 @@ export default function App() {
               {/* What fits now, in sight where it is used; while it is on, the line above the list takes over. On a phone
                   it is in the View menu, with every other way of looking at the list: one button, not a row of links. */}
               {!phone && view === "next" && !fitNow && (
-                <button type="button" className="text-btn" onClick={() => openFit(ui)}>
+                <button type="button" className="text-btn" data-keycap="f" data-keycap-at="before" onClick={() => openFit(ui)}>
                   What fits now
                 </button>
               )}
               {!phone && view === "projects" && !areaFilter && s.areas.length > 0 && (
-                <button type="button" className="text-btn" onClick={() => openAreaFilter(ui)}>
+                <button type="button" className="text-btn" data-keycap="f" data-keycap-at="before" onClick={() => openAreaFilter(ui)}>
                   Filter by area
                 </button>
               )}
               {/* A routine stepped back to an earlier day: the way back to today (⌥⇧Y), beside the count that names the day. */}
               {openList?.repeats && checklistDay && (
-                <button type="button" className="text-btn" onClick={() => setChecklistDay(null, openList.repeats!)}>
+                <button type="button" className="text-btn" data-keycap="alt+shift+y" data-keycap-at="before" onClick={() => setChecklistDay(null, openList.repeats!)}>
                   {openList.repeats === "week" ? "Back to this week" : "Back to today"}
                 </button>
               )}
