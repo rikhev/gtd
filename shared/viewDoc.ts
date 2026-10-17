@@ -115,8 +115,8 @@ export function docPage(title: string, body: string, dark: boolean, wide = false
   // A document is paper on the stage, as a PDF's pages are (owner's request): a white sheet in both themes, in the
   // light theme's ink, on the stage's own paper colour (the app's `paper` token, light or dark). The frame can't read
   // the app's stylesheet, so the tokens are written out here.
-  const stage = dark ? "#0e1418" : "#f6f5f1";
-  const c = { bg: "#fdfcf9", ink: "#16191d", ink2: "#47453f", rule: "#e3e0d8", wash: "#eeebe4" };
+  const stage = dark ? "#0e1418" : "#f3f5f7";
+  const c = { bg: "#ffffff", ink: "#16191d", ink2: "#454b53", rule: "#dbe0e4", wash: "#e9eef2" };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
 :root{color-scheme:${dark ? "dark" : "light"}}
 html{background:${stage}}

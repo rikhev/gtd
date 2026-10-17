@@ -1,21 +1,21 @@
 ---
 name: Stiltje
-description: A still keyboard grid for GTD; warm paper beside cool water, one lake teal for focus.
+description: A still, near-neutral keyboard grid for GTD; one lake teal for focus, colour only where it says something.
 colors:
-  paper: "#f6f5f1"
-  sheet: "#fdfcf9"
+  paper: "#f3f5f7"
+  sheet: "#fbfcfd"
   ink: "#16191d"
-  ink-2: "#47453f"
-  ink-3: "#5e5b54"
-  rule: "#e3e0d8"
-  rule-strong: "#c7c3b9"
-  rail: "#e0e8eb"
-  rail-2: "#cedadf"
-  rail-ink: "#23303a"
-  hover: "#edebe5"
-  hover-2: "#e2dfd6"
-  wash: "#eeebe4"
-  wash-ink: "#33302a"
+  ink-2: "#454b53"
+  ink-3: "#5a6169"
+  rule: "#dbe0e4"
+  rule-strong: "#bcc4cb"
+  rail: "#e2e7eb"
+  rail-2: "#d1d9df"
+  rail-ink: "#282d33"
+  hover: "#e2e7eb"
+  hover-2: "#d1d9df"
+  wash: "#e9eef2"
+  wash-ink: "#2b333c"
   toast: "#20262d"
   toast-ink: "#eef2f5"
   accent: "#1d6b73"
@@ -24,7 +24,7 @@ colors:
   select-ink: "#0b2427"
   go: "#1f8a4c"
   wait: "#c7890a"
-  tick: "#e7e4dd"
+  tick: "#e3e8ec"
   alert: "#b33c0e"
   mark: "#2a3139"
   shade-on-select: "color-mix(in srgb, #0f1b2d 22%, transparent)"
@@ -238,7 +238,7 @@ components:
 
 **Creative North Star: "Still Water"**
 
-The app is a quiet surface for a busy mind: David Allen's "mind like water", set as a dense keyboard grid. Nothing on screen imitates an object. There is no tape, no folder, no rubber stamp and no desk drawer (owner's decision: the original paper-desk kit is scrapped). What is left is warm paper beside cool still water, near-black ink, and colour only where it changes what the owner does next. The one image in the app is the pond at the head of the rail, and the palette is taken from it: the rail is its water, the one accent is its lake teal, and the paper you work on sits warm beside it.
+The app is a quiet surface for a busy mind: David Allen's "mind like water", set as a dense keyboard grid. Nothing on screen imitates an object. There is no tape, no folder, no rubber stamp and no desk drawer (owner's decision: the original paper-desk kit is scrapped). What is left is near-white and grey with the faintest cast of still water, near-black ink, and colour only where it changes what the owner does next. The one image in the app is the pond at the head of the rail, and the palette is tuned to it: the greys lean a hair toward its water, and the one accent is its lake teal.
 
 Rows are 30px, the body type is 13.5px, and a 1440 viewport holds more than twenty working rows. Project health is a small traffic-light lamp, drawn as SVG on a 12px grid (a 10px light with a pixel of air; 11px beside a field label, 10px on a Calendar bar) so it stays round and crisp on a 1× screen such as a 1440p monitor (owner's request: the CSS-gradient lamps smeared there), told by shape as well as colour so it reads without colour vision: on track a solid `go` light, waiting a dot held in a `wait` ring, stalled an `alert` no-entry sign (a light with a bar cut out of it: stopped), someday half-lit, and not started yet (a start date ahead) an `ink-3` ring with clock hands, never green, since nothing is moving yet and nothing needs to; its hover names the day ("Not started yet: starts Fri 2 Oct"). On its start day it has begun: green with a next action, red without one. The Projects list's Next action cell says "Starts Fri 2 Oct" for such a project, and on its start day "Starts today · add a next action" in 600 `ink`; the Weekly Review notes the same, and the detail pane says "No next action needed before then". Done is a tick and a line through the subject.
 
@@ -246,7 +246,7 @@ The build rejects the category default of an airy sidebar and rounded cards. Sur
 
 **Key Characteristics:**
 - Dense, keyboard-driven grid: 30px rows, 13px system type, tabular numerals everywhere.
-- Warm paper beside cool water (owner's decision, 17 October): the lists and the pane are a barely warm paper white; the rail is the pond's cool blue-grey. The change of temperature, not lines or shadows, tells the regions apart.
+- Near-neutral ground: white and grey with a faint water cast (owner's decision, 17 October: a warm paper for the lists was tried and set aside; the cool greys read better).
 - One lake teal, the pond's colour, plus a pale teal selection fill, used only to show position and focus.
 - Colour is meaning: red for trouble (overdue, stalled, chase, errors), rationed to one red mark a row and one on the rail, green and amber only in project-health lamps, the red exclamation mark for importance. Everything else is ink on grey.
 - Condensed caps mark sections (group heads, pane sections, tabs); column heads and field labels are quiet sentence case; the normal width says things.
@@ -254,7 +254,7 @@ The build rejects the category default of an airy sidebar and rounded cards. Sur
 
 ## Colors
 
-The palette is a pond beside a sheet of paper (owner's decision, 17 October, replacing the near-neutral greys and the stock link blue): warm paper for everything you work on, the rail in the pond's cool water, near-black ink, one lake teal for focus, and a few state colours that each mean one thing.
+The palette is still water in daylight: pale grey-white ground, near-black ink, a rail the colour of the pond's air, one lake teal for focus (owner's decision, 17 October, replacing the stock link blue), and a few state colours that each mean one thing.
 
 ### Primary
 - **Lake Teal** (`accent`, #1d6b73, the pond's own colour; dark #5cb4ba): the single accent. It forms the 2px focus ring on inputs, pickers, Clarify's decision rows and `:focus-visible`, the 1px hairline (45% mix) around the focused grid row, the 2px ring on a ticked row that is also focused, and the current Clarify track cell. Dark: #6497ee.
@@ -267,19 +267,19 @@ The palette is a pond beside a sheet of paper (owner's decision, 17 October, rep
 - **Mark** (`mark`): the drawn marks: the done tick and the line through a subject. A near-black slate, not a colour. Dark: #d5dae0.
 
 ### Neutral
-- **Paper** (`paper`, #f6f5f1): the app ground, the grid head and field wells, a barely warm white. Dark: #15181b.
-- **Sheet** (`sheet`, #fdfcf9): raised surfaces, warm like the paper: detail pane, pickers, palette, capture input, the Clarify source text and the current rail entry. Dark: #1b1f23.
+- **Paper** (`paper`): the app ground, the grid head and field wells. Dark: #15181b.
+- **Sheet** (`sheet`): raised surfaces: detail pane, pickers, palette, capture input, the Clarify source text and the current rail entry. Dark: #1b1f23.
 - **Ink** (`ink`, `ink-2`, `ink-3`): primary text; secondary text (projects, column heads, meta); tertiary text (placeholders, dashes, hints, the done lamp). `ink-3` holds 4.5:1 on paper and on the rail. Dark: #e7eaed / #b4bac0 / #979ea5.
 - **Rules** (`rule`, `rule-strong`): row dividers and pane borders; grid-head underline, group underline and input borders.
-- **Rail** (`rail` #e0e8eb, `rail-2`, `rail-ink`): the pond's cool water grey, so the water settles into the rail without a seam; the rail and its hover only (the phone's menu and the sign-in scene too). The current stop is lifted onto the warm `sheet`, a sheet of paper pulled out of the water. Dark: #1d2227 / #2a3037 / #d5d9dd.
-- **Hover** (`hover`, `hover-2`): the warm paper's own shades for hover, the focused row when its grid is not the active region, the pane's resting field cursor and weekend days, so nothing cool lands on the paper. Dark: #1d2227 / #2a3037.
+- **Rail** (`rail`, `rail-2`, `rail-ink`): the pond's air, a faint water grey a shade under the pond, so the water settles into the rail without a seam. The rail and its hover. Dark: #0b1215 / #17222a / #d3dde0.
+- **Hover** (`hover`, `hover-2`): hover, the focused row when its grid is not the active region, the pane's resting field cursor and weekend days on the lists, the pane and the Calendar; in light the rail's own greys, in dark a shade of the night water apart from the rail's. Dark: #162026 / #1e2a31.
 - **Wash** (`wash`, `wash-ink`): the one quiet surface for naming chips: tags (a disposition, a rule source), the muted Someday/Done badges and the proposed-project block in Clarify. Dark: #232a31 / #cfd7df.
 - **Toast** (`toast`, `toast-ink`): the undo note, a dark slate in light and a pale one in dark, so it floats clear of either ground.
 - **Tick Grey** (`tick`): multi-selected (ticked) rows.
 - **Scrim** (`scrim`): the dim behind the palette (⌘K), a slate at 30%.
 
 ### Named Rules
-**The Paper and Water Rule.** Warm is where you work, cool is where you go (owner's decision, 17 October): lists, the pane, pickers and documents are warm paper (a hue near 75°, chroma at the edge of perception); the rail and the pond are cool water (near 200°). A content surface never takes a rail colour, and the rail never takes a paper one, except the current stop lifted onto the sheet.
+**The Still Water Rule.** Neutrals carry a trace of the pond's water (a hue near 210°, chroma kept at the edge of perception). If a grey can be named as blue, it has gone too far. Colour as such belongs to focus and selection (the lake teal) and to state.
 
 **The caret is teal** (owner's decision, 17 October): every text field's caret is the `accent`, as every other mark of where you are; text selection is the accent at 55% under `ink`.
 
@@ -427,7 +427,7 @@ The picker is a 300px sheet card (4px radius, float shadow, 8px padding) that po
 **Date picker** (owner's request): it widens to 500px and shows the month beside its quick choices (Today, Tomorrow, This weekend, Next week, In a month), parted by a `rule` hairline. The month heading ("October 2026", 600, tabular) has ‹ › icon buttons (PageUp/PageDown too, as in the Calendar); condensed-caps weekday initials in `ink-3` from the week's first day (Settings › General); six weeks of 30×28px day buttons, tabular figures, weekends in `ink-2`, days outside the month in `ink-3`, a `rail` hover. Today is the Calendar's mark, a 24px `ink` circle with `sheet` figures; the date already set has a 1.5px `ink` ring; a typed date ("3 dec") turns its month into view and takes the picker's cursor fill (`select`, `cursor-edge`) before Enter takes it. A click picks the day without taking the focus from the field. Below 540px the month sits under the choices, with 40px days for a thumb.
 
 ### Theme
-**The dark theme is the pond at night** (owner's decision, 17 October, replacing a neutral charcoal): blue-black water for the ground (`paper` #0e1418, `sheet` #141c21), the rail deeper still (#0b1215) with the current stop lifted (#1d2a31), the pond's crests moonlit (#bcd8e0 over near-black troughs), cool ink (#e4eaec / #b0bcc1 / #95a2a8), and the teal and vermilion lightened (#5cb4ba, #f2875a). By day the paper is warm beside cool water; at night it is all water, and the evening review feels like a place of its own. Light, dark, or follow the system (the default). The choice lives on `<html data-theme>` and is kept per browser; with no attribute the dark tokens follow `prefers-color-scheme`, `data-theme="dark"` forces them, `data-theme="light"` keeps the light ones even on a dark OS. It is applied before the first render, so the page never flashes the other theme. Chosen from Settings › General › Theme (Enter opens System / Light / Dark, System showing which it resolves to now) or ⌘K ("Switch to the dark/light theme", "Follow the system theme"). The pond reads its colours when a drop starts, so it follows a switch.
+**The dark theme is the pond at night** (owner's decision, 17 October, replacing a neutral charcoal): blue-black water for the ground (`paper` #0e1418, `sheet` #141c21), the rail deeper still (#0b1215) with the current stop lifted (#1d2a31), the pond's crests moonlit (#bcd8e0 over near-black troughs), cool ink (#e4eaec / #b0bcc1 / #95a2a8), and the teal and vermilion lightened (#5cb4ba, #f2875a). By day the greys are still water in daylight; at night it is the water after dark, and the evening review feels like a place of its own. Light, dark, or follow the system (the default). The choice lives on `<html data-theme>` and is kept per browser; with no attribute the dark tokens follow `prefers-color-scheme`, `data-theme="dark"` forces them, `data-theme="light"` keeps the light ones even on a dark OS. It is applied before the first render, so the page never flashes the other theme. Chosen from Settings › General › Theme (Enter opens System / Light / Dark, System showing which it resolves to now) or ⌘K ("Switch to the dark/light theme", "Follow the system theme"). The pond reads its colours when a drop starts, so it follows a switch.
 
 ### Calendar
 The hard landscape as a flat grid in the lists' own language (owner's request): rules for days, ink for what is on them, colour only where it says something. A 15px 600 period title ("September 2026", "Week 40 · 28 Sep – 4 Oct 2026", "2026") with previous/next chevrons and a quiet Today button; then, pushed right as one group, what's shown ("Soft dates" as a small checkbox, a hairline, then each subscribed calendar as its colour dot and name), the sync button, and Day · Week · Month · Year as tabs (see Tabs, steps and views; keys 1–4). Soft dates is never crossed out: an empty hairline square when off, filled in `mark` when on (calendars still strike through when hidden). A day-specific action (start and due the same day) is an outlined bar, `sheet` with an `ink-2` edge and no diamond, so the solid ink bar and diamond stay the deadline's alone. Today's cell in Week and Month carries "N overdue" (11.5px 600 `alert`, top right) when anything is, opening the Day tab. The Day tab is the list's full width, in sections under Label Caps heads over a `rule-strong` line: On the calendar, Overdue, Next actions (with what fits, in 12px `ink-3`), Follow-ups to chase; every row is a list row (consistency critique): 30px, its parts where Next Actions has them (the mark, quiet beside the Complete box as there, then the box, then the title), walked with ↑↓. For a screen reader the calendar is one keyboard widget (role application, "calendar"), holding focus while it is the active region, as a list's grid does; its live line says the cursor's day and item count, or the item whole ("Appointment, Work: Standup, Thu 1 Oct, 09:30 to 09:45", "Action: Call Anna, due Mon 28 Sep, overdue"). The Day · Week · Month · Year tabs control a real tab panel, only the current tab is a tab stop, and the Year view's day buttons stay out of the tab order (the calendar's keys move through the days). Weeks start on Monday by default (Settings › General › Week starts on); ISO week numbers run down an 11px `ink-3` gutter. The month looks forward (owner's decision after the critique): past weeks keep a compact 112px and three lanes ("+N more" beyond), this week and later ones grow to hold everything on them (up to eight lanes, 24px each), and on the current month the weeks scroll inside the grid (title, navigation and weekday names stay put) with this week brought to the top. On today, the black date disc is the one emphasis: the keyboard cursor keeps only its hairline there, no fill. On phones (820px and under, where the rail gives way to the menu) bars across seven columns can't be read, so the calendar changes form: the week, the phone's default view (kept apart from the desktop's choice), is an agenda, one section per day (weekday, date disc on today, month), each item a two-line row as on the phone's lists (the whole title in 15px, up to two lines; under it in 13px its mark, a project's lamp, hourglass, tickler clock or calendar leaf, the plain ring left out beside the Complete box, and what the date is to it: Due in `alert` when overdue, Starts, Until 5 Oct, Follow up …, Comes back); a day with nothing on it is its heading line alone, in `ink-3`, so free days don't push busy ones off the screen; the month is a grid of day numbers with single-letter weekdays and up to four 5px dots per day (`alert` for something due that day, `wait` for a follow-up, `ink-2` for a project, `ink-3` otherwise), and the chosen day's items are listed in full under it. Today's "N overdue" moves from the cell (no room) to the end of today's heading line, in the week agenda and over the month's chosen day. The toolbar is three short lines (phone calendar critique: it wrapped into a ragged block taking a third of the screen): the period title (the week's without this year, breaking only between its dates) with ‹ Today › at its right, Today as plain 600 text between the chevrons; the four views as equal Label Caps tabs across the width, the current one in `ink` with a 2px `ink` underline; then what's shown (Soft dates, the calendars, sync) as one line that scrolls sideways. The year is two small months a row without week numbers, and a tap on a day opens its month there. Tapping an agenda row opens its details. None of this reaches the desktop: every rule is scoped to the phone's calendar.
@@ -521,7 +521,7 @@ Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and e
 - **Don't** use green (`go`) or amber (`wait`) anywhere but project-health lamps, and don't fill rows, tags or chips with lamp colours.
 - **Don't** bring back yellow as a fill, ring or tag tone. Amber exists only as the waiting lamp.
 - **Don't** bring back the desk kit: no label tape, folders, rubber stamps, paper stacks, sheen, emboss or bevels (owner's decision).
-- **Don't** let paper drift cool or the rail drift warm: the temperature is how the regions are told apart.
+- **Don't** let a neutral drift into a colour: if a grey reads as blue, pull it back.
 - **Don't** use alert red decoratively.
 - **Don't** fill rows, cells or chips with context colours.
 - **Do** name every command by what it does, verb first: "Set the day to do it", not "Do on" (a field's bare name is a label, not a command); "Go to the next row", "Show the week", "Open the View menu". Keep it short: the action alone, no bracketed explanation, nothing the place already says.
