@@ -381,13 +381,13 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       run: () => setProject(ui, "refs", nav.targets()),
     },
     {
-      // ⇧L locks the reference (setting the lock password the first time); on a locked one it takes the lock off. X
+      // ⇧S locks the reference (setting the lock password the first time); on a locked one it takes the lock off. X
       // makes a new list, as N makes a note: making something new is one key (owner's rule).
       id: "ref.lock",
       row: true,
       label: focusId && s.refs.find((r) => r.id === focusId)?.sealed ? "Remove the lock" : "Lock with password",
       group: "Reference",
-      keys: ["shift+l"],
+      keys: ["shift+s"],
       enabled: Boolean(focusId),
       run: () => {
         const ids = nav.targets();

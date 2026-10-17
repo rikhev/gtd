@@ -107,7 +107,7 @@ export function InboxView({ regionActive }: { regionActive: boolean }) {
   const commands: Command[] = [
     ...nav.commands,
     { id: "inbox.new", label: "Capture", group: "Inbox", keys: ["n"], run: ui.focusCapture },
-    { id: "inbox.clarify", label: "Clarify", group: "Inbox", keys: ["shift+k"], run: () => ui.startClarify(), enabled: rows.length > 0 },
+    { id: "inbox.clarify", label: "Clarify", group: "Inbox", keys: ["z"], run: () => ui.startClarify(), enabled: rows.length > 0 },
     { id: "inbox.open", row: true, label: "Open details", group: "Inbox", keys: ["enter"], run: () => focusId && ui.openDetail({ kind: "stuff", id: focusId }, true), enabled: Boolean(focusId) },
     { id: "inbox.rename", row: true, label: "Rename", group: "Inbox", keys: ["f2"], run: () => focusId && setEditing(focusId), enabled: Boolean(focusId) },
     { id: "inbox.file", row: true, label: "File", group: "Inbox", keys: ["v"], run: () => fileStuff(ui, nav.targets()), enabled: Boolean(focusId) },

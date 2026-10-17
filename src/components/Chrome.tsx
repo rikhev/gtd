@@ -145,7 +145,7 @@ export function Rail({ active }: { active: boolean }) {
   const here = Math.max(0, entries.findIndex((e) => e.view === ui.view));
   const open = (e: Entry) => {
     if (e.start) ui.startReview();
-    // The oldest item is waiting to be clarified: the row does what its key (⇧K) does, not the Inbox row's job.
+    // The oldest item is waiting to be clarified: the row does what its key (Z) does, not the Inbox row's job.
     else if (e.key === "h-oldest") ui.startClarify();
     else ui.go(e.view);
     ui.setRegion("list");
@@ -250,7 +250,7 @@ export function Rail({ active }: { active: boolean }) {
                 type="button"
                 {...stop(e, "rail-item rail-check")}
                 // Check rows do something (list rows only go somewhere): the tooltip says what, and its key.
-                title={e.key === "h-review" ? `Start the Weekly Review (${keyLabel("shift+r")})` : `Clarify the Inbox, oldest first (${keyLabel("shift+k")})`}
+                title={e.key === "h-review" ? `Start the Weekly Review (${keyLabel("shift+r")})` : `Clarify the Inbox, oldest first (${keyLabel("z")})`}
               >
                 {e.key === "h-review" && (
                   <>

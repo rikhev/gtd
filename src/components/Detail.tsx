@@ -1468,10 +1468,10 @@ function RefDetail({ r }: { r: Ref }) {
     "detail-ref",
     [
       { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+u"], run: () => ui.jumpFromSupport("ref", r.id) },
-      // ⇧L and Delete, as on the Reference row (the pane is the row, bigger).
+      // ⇧S and Delete, as on the Reference row (the pane is the row, bigger).
       r.sealed
-        ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", keys: ["shift+l"], run: () => removeLock(ui, [r.id]) }
-        : { id: "detail.r.seal", label: "Lock with password", group: "Details", keys: ["shift+l"], run: () => lockWithPassword(ui, [r.id]) },
+        ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", keys: ["shift+s"], run: () => removeLock(ui, [r.id]) }
+        : { id: "detail.r.seal", label: "Lock with password", group: "Details", keys: ["shift+s"], run: () => lockWithPassword(ui, [r.id]) },
       { id: "detail.r.trash", label: "Trash", group: "Details", keys: ["backspace", "delete"], run: () => mutate(`${quote(r.title)} trashed`, [{ type: "patch", table: "refs", id: r.id, data: { status: "trashed" } }]) },
       ...(lock.unlocked ? [{ id: "detail.r.locknow", label: "Lock now", group: "Details", run: () => lockNow() }] : []),
     ],
@@ -1709,7 +1709,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
         },
       },
       { id: "detail.close", label: "Close details, pinned or not", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
-      // An Inbox item's pane takes the Inbox row's verbs (the pane is the row, bigger): V, ⇧K, E, Delete, ⇧Delete.
+      // An Inbox item's pane takes the Inbox row's verbs (the pane is the row, bigger): V, Z, E, Delete, ⇧Delete.
       {
         id: "detail.file",
         label: "File",
@@ -1722,7 +1722,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           runWhenReady("inbox.file");
         },
       },
-      { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["shift+k"], enabled: target?.kind === "stuff", run: () => ui.startClarify() },
+      { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["z"], enabled: target?.kind === "stuff", run: () => ui.startClarify() },
       {
         id: "detail.stuffdone",
         label: target?.kind === "stuff" && getState().stuff.find((x) => x.id === target.id)?.status === "done" ? "Mark not done" : "Mark done (two-minute rule)",

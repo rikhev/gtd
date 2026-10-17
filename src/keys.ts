@@ -168,10 +168,21 @@ export function eventToKey(e: KeyboardEvent): string {
 }
 
 /**
- * Vim's movement keys (owner's request: hjkl only, nothing else of vim): outside a text field, plain H J K L are the
- * arrows ← ↓ ↑ →, wherever the arrows move. With a modifier they are letters as before.
+ * Vim's movement keys (owner's request: hjkl only, nothing else of vim): outside a text field, H J K L are the arrows
+ * ← ↓ ↑ →, wherever the arrows move, and ⇧H J K L are ⇧ with the arrows. In a field that picks from a list (the
+ * palette, a picker, search) letters type, so ⌃H J K L are the arrows there (as in fzf). Any other modifier keeps the letter.
  */
 export const VIM_ARROWS: Record<string, string> = { h: "arrowleft", j: "arrowdown", k: "arrowup", l: "arrowright" };
+const ARROW_KEY: Record<string, string> = { h: "ArrowLeft", j: "ArrowDown", k: "ArrowUp", l: "ArrowRight" };
+/** The fields that pick from a list under them, where ⌃H J K L move. */
+const PICKING_FIELD = ".palette-input, .picker-input, .search input";
+
+/** Outside a field, H J K L and ⇧H J K L read as the arrows. */
+function vimKey(k: string): string {
+  const shift = k.startsWith("shift+");
+  const letter = shift ? k.slice(6) : k;
+  return VIM_ARROWS[letter] ? `${shift ? "shift+" : ""}${VIM_ARROWS[letter]}` : k;
+}
 
 /** Mac aliases: the "Del" key on a MacBook reports Backspace. */
 function aliases(k: string): string[] {
@@ -194,8 +205,16 @@ export function installKeyHandler() {
   const handler = (e: KeyboardEvent) => {
     if (e.isComposing) return;
     const editing = isEditable(e.target);
+    // ⌃H J K L in a picking field: pressed again as the arrow, so the field's own list moves as it does for ↓ and ↑.
+    const letter = /^Key[HJKL]$/.test(e.code) ? e.code.slice(3).toLowerCase() : "";
+    if (editing && letter && e.ctrlKey && !e.metaKey && !e.altKey && e.target instanceof HTMLElement && e.target.matches(PICKING_FIELD)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.target.dispatchEvent(new KeyboardEvent("keydown", { key: ARROW_KEY[letter], code: ARROW_KEY[letter], shiftKey: e.shiftKey, bubbles: true, cancelable: true }));
+      return;
+    }
     const typed = eventToKey(e);
-    const key = !editing && VIM_ARROWS[typed] ? VIM_ARROWS[typed] : typed;
+    const key = editing ? typed : vimKey(typed);
     const candidates = aliases(key);
     // While typing, Backspace and Delete belong to the text, with any modifier: the system's delete word (⌥⌫,
     // Ctrl+⌫), delete to line start (⌘⌫) and forward delete must never close a pane or remove a row instead.

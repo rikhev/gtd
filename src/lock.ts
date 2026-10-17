@@ -95,7 +95,7 @@ function shut(idle: boolean) {
 
 /**
  * Takes the lock password away, when nothing is locked with it any more (the server checks too): the key goes, and
- * ⇧L on Reference asks for a new password the next time.
+ * ⇧S on Reference asks for a new password the next time.
  */
 export async function removeLockPassword() {
   const was = getMeta().lock;
@@ -390,7 +390,7 @@ export function choosePassword(ui: Ask, then?: () => void) {
   });
 }
 
-/** ⇧L: lock with the password, setting one the first time. */
+/** ⇧S: lock with the password, setting one the first time. */
 export function lockWithPassword(ui: Ask, ids: ID[]) {
   if (!getMeta().lock) return choosePassword(ui, () => void lockRefs(ids));
   if (!key) return askUnlock(ui, () => void lockRefs(ids));

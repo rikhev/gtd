@@ -501,7 +501,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "rv.next", label: "Go to the next step", group: "Step", keys: ["mod+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
     { id: "rv.prev", label: "Go to the previous step", group: "Step", keys: ["mod+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
-    { id: "rv.clarify", label: "Clarify", group: "Row", keys: ["shift+k"], enabled: step.id === "clear" && inboxCount > 0, run: clarify },
+    { id: "rv.clarify", label: "Clarify", group: "Row", keys: ["z"], enabled: step.id === "clear" && inboxCount > 0, run: clarify },
     {
       id: "rv.addnext",
       row: true,

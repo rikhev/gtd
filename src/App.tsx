@@ -536,8 +536,8 @@ export default function App() {
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
     { id: "g.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
-    // ⇧K clarifies (K is navigation, as in vim): you decide, one item at a time.
-    { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["shift+k"], hidden: view === "inbox", run: () => ui.startClarify() },
+    // Z clarifies (K and ⇧K are navigation, as in vim): you decide, one item at a time.
+    { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["z"], hidden: view === "inbox", run: () => ui.startClarify() },
     // ⇧E archives what is done everywhere, not just on the list in view (owner's request); each list's View menu still
     // archives that list alone.
     { id: "g.archive", label: `Archive all done items to Done${archivable ? ` (${archivable})` : ""}`, group: "Actions", keys: ["shift+e"], run: archiveAllDone },
