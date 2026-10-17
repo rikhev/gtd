@@ -86,11 +86,13 @@ const minWidth = (w: string) => Number((/^minmax\((\d+)px/.exec(w) ?? /^(\d+)px/
 /** The column that takes the room left over (the subject): it has no width of its own to set. */
 const isFlexible = (w: string) => w.includes("fr");
 /**
- * On a wide list the flexible columns stop growing at a reading width and the room left over stays empty at the row's
- * end (owner's decision, 17 October: at 1920px a row ran 1,400px from its subject to its date). The cap is twice the
- * column's minimum or 320px a share of fr, whichever is more, so a 2fr subject stops at 640px and a 1fr project at 320px.
+ * The flexible columns after the subject (a project, a next action) stop growing at a reading width, so the dates sit
+ * beside them (owner's decision, 17 October: at 1920px a row ran 1,400px from its subject to its date).
+ * The subject is never capped: it takes all the room left over, so a title is never cut while there is room for it
+ * (owner's bug report: capped at 400px, long project names were cut off beside empty space). The cap is twice the
+ * column's minimum or 320px a share of fr, whichever is more: a 1fr project stops at 320px.
  */
-const WIDE_LIST = 1400;
+const CAP_FROM = 1000;
 const capFlexible = (w: string) => {
   const m = /^minmax\((\d+)px,\s*([\d.]+)fr\)$/.exec(w);
   return m ? `minmax(${m[1]}px, ${Math.round(Math.max(Number(m[1]) * 2, 320 * Number(m[2])))}px)` : w;
@@ -911,8 +913,9 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
     return cols;
   }, [sized, width, phone]); // eslint-disable-line react-hooks/exhaustive-deps
   columnsRef.current = columns;
-  const capped = !phone && width >= WIDE_LIST && columns.some((c) => isFlexible(c.width));
-  const template = capped ? `${columns.map((c) => capFlexible(c.width)).join(" ")} minmax(0, 1fr)` : columns.map((c) => c.width).join(" ");
+  // Below 1000px the columns share the room by their fr as before: there a cap would give a side column more than its share.
+  const capped = !phone && width >= CAP_FROM;
+  const template = columns.map((c) => (capped && c.key !== lockedKey ? capFlexible(c.width) : c.width)).join(" ");
 
   // Rectangle select: press and drag over the rows, as on a Finder or Explorer desktop. Rows the band touches are ticked
   // (added to the selection with ⌘/Ctrl held); near the list's top or bottom edge it scrolls. A press without a drag stays a click.
