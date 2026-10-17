@@ -1,28 +1,30 @@
 ---
 name: Stiltje
-description: A still, near-neutral keyboard grid for GTD; colour only where it says something.
+description: A still keyboard grid for GTD; warm paper beside cool water, one lake teal for focus.
 colors:
-  paper: "#f3f5f7"
-  sheet: "#fbfcfd"
+  paper: "#f6f5f1"
+  sheet: "#fdfcf9"
   ink: "#16191d"
-  ink-2: "#454b53"
-  ink-3: "#5a6169"
-  rule: "#dbe0e4"
-  rule-strong: "#bcc4cb"
-  rail: "#e2e7eb"
-  rail-2: "#d1d9df"
-  rail-ink: "#282d33"
-  wash: "#e9eef2"
-  wash-ink: "#2b333c"
+  ink-2: "#47453f"
+  ink-3: "#5e5b54"
+  rule: "#e3e0d8"
+  rule-strong: "#c7c3b9"
+  rail: "#e0e8eb"
+  rail-2: "#cedadf"
+  rail-ink: "#23303a"
+  hover: "#edebe5"
+  hover-2: "#e2dfd6"
+  wash: "#eeebe4"
+  wash-ink: "#33302a"
   toast: "#20262d"
   toast-ink: "#eef2f5"
-  accent: "#2462c6"
+  accent: "#1d6b73"
   accent-contrast: "#ffffff"
-  select: "#dce6f3"
-  select-ink: "#0f1b2d"
+  select: "#d5e8e8"
+  select-ink: "#0b2427"
   go: "#1f8a4c"
   wait: "#c7890a"
-  tick: "#e3e8ec"
+  tick: "#e7e4dd"
   alert: "#b3301c"
   mark: "#2a3139"
   shade-on-select: "color-mix(in srgb, #0f1b2d 22%, transparent)"
@@ -230,7 +232,7 @@ components:
 
 **Creative North Star: "Still Water"**
 
-The app is a quiet surface for a busy mind: David Allen's "mind like water", set as a dense keyboard grid. Nothing on screen imitates an object. There is no tape, no folder, no rubber stamp and no desk drawer (owner's decision: the original paper-desk kit is scrapped). What is left is near-white and grey with the faintest cast of still water, near-black ink, and colour only where it changes what the owner does next. The one image in the app is the pond at the head of the rail, and the rest of the palette is tuned to it: the greys lean a hair toward its blue, never far enough to read as blue.
+The app is a quiet surface for a busy mind: David Allen's "mind like water", set as a dense keyboard grid. Nothing on screen imitates an object. There is no tape, no folder, no rubber stamp and no desk drawer (owner's decision: the original paper-desk kit is scrapped). What is left is warm paper beside cool still water, near-black ink, and colour only where it changes what the owner does next. The one image in the app is the pond at the head of the rail, and the palette is taken from it: the rail is its water, the one accent is its lake teal, and the paper you work on sits warm beside it.
 
 Rows are 30px, the body type is 13.5px, and a 1440 viewport holds more than twenty working rows. Project health is a small traffic-light lamp, drawn as SVG on a 12px grid (a 10px light with a pixel of air; 11px beside a field label, 10px on a Calendar bar) so it stays round and crisp on a 1× screen such as a 1440p monitor (owner's request: the CSS-gradient lamps smeared there), told by shape as well as colour so it reads without colour vision: on track a solid `go` light, waiting a dot held in a `wait` ring, stalled an `alert` no-entry sign (a light with a bar cut out of it: stopped), someday half-lit, and not started yet (a start date ahead) an `ink-3` ring with clock hands, never green, since nothing is moving yet and nothing needs to; its hover names the day ("Not started yet: starts Fri 2 Oct"). On its start day it has begun: green with a next action, red without one. The Projects list's Next action cell says "Starts Fri 2 Oct" for such a project, and on its start day "Starts today · add a next action" in 600 `ink`; the Weekly Review notes the same, and the detail pane says "No next action needed before then". Done is a tick and a line through the subject.
 
@@ -238,20 +240,20 @@ The build rejects the category default of an airy sidebar and rounded cards. Sur
 
 **Key Characteristics:**
 - Dense, keyboard-driven grid: 30px rows, 13px system type, tabular numerals everywhere.
-- Near-neutral ground: white and grey with a faint water cast, never tinted enough to call blue.
-- One blue accent plus a pale blue selection fill, used only to show position and focus.
+- Warm paper beside cool water (owner's decision, 17 October): the lists and the pane are a barely warm paper white; the rail is the pond's cool blue-grey. The change of temperature, not lines or shadows, tells the regions apart.
+- One lake teal, the pond's colour, plus a pale teal selection fill, used only to show position and focus.
 - Colour is meaning: red for trouble (overdue, stalled, chase, errors), rationed to one red mark a row and one on the rail, green and amber only in project-health lamps, the red exclamation mark for importance. Everything else is ink on grey.
 - Condensed caps name things; the normal width says things.
 - Light and dark themes, both designed in their own right.
 
 ## Colors
 
-The palette is still water in daylight: pale grey-white ground, near-black ink, a rail the colour of the pond's air, one blue for focus, and a few state colours that each mean one thing.
+The palette is a pond beside a sheet of paper (owner's decision, 17 October, replacing the near-neutral greys and the stock link blue): warm paper for everything you work on, the rail in the pond's cool water, near-black ink, one lake teal for focus, and a few state colours that each mean one thing.
 
 ### Primary
-- **Focus Blue** (`accent`): the single accent. It forms the 2px focus ring on inputs, pickers, Clarify's decision rows and `:focus-visible`, the 1px hairline (45% mix) around the focused grid row, the 2px ring on a ticked row that is also focused, and the current Clarify track cell. Dark: #6497ee.
-- **Accent Contrast** (`accent-contrast`): text on a solid accent fill. Dark: #0b1426.
-- **Selection Blue** (`select`, `select-ink`): the pale blue fill that says "you are here": the focused row in the active grid, the highlighted picker or palette option, the current Weekly Review step, a focused mini-row in the detail pane and a focused proposal field chip. Text, markers, badges, dates and energy bars on it switch to `select-ink`. Dark: #1f3656 / #eef3fa.
+- **Lake Teal** (`accent`, #1d6b73, the pond's own colour; dark #5cb4ba): the single accent. It forms the 2px focus ring on inputs, pickers, Clarify's decision rows and `:focus-visible`, the 1px hairline (45% mix) around the focused grid row, the 2px ring on a ticked row that is also focused, and the current Clarify track cell. Dark: #6497ee.
+- **Accent Contrast** (`accent-contrast`): text on a solid accent fill. Dark: #06191b.
+- **Selection Teal** (`select` #d5e8e8, `select-ink`; dark #16393c): the pale teal fill that says "you are here": the focused row in the active grid, the highlighted picker or palette option, the current Weekly Review step, a focused mini-row in the detail pane and a focused proposal field chip. Text, markers, badges, dates and energy bars on it switch to `select-ink`. Dark: #1f3656 / #eef3fa.
 
 ### State
 - **Alert Red** (`alert`): a state colour only. Overdue dates, stalled projects (the red lamp), the dashed chase ring (the name after it is ink: one red mark a row), the rail's single worst signal, warning facts and error notes. `alert-on-rail` is the darker (lighter in dark) red for small text on a hovered rail row. Dark: #ec6d57.
@@ -259,20 +261,21 @@ The palette is still water in daylight: pale grey-white ground, near-black ink, 
 - **Mark** (`mark`): the drawn marks: the done tick and the line through a subject. A near-black slate, not a colour. Dark: #d5dae0.
 
 ### Neutral
-- **Paper** (`paper`): the app ground, the grid head and field wells. Dark: #15181b.
-- **Sheet** (`sheet`): raised surfaces: detail pane, pickers, palette, capture input, the Clarify source text and the current rail entry. Dark: #1b1f23.
+- **Paper** (`paper`, #f6f5f1): the app ground, the grid head and field wells, a barely warm white. Dark: #15181b.
+- **Sheet** (`sheet`, #fdfcf9): raised surfaces, warm like the paper: detail pane, pickers, palette, capture input, the Clarify source text and the current rail entry. Dark: #1b1f23.
 - **Ink** (`ink`, `ink-2`, `ink-3`): primary text; secondary text (projects, column heads, meta); tertiary text (placeholders, dashes, hints, the done lamp). `ink-3` holds 4.5:1 on paper and on the rail. Dark: #e7eaed / #b4bac0 / #979ea5.
 - **Rules** (`rule`, `rule-strong`): row dividers and pane borders; grid-head underline, group underline and input borders.
-- **Rail** (`rail`, `rail-2`, `rail-ink`): the pond's air, a faint water grey a shade under the pond, so the water settles into the rail without a seam. The rail, rail hover, and the focused row when its grid is not the active region. Dark: #1d2227 / #2a3037 / #d5d9dd.
+- **Rail** (`rail` #e0e8eb, `rail-2`, `rail-ink`): the pond's cool water grey, so the water settles into the rail without a seam; the rail and its hover only (the phone's menu and the sign-in scene too). The current stop is lifted onto the warm `sheet`, a sheet of paper pulled out of the water. Dark: #1d2227 / #2a3037 / #d5d9dd.
+- **Hover** (`hover`, `hover-2`): the warm paper's own shades for hover, the focused row when its grid is not the active region, the pane's resting field cursor and weekend days, so nothing cool lands on the paper. Dark: #1d2227 / #2a3037.
 - **Wash** (`wash`, `wash-ink`): the one quiet surface for naming chips: tags (a disposition, a rule source), the muted Someday/Done badges and the proposed-project block in Clarify. Dark: #232a31 / #cfd7df.
 - **Toast** (`toast`, `toast-ink`): the undo note, a dark slate in light and a pale one in dark, so it floats clear of either ground.
 - **Tick Grey** (`tick`): multi-selected (ticked) rows.
 - **Scrim** (`scrim`): the dim behind the palette (⌘K), a slate at 30%.
 
 ### Named Rules
-**The Still Water Rule.** Neutrals carry a trace of the pond's blue (a hue near 210°, chroma kept at the edge of perception). If a surface can be named as blue, it has gone too far. Blue as a colour belongs to focus and selection alone.
+**The Paper and Water Rule.** Warm is where you work, cool is where you go (owner's decision, 17 October): lists, the pane, pickers and documents are warm paper (a hue near 75°, chroma at the edge of perception); the rail and the pond are cool water (near 200°). A content surface never takes a rail colour, and the rail never takes a paper one, except the current stop lifted onto the sheet.
 
-**The One Blue Rule.** Blue means focus and position. `accent` draws rings and hairlines; `select` fills the focused row, the highlighted option, the current review step and focused chips. Neither is used for decoration, headings or tags. Region focus is shown on the focused element itself, never by painting a pane. An empty list still takes focus, so its keys work (N adds the first item), but draws no ring or hairline: with no row to point at, there is nothing to mark. A grid that loses region focus keeps its cursor row in `rail-2`, not blue.
+**The One Teal Rule.** Teal means focus and position. `accent` draws rings and hairlines; `select` fills the focused row, the highlighted option, the current review step and focused chips. Neither is used for decoration, headings or tags. Region focus is shown on the focused element itself, never by painting a pane. An empty list still takes focus, so its keys work (N adds the first item), but draws no ring or hairline: with no row to point at, there is nothing to mark. A grid that loses region focus keeps its cursor row in `rail-2`, not blue.
 
 **The Red Means Trouble Rule.** `alert` is semantic only: overdue, stalled, chase, errors. It is never decoration and never a brand colour. It is also rationed (owner's decision, 17 October): one red mark per row, one red signal on the rail, and never a solid red fill on the Calendar, so red keeps meaning trouble. A neutral status (Someday, Done) uses the same badge shape in `ink-3` on `wash`.
 
@@ -382,7 +385,7 @@ One look for every switch between the parts of a page (owner's rule: consistency
 ### Grid Rows (Signature)
 - **One-line rows, everywhere (owner's rule: consistency above all).** Every list row on the desktop is one line, 30px, in every view, Settings included: a name, then its secondary text on the same line in `ink-3`, cut off with an ellipsis when the room runs out, never wrapped onto a second line, never a taller row for one view. Values sit in their own column, as columns do in every list. If a row's text doesn't fit, shorten the text; don't grow the row. (Only the phone's two-line rows differ, on every list alike.)
 - **Row:** 30px tall with a `rule` bottom divider. Hover is a 45% `rail` wash.
-- **Focus:** the focused row in the active grid fills with selection blue (`select`) inside a 1px `accent` hairline. Markers, badges, overdue dates and energy bars switch to `select-ink` so they stay legible; an overdue date on the focused row keeps a 2px underline. In an inactive grid the cursor row is `steel-2`. Ticked (multi-selected) rows are `tick`. A ticked row that is also focused gets an inset 2px `accent` ring.
+- **Focus:** the focused row in the active grid fills with selection teal (`select`) inside a 1px `accent` hairline. Markers, badges, overdue dates and energy bars switch to `select-ink` so they stay legible; an overdue date on the focused row keeps a 2px underline. In an inactive grid the cursor row is `steel-2`. Ticked (multi-selected) rows are `tick`. A ticked row that is also focused gets an inset 2px `accent` ring.
 - **Marker:** a 22px cell holding a thin ring (the Important mark was retired after the second GTD critique, owner's decision). A done action shows a tick; a waiting item whose follow-up has come, a dashed `alert` ring.
 - **Complete box:** as in classic Outlook's task list, every action row has a Complete checkbox between the marker and the subject (a 26px column). A 12px square with a 2px radius, `sheet` fill and a 1.25px `ink-3` edge; hover inks the edge; checked, a tick. One click completes that row only (not the selection) with the usual strike and fold, and ⌘Z undoes it; in Done a checked box unticks to bring the action back. It never moves the cursor or starts a rectangle. Beside it the marker goes quiet: the plain ring and the done tick are left out (the box says both), so the marker column only carries flagged for today and chase.
 - **Done:** as in classic Outlook, a done action stays on its list: a line strikes through the subject (200ms), then the row settles, greyed out (`ink-3` throughout, the subject struck through, no overdue red, context and area tiles at 50% and faded energy bars) at the bottom of its group, whatever the sort. The cursor moves on to the next open row instead of following it down. E or the Complete box on a done row takes it back to the list it was done on. Each action list (Next Actions, Waiting For) has a per-list Show/Hide done actions toggle (View menu and ⌘K; shown by default); hidden, a completed row folds away (180ms, fade and 8px slide). ⇧E archives every done item on every list to Done at once, done actions (the Inbox's too), whichever list is in view (owner's request), with one toast ("6 done items archived to Done") and one ⌘Z; with nothing done it says "Nothing done to archive". A list's View menu (and ⌘K) still has "Archive done actions to Done" for that list alone. Done is built like the Trash (owner's request: it shows everything): every archived item, actions and completed projects together, newest first, grouped by the day it was done ("Today · Wed 30 Sep 2026", then the full date) or, from the View menu (⌥V), by project (the finished project leads its group, loose actions go last). Rows are done rows as on any list (consistency critique): the ticked Complete box (a click puts it back, as E does), then Item, struck through and greyed (a project's title in 600), Was in (the list, then for a Waiting For item who it waited on, then its project: "Waiting For · Anna Lind · Deliver the shredder…" (owner's request: shown like the other data, not in a column of its own); a project reads Projects and its area; grouped by project, the project part is left out) and Done (the time when grouped by day, the date when grouped by project). A done waiting item's detail pane keeps its Waiting on, Follow up and Since fields, and a project's timeline says "Waited · Anna Lind" for it. E puts the focused or ticked items back (an action to the list it was done on, a project to Projects with the actions closed along with it), Delete trashes them, Enter opens details, and a swipe right on a phone puts one back. A finished project's open actions are marked done with it and stay struck through on their lists until archived. The Inbox follows the same rules: each row has a Complete box after its kind icon, and ticking an item off (the two-minute rule, E or the box) strikes it through at the bottom of the Inbox, logged as a done action; unticking returns it to the Inbox as stuff, ⇧E archives it to Done (with everything else done), and Show/Hide done items is in ⌘K. Projects differ (owner's request): each project row has a Complete box after its lamp; completing a project (E or the box) strikes it through, then the row folds away and the project goes straight into Done; its open actions are marked done, struck through on their own lists. Done is the only place a completed project is shown: Projects has no Show completed toggle, and its View menu's wider filter adds someday projects only. E on it in Done makes it active again with those same actions back.
@@ -401,12 +404,12 @@ Projects has no fold-out (owner's decision, after the pinned detail pane arrived
 There is no Areas page (owner's decision: the Projects list grouped by area already shows them). Areas are their own tab in Settings, before Contexts: each row is the area's plain "#Name" with its active-project count on the right. N adds one (the name is typed in place), F2 renames, ⌥↑/⌥↓ reorders (the order the Projects area groups follow), Delete removes it and its projects keep going without an area. Any area picker can still create one by typing a new name.
 
 ### Group Heads
-Every list's group heads look the same (owner's decision: Projects used to have blue-grey folder bands with raised area tape, and was the odd one out): 32px, a chevron, the group name in Label Caps (`ink-2`; a context shows its colour as the 2px code under the name), then an `ink-3` count and an optional quiet 12px `ink-3` note on the right, over a `rule-strong` line. Group heads sit 10px below the group above them. Group focus matches row focus: in the active grid the head fills selection blue (`select`) inside a 1px `accent` hairline; in an inactive grid it gets a 1px `ink-3` hairline. The detail pane, when it holds focus itself, shows the same 1px `accent` hairline around the pane, never a painted header.
+Every list's group heads look the same (owner's decision: Projects used to have blue-grey folder bands with raised area tape, and was the odd one out): 32px, a chevron, the group name in Label Caps (`ink-2`; a context shows its colour as the 2px code under the name), then an `ink-3` count and an optional quiet 12px `ink-3` note on the right, over a `rule-strong` line. Group heads sit 10px below the group above them. Group focus matches row focus: in the active grid the head fills selection teal (`select`) inside a 1px `accent` hairline; in an inactive grid it gets a 1px `ink-3` hairline. The detail pane, when it holds focus itself, shows the same 1px `accent` hairline around the pane, never a painted header.
 
 ### Inputs / Fields
-- **Capture line:** sheet background, 1px `rule-strong` border, 3px radius, 30px minimum, grows to 160px. On focus the border turns ink with a 2px blue ring. When open it adds the float shadow.
-- **Search:** a 30px, `rule`-bordered well at 220px. When open it widens to 320px with an ink border, blue ring and sheet fill.
-- **Detail fields:** paper wells (`rule` border, 3px) that turn into a sheet with an ink border and blue ring on focus. Picker fields are 28px. Project notes are ruled like a notepad (19.5px line pitch).
+- **Capture line:** sheet background, 1px `rule-strong` border, 3px radius, 30px minimum, grows to 160px. On focus the border turns ink with a 2px teal ring. When open it adds the float shadow.
+- **Search:** a 30px, `rule`-bordered well at 220px. When open it widens to 320px with an ink border, teal ring and sheet fill.
+- **Detail fields:** paper wells (`rule` border, 3px) that turn into a sheet with an ink border and teal ring on focus. Picker fields are 28px. Project notes are ruled like a notepad (19.5px line pitch).
 - **Labels:** Label Caps 11.5px in `ink-3`.
 
 ### Pickers, Palette, Help
@@ -492,7 +495,7 @@ Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and e
 ## Do's and Don'ts
 
 ### Do:
-- **Do** reserve `accent` for focus rings and hairlines, and selection blue (`select`, with `select-ink` text) for the focused row, the highlighted option and focused chips.
+- **Do** reserve `accent` for focus rings and hairlines, and selection teal (`select`, with `select-ink` text) for the focused row, the highlighted option and focused chips.
 - **Do** mark the open rail list by lifting it onto `sheet`, in the same type as every other entry. Areas are plain "#Name" text, never chips.
 - **Do** show region focus on the focused element (selected row, ink cursor ring) and demote an inactive grid's cursor row to `rail-2`.
 - **Do** show project health with the traffic-light lamp, and give every lamp `role="img"` with an `aria-label` and `title` that name its state.
@@ -503,13 +506,13 @@ Motion is short, uses the out-expo ease (`cubic-bezier(0.16, 1, 0.3, 1)`), and e
 - **Do** honour `prefers-reduced-motion` for every animation and transition.
 
 ### Don't:
-- **Don't** paint a pane or region blue to show it has focus.
+- **Don't** paint a pane or region teal to show it has focus.
 - **Don't** change the face, size or colour of the open rail list (no chip, no colour change). The owner found a different-looking current item jarring.
 - **Don't** let a lamp's colour stand alone. A lamp without an accessible name is a defect. Don't add a STALLED badge beside a red lamp: the lamp says it.
 - **Don't** use green (`go`) or amber (`wait`) anywhere but project-health lamps, and don't fill rows, tags or chips with lamp colours.
 - **Don't** bring back yellow as a fill, ring or tag tone. Amber exists only as the waiting lamp.
 - **Don't** bring back the desk kit: no label tape, folders, rubber stamps, paper stacks, sheen, emboss or bevels (owner's decision).
-- **Don't** let a neutral drift into a colour: if a grey reads as blue, pull it back.
+- **Don't** let paper drift cool or the rail drift warm: the temperature is how the regions are told apart.
 - **Don't** use alert red decoratively.
 - **Don't** fill rows, cells or chips with context colours.
 - **Do** name every command by what it does, verb first: "Set the day to do it", not "Do on" (a field's bare name is a label, not a command); "Go to the next row", "Show the week", "Open the View menu". Keep it short: the action alone, no bracketed explanation, nothing the place already says.
