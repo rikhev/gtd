@@ -1376,18 +1376,17 @@ body.is-col-dragging * {
   cursor: grabbing !important;
   user-select: none;
 }
+/* Column heads speak in sentence case, quietly (owner's decision, 17 October: condensed capitals on every head, label
+   and tab were the loudest texture on the screen). Capitals are kept for group heads, which mark sections. */
 .gh {
   position: relative;
   align-self: stretch;
   display: flex;
   align-items: center;
-  font-family: var(--font-label);
-  font-stretch: 75%;
-  font-weight: 600;
+  font-family: var(--font-ui);
+  font-weight: 500;
   font-size: var(--fs-small);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--ink-2);
+  color: var(--ink-3);
   padding: 0 8px;
   white-space: nowrap;
   overflow: hidden;
@@ -2513,20 +2512,18 @@ body.is-col-resizing * {
 input.field-text.has-lead {
   padding-left: 27px;
 }
-/* A project's health lamp rides after its label, sized to the caps. */
+/* A project's health lamp rides after its label, sized to the label. */
 .field-label .lamp {
   width: 11px;
   height: 11px;
   margin-left: 6px;
   vertical-align: -1px;
 }
+/* A field's label: sentence case, as the column heads (owner's decision, 17 October). */
 .field-label {
-  font-family: var(--font-label);
-  font-stretch: 75%;
-  font-weight: 600;
-  font-size: var(--fs-tag);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: var(--fs-small);
   color: var(--ink-3);
 }
 .field-text {

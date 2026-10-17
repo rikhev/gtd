@@ -243,7 +243,7 @@ The build rejects the category default of an airy sidebar and rounded cards. Sur
 - Warm paper beside cool water (owner's decision, 17 October): the lists and the pane are a barely warm paper white; the rail is the pond's cool blue-grey. The change of temperature, not lines or shadows, tells the regions apart.
 - One lake teal, the pond's colour, plus a pale teal selection fill, used only to show position and focus.
 - Colour is meaning: red for trouble (overdue, stalled, chase, errors), rationed to one red mark a row and one on the rail, green and amber only in project-health lamps, the red exclamation mark for importance. Everything else is ink on grey.
-- Condensed caps name things; the normal width says things.
+- Condensed caps mark sections (group heads, pane sections, tabs); column heads and field labels are quiet sentence case; the normal width says things.
 - Light and dark themes, both designed in their own right.
 
 ## Colors
@@ -304,7 +304,8 @@ The palette is a pond beside a sheet of paper (owner's decision, 17 October, rep
 - **Body Sheet** (400, 14px, 1.55, max 68ch): the captured text on the Clarify source sheet.
 - **Body Small** (400, 12px): meta, counts, file sizes, and toast notes.
 - **Label Tag** (condensed 600, 11.5px, 0.07em, uppercase, line-height 1): tags. A state's title (Inbox zero, Ready to record) uses the same caps at 14px in `ink-2`, with no chip.
-- **Label Caps** (condensed 600, 12–13px, 0.06–0.08em, uppercase, `ink-2` or `ink-3`): column heads, pane and detail section heads, field labels, plain group labels, picker titles, and tabs and steps (see Tabs, steps and views).
+- **Label Caps** (condensed 600, 12–13px, 0.06–0.08em, uppercase, `ink-2` or `ink-3`): what marks a section: group heads, pane and detail section heads, picker titles, and tabs and steps (see Tabs, steps and views).
+- **Label** (500, 12px, sentence case, `ink-3`; owner's decision, 17 October: condensed capitals on every head and label were the loudest texture on the screen): what names a column or a field: column heads (`ink` when sorted or hovered) and the pane's field labels.
 - **Numeral** (condensed 700, 40px): the review tallies.
 
 ### Named Rules
