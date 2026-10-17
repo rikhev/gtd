@@ -53,6 +53,19 @@ const openChecklistPath = () => (/^checklists\/.+/.test(routePath()) ? routePath
 /** What takes focus when the list region does: the active list. */
 const LIST_FOCUS = ".list-region .grid.is-active";
 
+/** A window wide enough to keep the details pane beside the list (DESIGN.md › Detail Pane). */
+const WIDE = "(min-width: 1600px)";
+const pinKey = (wide: boolean) => (wide ? "gtd:detailPinned:wide" : "gtd:detailPinned");
+/** The pin for this width: what the owner last chose there, or pinned on a wide window and not on a narrower one. */
+function readPin(wide: boolean): boolean {
+  try {
+    const v = localStorage.getItem(pinKey(wide));
+    return v === null ? wide : v === "1";
+  } catch {
+    return wide;
+  }
+}
+
 const openRefListPath = () => (/^reference\/.+/.test(routePath()) ? routePath() : null);
 function viewFromPath(): ViewId | null {
   const h = routeView() as ViewId;
@@ -110,14 +123,20 @@ export default function App() {
     if (alongTrail.current) alongTrail.current = false;
     else setDetailTrail((t) => (t.length ? [] : t));
   }, [detail]);
-  const [detailPinned, setDetailPinnedState] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("gtd:detailPinned") === "1";
-    } catch {
-      return false;
-    }
-  });
+  // A wide window (1600px and up) has room for the pane beside the list, so there it is pinned unless the owner unpins
+  // it (owner's decision, 17 October: rows 1,400px long were hard to follow). The pin is kept per width, so unpinning
+  // on a wide window never unpins a narrow one, or the other way round.
+  const [wide, setWide] = useState(() => window.matchMedia(WIDE).matches);
+  const [detailPinned, setDetailPinnedState] = useState<boolean>(() => readPin(window.matchMedia(WIDE).matches));
   const pinnedRef = useRef(detailPinned);
+  const wideRef = useRef(wide);
+  wideRef.current = wide;
+  useEffect(() => {
+    const mq = window.matchMedia(WIDE);
+    const change = () => setWide(mq.matches);
+    mq.addEventListener("change", change);
+    return () => mq.removeEventListener("change", change);
+  }, []);
   /** What the active list's cursor is on, so pinning can show it straight away. */
   const cursorTarget = useRef<Target | null>(null);
   const viewRef = useRef(view);
@@ -126,11 +145,26 @@ export default function App() {
   const setDetailPinned = useCallback((on: boolean) => {
     setDetailPinnedState(on);
     try {
-      localStorage.setItem("gtd:detailPinned", on ? "1" : "0");
+      localStorage.setItem(pinKey(wideRef.current), on ? "1" : "0");
     } catch {
       /* storage unavailable: pinned for this session only */
     }
   }, []);
+  // Crossing the width takes up that width's pin: pinned, the pane shows the cursor's row at once; unpinned, it goes
+  // (unless the owner is working in it).
+  const firstWidth = useRef(true);
+  useEffect(() => {
+    if (firstWidth.current) {
+      firstWidth.current = false;
+      return;
+    }
+    const on = readPin(wide);
+    setDetailPinnedState(on);
+    pinnedRef.current = on;
+    if (on) setDetail((prev) => prev ?? cursorTarget.current);
+    else if (region !== "detail") setDetail(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wide]);
   // The rail can be hidden for room on the lists; the go-to keys still work without it.
   const [railHidden, setRailHiddenState] = useState<boolean>(() => {
     try {
