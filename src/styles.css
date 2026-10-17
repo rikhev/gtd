@@ -382,6 +382,8 @@ a:hover {
   min-width: 0;
   overflow: auto;
   padding: 0 20px 72px; /* room below the last row so a toast never sits on it */
+  /* A row scrolled into view stops below the sticky column heads (28px and their rule), not under them. */
+  scroll-padding-top: 29px;
 }
 /* The list's own content; while the viewer covers it, it waits hidden, cursor and all. */
 .list-body {
@@ -3891,6 +3893,8 @@ textarea.field-text {
     padding-bottom: 88px;
     /* Whatever is scrolled into view (Clarify's next answer, a field) stops clear of the two round buttons. */
     scroll-padding-bottom: 88px;
+    /* A phone's list has no column heads to stop below. */
+    scroll-padding-top: 0;
   }
   /* Clarify's answers are touch targets (44px), as a phone's rows are. */
   .key-choices button {

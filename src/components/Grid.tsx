@@ -318,7 +318,12 @@ export function useListNav(
   useEffect(() => {
     if (!focus) return;
     const el = document.querySelector(`[data-list="${listId}"] [data-key="${CSS.escape(focus)}"]`);
-    el?.scrollIntoView({ block: "nearest" });
+    // On the first row the list goes back to its very top, so nothing above it (a group heading, a filter line)
+    // stays scrolled away.
+    const scroller = el?.closest<HTMLElement>(".list-region");
+    if (scroller && focus === items.find((k) => !isGroupKey(k))) scroller.scrollTo({ top: 0 });
+    else el?.scrollIntoView({ block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, listId]);
 
   const setFocus = (k: string | null) => {
