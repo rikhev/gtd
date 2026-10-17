@@ -131,6 +131,22 @@ export default function App() {
       /* storage unavailable: pinned for this session only */
     }
   }, []);
+  // The rail can be hidden for room on the lists; the go-to keys still work without it.
+  const [railHidden, setRailHiddenState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("gtd:railHidden") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setRailHidden = useCallback((on: boolean) => {
+    setRailHiddenState(on);
+    try {
+      localStorage.setItem("gtd:railHidden", on ? "1" : "0");
+    } catch {
+      /* storage unavailable: hidden for this session only */
+    }
+  }, []);
   const [picker, setPicker] = useState<PickerSpec | null>(null);
   const [viewer, setViewer] = useState<{ ids: string[]; at: number } | null>(null);
   // Where the viewer was opened from (the list or the details pane), so closing it goes back there.
@@ -503,8 +519,15 @@ export default function App() {
     [view, go, region, detail, detailTrail, detailPinned, setDetailPinned, picker, searchQuery, revealTarget, viewer],
   );
 
+  const phone = usePhone();
+  // On a phone the rail is its own screen, so only the desktop's can be hidden.
+  const railShown = phone || !railHidden;
+  // Hiding the rail while it has the keys hands them to the list.
+  useEffect(() => {
+    if (!railShown && region === "rail") setRegion("list");
+  }, [railShown, region, setRegion]);
   const cycleRegion = (dir: 1 | -1) => {
-    const order: Region[] = detail || detailPinned ? ["rail", "list", "detail"] : ["rail", "list"];
+    const order: Region[] = [...(railShown ? (["rail"] as Region[]) : []), "list", ...(detail || detailPinned ? (["detail"] as Region[]) : [])];
     const i = order.indexOf(region);
     ui.setRegion(order[(i + dir + order.length) % order.length]);
   };
@@ -580,6 +603,14 @@ export default function App() {
       keys: ["alt+p"],
       run: () => ui.setDetailPinned(!detailPinned),
     },
+    {
+      id: "g.railhide",
+      label: railHidden ? "Show the rail" : "Hide the rail",
+      group: "View",
+      keys: ["alt+r"],
+      enabled: !phone,
+      run: () => setRailHidden(!railHidden),
+    },
     { id: "g.paste", label: "Paste into the Inbox", group: "Capture", displayKeys: ["mod+v"], run: () => notify(`Press ${keyLabel("mod+v")} with a list focused to paste into the Inbox`) },
     { id: "g.upload", label: "Upload files to the Inbox", group: "Capture", keys: ["mod+o"], hidden: view === "inbox", run: () => document.querySelector<HTMLInputElement>("#global-upload")?.click() },
     { id: "g.exportzip", label: "Export everything as Markdown (.zip)", group: "Data", run: () => (window.location.href = `/api/export/zip?today=${today()}`) },
@@ -620,7 +651,6 @@ export default function App() {
   const listActive = region === "list" && !picker && !palette && !viewer;
   // The phone is slimmer (owner's request): the Weekly Review, Settings and Horizons stay on the desktop. An address
   // for one (a bookmark, Back) lands on the Inbox instead.
-  const phone = usePhone();
   useEffect(() => {
     if (phone && (view === "review" || view === "settings" || view === "horizons")) go("inbox");
   }, [phone, view, go]);
@@ -738,8 +768,8 @@ export default function App() {
 
   return (
     <UIContext.Provider value={ui}>
-      <div className={`app ${detail || detailPinned ? "has-detail" : ""}`} data-region={region} data-searching={(phone && view === "search") || undefined}>
-        <Rail active={region === "rail" && !picker && !palette} />
+      <div className={`app ${detail || detailPinned ? "has-detail" : ""} ${railShown ? "" : "rail-hidden"}`} data-region={region} data-searching={(phone && view === "search") || undefined}>
+        {railShown && <Rail active={region === "rail" && !picker && !palette} />}
         {phone && <PhoneChrome />}
         <main className="main">
           <header className="topbar">

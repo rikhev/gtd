@@ -284,6 +284,11 @@ a:hover {
   height: 100dvh;
 }
 
+/* ⌥R hides the rail: the lists take its width. */
+.app.rail-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* The main column: top bar, view head and list on the left; the detail pane, when open, runs the full height
    on the right, its header sharing the top bar's bottom rule. */
 .main {
