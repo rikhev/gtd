@@ -55,7 +55,7 @@ Everything works from the keyboard. `⌘K` lists every command and its keys for 
 | `Enter` / `Esc` | Open details / go back |
 | `E` | Done |
 | `⇧R` | Weekly Review |
-| `⌥Q` | Search |
+| `⌥Q` or `/` | Search |
 | `⌘Z` | Undo (there are no confirmation dialogs) |
 
 How everything behaves, and why, is written down in [PRODUCT.md](PRODUCT.md); the look in [DESIGN.md](DESIGN.md).

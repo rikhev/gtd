@@ -533,7 +533,9 @@ export default function App() {
     // Horizons has no rail stop or key (owner's decision): looked at quarterly, from ⌘K and the review's Get creative.
     { id: "go.horizons", label: "Go to Horizons", group: "Go to", run: () => go("horizons") },
     { id: "g.capture", label: "Capture to the Inbox", group: "Capture", keys: ["shift+n"], run: () => captureRef.current?.focus() },
-    { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
+    { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], displayKeys: view === "reference" ? [] : ["/"], inInput: true, run: ui.openSearch },
+    // / searches too, as in vim, less and the web's apps; outside a field only, so it still types. A list's own / (Reference's Find a note) comes first.
+    { id: "g.search.slash", label: "Search", group: "Go to", keys: ["/"], hidden: true, run: ui.openSearch },
     { id: "g.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
     // Z clarifies (K and ⇧K are navigation, as in vim): you decide, one item at a time.

@@ -168,7 +168,7 @@ export function eventToKey(e: KeyboardEvent): string {
 }
 
 /**
- * Vim's movement keys (owner's request: hjkl only, nothing else of vim): outside a text field, H J K L are the arrows
+ * Vim's movement keys (owner's request: hjkl only, and / for search, nothing else of vim): outside a text field, H J K L are the arrows
  * ← ↓ ↑ →, wherever the arrows move, and ⇧H J K L are ⇧ with the arrows. In a field that picks from a list (the
  * palette, a picker, search) letters type, so ⌃H J K L are the arrows there (as in fzf). Any other modifier keeps the letter.
  */
