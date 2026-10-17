@@ -224,6 +224,12 @@ body {
   background: color-mix(in srgb, var(--accent) 55%, transparent);
   color: var(--ink);
 }
+/* The caret is the accent, as every other mark of where you are. */
+input,
+textarea,
+[contenteditable] {
+  caret-color: var(--accent);
+}
 
 * {
   scrollbar-width: thin;
@@ -2561,7 +2567,7 @@ textarea.field-text {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   cursor: text;
-  caret-color: var(--ink);
+  caret-color: var(--accent);
 }
 .md-edit b {
   font-weight: 650;
@@ -3247,18 +3253,21 @@ textarea.field-text {
 .dp-day.is-outside {
   color: var(--ink-3);
 }
-/* Today as in the Calendar: an ink circle with sheet figures, the one filled date. */
+/* Today as in the Calendar: teal figures underlined in teal (owner's decision, 17 October: the black disc was the
+   heaviest mark on the page; "now" is marked as "you are here" is, with an underline). */
 .dp-day.is-today span {
-  background: var(--ink);
-  color: var(--sheet);
-  font-weight: 600;
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline 2px var(--accent);
+  text-underline-offset: 3px;
 }
 /* The date already set: a ring round its number. */
 .dp-day.is-current span {
   box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 .dp-day.is-today.is-current span {
-  box-shadow: 0 0 0 1.5px var(--sheet), 0 0 0 3px var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 /* A typed date, before Enter takes it: the picker's own cursor fill. */
 .dp-day.is-preview {
@@ -4795,8 +4804,11 @@ textarea.field-text {
   border-radius: 50%;
 }
 .cal-agenda-day.is-today .cal-num {
-  background: var(--ink);
-  color: var(--sheet);
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline 2px var(--accent);
+  text-underline-offset: 3px;
 }
 .cal-agenda-month {
   color: var(--ink-2);
@@ -5229,7 +5241,7 @@ textarea.field-text {
   background: color-mix(in srgb, var(--select) 55%, transparent);
   box-shadow: inset 0 0 0 1px var(--cursor-edge);
 }
-/* On today the disc already says "here": the cursor keeps only its hairline, no second fill. */
+/* On today the underline already says "now": the cursor keeps only its hairline, no second fill. */
 .cal-day.is-today.is-cursor {
   background: none;
 }
@@ -5246,10 +5258,14 @@ textarea.field-text {
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
-/* Today is inked: the one filled date on the page. */
+/* Today: teal figures underlined in teal (owner's decision, 17 October, replacing the ink disc, the heaviest mark on
+   the Calendar): the way the app marks "you are here", here marking "now". */
 .cal-day.is-today .cal-num {
-  background: var(--ink);
-  color: var(--sheet);
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline 2px var(--accent);
+  text-underline-offset: 3px;
 }
 .cal-more {
   position: absolute;
@@ -5658,12 +5674,11 @@ body.is-cal-dragging {
   background: var(--alert);
 }
 .cal-mini-day.is-today {
-  background: var(--ink);
-  color: var(--sheet);
-  font-weight: 600;
-}
-.cal-mini-day.is-today::after {
-  background: var(--sheet);
+  background: none;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline 2px var(--accent);
+  text-underline-offset: 2px;
 }
 .cal-mini-day.is-cursor {
   box-shadow: inset 0 0 0 1px var(--cursor-edge);
