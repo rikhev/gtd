@@ -1,6 +1,11 @@
 // Synthetic demo data for screenshots and keyboard tests (not the owner's data).
 const API = "http://127.0.0.1:5174";
 const { state } = await (await fetch(`${API}/api/state`)).json();
+// Seeding twice doubles every row: seed only an empty demo (start from a fresh data-demo folder to seed again).
+if (state.projects.length || state.actions.length || state.stuff.length) {
+  console.error("The demo already has data: move data-demo aside and restart `npm run demo` to seed it afresh.");
+  process.exit(1);
+}
 const ctx = Object.fromEntries(state.contexts.map((c) => [c.name, c.id]));
 const area = Object.fromEntries(state.areas.map((a) => [a.name, a.id]));
 const now = new Date();

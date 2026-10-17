@@ -7,25 +7,20 @@ related_targets: []
 
 # Surface brief: GTD app shell (all lists, capture, clarify, review)
 
-Mode: Operate. Keyboard-only owner, desk daytime plus evening review, dense lists.
-Job: capture stuff instantly, clarify it with Claude's proposals one item at a time, and work from compact, editable Outlook-Tasks-style lists.
-Keyboard: the spec lives in PRODUCT.md and the confirmed shape brief (Outlook-on-the-web grammar, ⌘ where free, ⌃ fallback, ⌘K palette, ⇧? overlay, no printed key hints, no confirm dialogs, ⌘Z undo).
+Mode: Operate. One owner, keyboard first, at a desk by day (light theme) and for the evening review (dark theme), on a ~1920px window; dense, directly editable lists.
+Job: capture stuff instantly, clarify it one item at a time by the owner's own decision (there are no AI features), and work from compact Outlook-Tasks-style lists the owner trusts.
+Keyboard: the spec lives in PRODUCT.md (Outlook-on-the-web grammar, ⌘ on the Mac, ⌃ for the go-to keys, H J K L as the arrows, ⌘K palette that follows focus, key caps shown only while ⌃ or ⌘ is held, no confirm dialogs, ⌘Z undo).
 
 ## Direction contract
 
-THESIS: The app is David Allen's paper desk kit turned into a keyboard grid. The Inbox is a wire in-tray, projects and lists are manila folders with label-maker tape, and the tickler holds what returns later. It refuses the category default of an airy sidebar with rounded cards and a blue accent. Density wins over any paper texture.
+THESIS: Stiltje, Swedish for dead calm: David Allen's "mind like water" as a still, near-neutral keyboard grid. Nothing imitates an object (the paper desk kit of folders, label tape and stamps was scrapped). It refuses the category default of an airy sidebar with rounded cards: density over decoration, consistency above all.
 
-OWN-WORLD: The ground is cool office white paper and the ink is near-black. Steel grey carries rules and secondary text. Manila tan appears only on folder-tab group headers. Label-maker tape (black tape, white embossed condensed caps) names lists, projects and areas. Label yellow is the single accent, used only for the focused row and the active control. Done is a ruled strike-through; flagged for today is a hand-drawn pen circle; context colours appear only as 2px hairline codes. The dark theme is a graphite desk at night with the same roles.
+OWN-WORLD: Near-white and grey with the faintest cast of the pond's water, never reading as blue; near-black ink. One blue for focus and selection only. Red is trouble and is rationed: one red mark a row, one red signal on the rail, never a solid red block on the Calendar. Green and amber live only in the project lamps. No yellow. One typeface, Instrument Sans, with its condensed cut for labels. The only image is the pond at the head of the rail, and it is the system's weather: dead calm, a ripple, or rough water.
 
-STORY: The owner sees at a glance what's in the tray and what's next. They capture without deciding, clarify with Claude proposing and themselves deciding, and trust the lists enough to work from them.
+STORY: The owner glances at the pond and knows whether the system is current; captures without deciding; clarifies one item at a time; works from the lists and the Calendar's hard landscape; reviews weekly.
 
-FIRST VIEWPORT: A 1440 desktop layout.
-- Left: a 208px steel drawer rail of tape-labelled lists with counts. The in-tray at the top shows stacked sheet edges scaled to the inbox count.
-- Top: a 44px bar holding the always-available capture line and search.
-- Centre: the Next Actions grid, 30px rows grouped under manila folder tabs, with columns for the flag circle, subject, context, project, due, defer, time and energy.
-- Right: a 360px detail pane that opens with Enter.
-- Bottom: a 26px status line with action feedback and undo.
+FIRST VIEWPORT: A 1920 desktop: the 236px rail (pond, lists with signal counts, system check, Done/Trash/Settings at the foot), a top bar with capture and search, the list of 30px one-line rows, and the 380px details pane pinned beside it on wide windows.
 
-FORM: #1 of the ordered list, "In-Tray & Tickler" (IMPECCABLE'S PICK), seed key 67b3a180. Code-led. Signature interaction: a pen stroke draws through a row as it is marked done, then the row folds away; the flag circle draws itself around the row marker; a capture drops a sheet into the tray and the count ticks up.
+FORM: Every view is built from the same parts used the same way (DESIGN.md is the system of record): one row shape, one pane width, one heading, the same pickers and keys. A place that would look or work differently changes to match the rest.
 
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+FINISH: changes are recorded in DESIGN.md and PRODUCT.md with the owner's decision and its date.
