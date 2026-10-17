@@ -15,7 +15,7 @@ Keyboard: the spec lives in PRODUCT.md (Outlook-on-the-web grammar, ⌘ on the M
 
 THESIS: Stiltje, Swedish for dead calm: David Allen's "mind like water" as a still, near-neutral keyboard grid. Nothing imitates an object (the paper desk kit of folders, label tape and stamps was scrapped). It refuses the category default of an airy sidebar with rounded cards: density over decoration, consistency above all.
 
-OWN-WORLD: Near-white and grey with the faintest cast of the pond's water, never reading as blue; near-black ink. One blue for focus and selection only. Red is trouble and is rationed: one red mark a row, one red signal on the rail, never a solid red block on the Calendar. Green and amber live only in the project lamps. No yellow. One typeface, Instrument Sans, with its condensed cut for labels. The only image is the pond at the head of the rail, and it is the system's weather: dead calm, a ripple, or rough water.
+OWN-WORLD: Near-white and grey with the faintest cast of the pond's water, never reading as blue; near-black ink. One muted lake blue for focus and selection only. Red is trouble and is rationed: one red mark a row, one red signal on the rail, never a solid red block on the Calendar. Green and amber live only in the project lamps. No yellow. One typeface, Instrument Sans, with its condensed cut for labels. The only image is the pond at the head of the rail, and it is the system's weather: dead calm, a ripple, or rough water.
 
 STORY: The owner glances at the pond and knows whether the system is current; captures without deciding; clarifies one item at a time; works from the lists and the Calendar's hard landscape; reviews weekly.
 

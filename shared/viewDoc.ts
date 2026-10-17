@@ -149,6 +149,6 @@ pre{white-space:pre-wrap;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monosp
 .mail .who{display:inline-block;max-width:100%;margin-right:.35em;overflow-wrap:anywhere}
 .mail .addr{color:${c.ink2};margin-left:.15em}
 .none{color:${c.ink2}}
-::selection{background:#d5e8e8}
+::selection{background:#d5e6f3}
 </style></head><body><div class="doc">${body}</div></body></html>`;
 }

@@ -65,10 +65,10 @@
   --water-trough: #6d8396;
   --water-drop: #58728a;
   --alert-on-rail: #963108;
-  --accent: #1d6b73;
+  --accent: #246089;
   --accent-contrast: #ffffff;
-  --select: #d5e8e8;
-  --select-ink: #0b2427;
+  --select: #d5e6f3;
+  --select-ink: #14232f;
   /* The 1px edge of every "you are here" cursor (rail, list rows, group heads, the pane's field, the Calendar's day):
      full accent, so focus reaches 3:1 against the rail and the lists (audit: the 45% mix gave 1.88:1 on the rail). */
   --cursor-edge: var(--accent);
@@ -141,10 +141,10 @@
     --water-trough: #03080a;
     --water-drop: #a9cbd6;
     --alert-on-rail: #f6a27f;
-    --accent: #5cb4ba;
-    --accent-contrast: #06191b;
-    --select: #16393c;
-    --select-ink: #e6f5f5;
+    --accent: #82b9db;
+    --accent-contrast: #0a1a24;
+    --select: #1d3949;
+    --select-ink: #e5f0f7;
     --go: #3dba72;
     --wait: #e2a634;
     --tick: #1c2a33;
@@ -181,10 +181,10 @@
   --water-trough: #03080a;
   --water-drop: #a9cbd6;
   --alert-on-rail: #f6a27f;
-  --accent: #5cb4ba;
-  --accent-contrast: #06191b;
-  --select: #16393c;
-  --select-ink: #e6f5f5;
+  --accent: #82b9db;
+  --accent-contrast: #0a1a24;
+  --select: #1d3949;
+  --select-ink: #e5f0f7;
   --go: #3dba72;
   --wait: #e2a634;
   --tick: #1c2a33;
