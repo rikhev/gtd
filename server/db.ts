@@ -143,7 +143,7 @@ if (!(db.prepare("PRAGMA table_info(actions)").all() as { name: string }[]).some
 // Areas carry a colour, shown only in their "#". Existing areas take the palette in their order, once.
 if (!(db.prepare("PRAGMA table_info(areas)").all() as { name: string }[]).some((c) => c.name === "color")) {
   db.exec("ALTER TABLE areas ADD COLUMN color TEXT");
-  const palette = ["#2f6fb5", "#0e8181", "#8a5a2b", "#6b4fa0", "#a3476e", "#9f691b", "#5b6b2e", "#5b6b7e"];
+  const palette = ["#3d6893", "#36725e", "#8c5538", "#6c598e", "#89506b", "#7f5e25", "#5f6b3c", "#536877"];
   const rows = db.prepare("SELECT id FROM areas ORDER BY sort").all() as { id: string }[];
   const set = db.prepare("UPDATE areas SET color = ? WHERE id = ?");
   rows.forEach((r, i) => set.run(palette[i % palette.length], r.id));
@@ -151,6 +151,13 @@ if (!(db.prepare("PRAGMA table_info(areas)").all() as { name: string }[]).some((
 // Teal and Ochre were darkened so the white "@" or "#" on them reads (4.5:1, after the critique): contexts and areas
 // that already carry the old values take the new ones. Runs every start and changes nothing once done.
 for (const [was, now] of [["#0f8a8a", "#0e8181"], ["#b7791f", "#9f691b"]]) {
+  for (const t of ["contexts", "areas"]) db.prepare(`UPDATE ${t} SET color = ? WHERE lower(color) = ?`).run(now, was);
+}
+// The tile colours were evened out (owner's decision, 17 October): eight hues at one OKLCH lightness and chroma, muted
+// to sit beside the lake teal and the vermilion, every one holding the white "@" or "#" at 5.6:1 or better; Teal became
+// Spruce, a blue-green, so it is never taken for the focus teal. Contexts and areas on the old values move over.
+export const TILE_MOVE: [string, string][] = [["#2f6fb5", "#3d6893"], ["#5b6b7e", "#536877"], ["#8a5a2b", "#8c5538"], ["#9f691b", "#7f5e25"], ["#6b4fa0", "#6c598e"], ["#0e8181", "#36725e"], ["#a3476e", "#89506b"], ["#5b6b2e", "#5f6b3c"]];
+for (const [was, now] of TILE_MOVE) {
   for (const t of ["contexts", "areas"]) db.prepare(`UPDATE ${t} SET color = ? WHERE lower(color) = ?`).run(now, was);
 }
 
@@ -200,17 +207,17 @@ function seed() {
   const count = db.prepare("SELECT COUNT(*) AS n FROM contexts").get() as { n: number };
   if (count.n > 0) return;
   const contexts: [string, string][] = [
-    ["@computer", "#2f6fb5"],
-    ["@phone", "#5b6b7e"],
-    ["@errands", "#8a5a2b"],
-    ["@home", "#9f691b"],
-    ["@office", "#6b4fa0"],
-    ["@agenda", "#0e8181"],
+    ["@computer", "#3d6893"],
+    ["@phone", "#536877"],
+    ["@errands", "#8c5538"],
+    ["@home", "#7f5e25"],
+    ["@office", "#6c598e"],
+    ["@agenda", "#36725e"],
   ];
   const ins = db.prepare("INSERT INTO contexts (id, name, color, sort) VALUES (?, ?, ?, ?)");
   contexts.forEach(([name, color], i) => ins.run(randomUUID(), name, color, i));
   const insA = db.prepare("INSERT INTO areas (id, name, sort, color) VALUES (?, ?, ?, ?)");
-  ([["Work", "#2f6fb5"], ["Home", "#0e8181"], ["Health", "#8a5a2b"], ["Finance", "#6b4fa0"]] as const).forEach(([name, color], i) => insA.run(randomUUID(), name, i, color));
+  ([["Work", "#3d6893"], ["Home", "#36725e"], ["Health", "#8c5538"], ["Finance", "#6c598e"]] as const).forEach(([name, color], i) => insA.run(randomUUID(), name, i, color));
 }
 seed();
 
@@ -243,9 +250,9 @@ db.exec(`UPDATE actions SET waiting_who = NULL, waiting_since = NULL, followup =
   WHERE status IN ('next', 'someday') AND (waiting_who IS NOT NULL OR waiting_since IS NOT NULL OR followup IS NOT NULL)`);
 
 // Red belongs to trouble (overdue, stalled, errors), so contexts no longer use it.
-db.exec(`UPDATE contexts SET color = '#5b6b7e' WHERE lower(color) = '#c0392b'`);
+db.exec(`UPDATE contexts SET color = '#536877' WHERE lower(color) = '#c0392b'`);
 // Green belongs to the "on track" lamp, so contexts no longer use it either.
-db.exec(`UPDATE contexts SET color = '#8a5a2b' WHERE lower(color) = '#1f8a4c'`);
+db.exec(`UPDATE contexts SET color = '#8c5538' WHERE lower(color) = '#1f8a4c'`);
 
 export function loadState(): State {
   const all = <T,>(t: string) => db.prepare(`SELECT * FROM ${t}`).all() as T[];

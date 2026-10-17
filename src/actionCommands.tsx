@@ -8,10 +8,10 @@ import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { addMonths, daysBetween, formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
 /** No red (kept for trouble: overdue, stalled, errors) and no green (kept for the "on track" lamp). */
-export const CONTEXT_COLORS = ["#2f6fb5", "#5b6b7e", "#8a5a2b", "#9f691b", "#6b4fa0", "#0e8181", "#a3476e", "#5b6b2e"];
-export const COLOR_NAMES: Record<string, string> = { "#2f6fb5": "Blue", "#5b6b7e": "Slate", "#8a5a2b": "Sienna", "#9f691b": "Ochre", "#6b4fa0": "Violet", "#0e8181": "Teal", "#a3476e": "Plum", "#5b6b2e": "Olive" };
+export const CONTEXT_COLORS = ["#3d6893", "#536877", "#8c5538", "#7f5e25", "#6c598e", "#36725e", "#89506b", "#5f6b3c"];
+export const COLOR_NAMES: Record<string, string> = { "#3d6893": "Blue", "#536877": "Slate", "#8c5538": "Sienna", "#7f5e25": "Ochre", "#6c598e": "Violet", "#36725e": "Spruce", "#89506b": "Plum", "#5f6b3c": "Olive" };
 /** Areas draw from the same palette (no red, no green), in an order that keeps neighbours apart. */
-export const AREA_COLORS = ["#2f6fb5", "#0e8181", "#8a5a2b", "#6b4fa0", "#a3476e", "#9f691b", "#5b6b2e", "#5b6b7e"];
+export const AREA_COLORS = ["#3d6893", "#36725e", "#8c5538", "#6c598e", "#89506b", "#7f5e25", "#5f6b3c", "#536877"];
 export const nextAreaColor = () => AREA_COLORS[getState().areas.length % AREA_COLORS.length];
 
 export function createContextOp(name: string): { id: ID; op: Op } {

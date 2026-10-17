@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { DATA_DIR, db, deleteRow, getSetting, insertRow, patchRow, setSetting } from "./db.ts";
+import { DATA_DIR, db, deleteRow, getSetting, insertRow, patchRow, setSetting, TILE_MOVE } from "./db.ts";
 import { addDays, formatLong } from "../shared/dates.ts";
 
 /**
@@ -69,10 +69,20 @@ const errors = new Map<string, string>();
 function load(): Feed[] {
   try {
     const feeds = JSON.parse(getSetting(KEY, "[]")) as Feed[];
+    // Calendars on the old tile colours take the evened-out ones, once.
+    let moved = false;
+    for (const f of feeds) {
+      const now = TILE_MOVE.find(([was]) => was === f.color?.toLowerCase())?.[1];
+      if (now) {
+        f.color = now;
+        moved = true;
+      }
+    }
+    if (moved) save(feeds);
     // The single Outlook link of before becomes the first calendar, once.
     const old = getSetting("calendarUrl", "");
     if (old && !feeds.some((f) => f.url === old)) {
-      feeds.unshift({ id: randomUUID(), name: "Outlook", color: "#2f6fb5", url: old });
+      feeds.unshift({ id: randomUUID(), name: "Outlook", color: "#3d6893", url: old });
       save(feeds);
       setSetting("calendarUrl", "");
     }
@@ -247,7 +257,7 @@ export function removeFeed(id: string) {
   }
 }
 
-const validColor = (c: unknown) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : "#2f6fb5");
+const validColor = (c: unknown) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c.toLowerCase() : "#3d6893");
 
 async function fetchIcs(url: string): Promise<{ events: RawEvent[]; name: string | null; text: string }> {
   // Network trouble is said in words, not as the runtime's "fetch failed".
