@@ -25,7 +25,7 @@ colors:
   go: "#1f8a4c"
   wait: "#c7890a"
   tick: "#e7e4dd"
-  alert: "#b3301c"
+  alert: "#b33c0e"
   mark: "#2a3139"
   shade-on-select: "color-mix(in srgb, #0f1b2d 22%, transparent)"
   cap-edge-on-select: "rgb(0 0 0 / 0.35)"
@@ -256,7 +256,7 @@ The palette is a pond beside a sheet of paper (owner's decision, 17 October, rep
 - **Selection Teal** (`select` #d5e8e8, `select-ink`; dark #16393c): the pale teal fill that says "you are here": the focused row in the active grid, the highlighted picker or palette option, the current Weekly Review step, a focused mini-row in the detail pane and a focused proposal field chip. Text, markers, badges, dates and energy bars on it switch to `select-ink`. Dark: #1f3656 / #eef3fa.
 
 ### State
-- **Alert Red** (`alert`): a state colour only. Overdue dates, stalled projects (the red lamp), the dashed chase ring (the name after it is ink: one red mark a row), the rail's single worst signal, warning facts and error notes. `alert-on-rail` is the darker (lighter in dark) red for small text on a hovered rail row. Dark: #ec6d57.
+- **Alert Vermilion** (`alert`, #b33c0e; owner's decision, 17 October: a rust-vermilion, the complement of the lake teal, in place of the brick red): a state colour only. Overdue dates, stalled projects (the red lamp), the dashed chase ring (the name after it is ink: one red mark a row), the rail's single worst signal, warning facts and error notes. `alert-on-rail` is the darker (lighter in dark) red for small text on a hovered rail row. Dark: #f2875a.
 - **Go Green** (`go`) and **Wait Amber** (`wait`): project-health lamp colours only. Green means the project has a next action; amber means it is only waiting on others. Dark: #3dba72 / #e2a634.
 - **Mark** (`mark`): the drawn marks: the done tick and the line through a subject. A near-black slate, not a colour. Dark: #d5dae0.
 
