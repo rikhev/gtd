@@ -107,7 +107,8 @@
   --fs-title: 15px; /* pane and dialog titles */
   --fs-input: 16px; /* touch inputs (no zoom on a phone) */
   --fs-proposal: 17px; /* Clarify's proposal title */
-  --fs-headline: 19px; /* view headings */
+  --fs-headline: 19px; /* Clarify's question */
+  --fs-display: 26px; /* view titles: each view's quiet anchor (owner's decision, 17 October) */
   --fs-numeral: 30px; /* big numerals, the pond's name */
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --hover: #edebe5;
@@ -118,27 +119,27 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper: #15181b;
-    --sheet: #1b1f23;
-    --ink: #e7eaed;
-    --ink-2: #b4bac0;
-    --ink-3: #979ea5;
-    --rule: #2a2f35;
-    --rule-strong: #3b4249;
-    --rail: #1d2227;
-    --rail-2: #2a3037;
-    --rail-ink: #d5d9dd;
-    --rail-current: #30373e;
-    --wash: #232a31;
-    --wash-ink: #cfd7df;
-    --toast: #e3e8ec;
-    --toast-ink: #15191d;
-    --water-far: #242b32;
-    --water-near: #1b2631;
-    --water-line: #3a4754;
-    --water-crest: #a9c1d8;
-    --water-trough: #0b1116;
-    --water-drop: #93b3d1;
+    --paper: #0e1418;
+    --sheet: #141c21;
+    --ink: #e4eaec;
+    --ink-2: #b0bcc1;
+    --ink-3: #95a2a8;
+    --rule: #222d33;
+    --rule-strong: #34424a;
+    --rail: #0b1215;
+    --rail-2: #17222a;
+    --rail-ink: #d3dde0;
+    --rail-current: #1d2a31;
+    --wash: #1a252b;
+    --wash-ink: #cddadf;
+    --toast: #e2eaec;
+    --toast-ink: #0e1418;
+    --water-far: #132a32;
+    --water-near: #0a1a20;
+    --water-line: #2f4b56;
+    --water-crest: #bcd8e0;
+    --water-trough: #03080a;
+    --water-drop: #a9cbd6;
     --alert-on-rail: #f6a27f;
     --accent: #5cb4ba;
     --accent-contrast: #06191b;
@@ -146,39 +147,39 @@
     --select-ink: #e6f5f5;
     --go: #3dba72;
     --wait: #e2a634;
-    --tick: #2b3440;
+    --tick: #1c2a33;
     --alert: #f2875a;
-    --mark: #d5dae0;
-    --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+    --mark: #d0dadd;
+    --shadow: 0 12px 32px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.4);
     --scrim: rgb(0 0 0 / 0.45);
     --shadow-soft: 0 2px 8px -4px rgb(0 0 0 / 0.4);
-      --hover: #1d2227;
-    --hover-2: #2a3037;
+      --hover: #162026;
+    --hover-2: #1e2a31;
 }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #15181b;
-  --sheet: #1b1f23;
-  --ink: #e7eaed;
-  --ink-2: #b4bac0;
-  --ink-3: #979ea5;
-  --rule: #2a2f35;
-  --rule-strong: #3b4249;
-  --rail: #1d2227;
-  --rail-2: #2a3037;
-  --rail-ink: #d5d9dd;
-  --rail-current: #30373e;
-  --wash: #232a31;
-  --wash-ink: #cfd7df;
-  --toast: #e3e8ec;
-  --toast-ink: #15191d;
-  --water-far: #242b32;
-  --water-near: #1b2631;
-  --water-line: #3a4754;
-  --water-crest: #a9c1d8;
-  --water-trough: #0b1116;
-  --water-drop: #93b3d1;
+  --paper: #0e1418;
+  --sheet: #141c21;
+  --ink: #e4eaec;
+  --ink-2: #b0bcc1;
+  --ink-3: #95a2a8;
+  --rule: #222d33;
+  --rule-strong: #34424a;
+  --rail: #0b1215;
+  --rail-2: #17222a;
+  --rail-ink: #d3dde0;
+  --rail-current: #1d2a31;
+  --wash: #1a252b;
+  --wash-ink: #cddadf;
+  --toast: #e2eaec;
+  --toast-ink: #0e1418;
+  --water-far: #132a32;
+  --water-near: #0a1a20;
+  --water-line: #2f4b56;
+  --water-crest: #bcd8e0;
+  --water-trough: #03080a;
+  --water-drop: #a9cbd6;
   --alert-on-rail: #f6a27f;
   --accent: #5cb4ba;
   --accent-contrast: #06191b;
@@ -186,14 +187,14 @@
   --select-ink: #e6f5f5;
   --go: #3dba72;
   --wait: #e2a634;
-  --tick: #2b3440;
+  --tick: #1c2a33;
   --alert: #f2875a;
-  --mark: #d5dae0;
-  --shadow: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.35);
+  --mark: #d0dadd;
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.55), 0 2px 6px rgb(0 0 0 / 0.4);
   --scrim: rgb(0 0 0 / 0.45);
   --shadow-soft: 0 2px 8px -4px rgb(0 0 0 / 0.4);
-  --hover: #1d2227;
-  --hover-2: #2a3037;
+  --hover: #162026;
+  --hover-2: #1e2a31;
 }
 :root[data-theme="light"] {
   color-scheme: light;
@@ -327,11 +328,14 @@ a:hover {
   gap: var(--sp-lg);
   padding: 16px 20px 8px;
 }
+/* The view's title is its anchor (owner's decision, 17 October: at 19px it was barely larger than the rows): larger and
+   lighter, set close, so it reads as a calm name rather than a loud label. */
 .viewtitle {
   margin: 0;
-  font-size: var(--fs-headline);
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: var(--fs-display);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 .viewcount {
   color: var(--ink-2);
@@ -343,9 +347,10 @@ a:hover {
 }
 /* Inside a checklist the heading starts with the way back up: "Checklists ›" in ink-2, then the checklist's name. */
 .viewcrumb {
-  font-size: var(--fs-headline);
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-size: var(--fs-display);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   color: var(--ink-2);
   border-radius: 3px;
 }
@@ -6053,6 +6058,11 @@ body.is-cal-dragging {
   }
   .viewtitle {
     white-space: nowrap;
+  }
+  /* A phone's narrower line keeps the title a step smaller. */
+  .viewtitle,
+  .viewcrumb {
+    font-size: 22px;
   }
   .viewtools .text-btn {
     white-space: nowrap;
