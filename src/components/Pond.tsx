@@ -14,7 +14,16 @@ import { useEffect, useRef } from "react";
  * The water can be touched (owner's request), in the rail and on the sign-in screen alike: a click on the water sends
  * rings out from the pointer, and a click in the air above lets a drop fall from there to the water below. Touching
  * the pond never takes focus from where it was (a list, the password field).
+ *
+ * The water is the system's weather (owner's decision, 17 October: mind like water, read at a glance). Dead calm while
+ * nothing asks for anything; a ripple while something waits on you (a chase, the review, an old Inbox): a little chop
+ * on the water, a ring rising now and then, the reflection swaying; rough water once work is late or a project has
+ * stalled: darker, choppier water, rings coming more often, the reflection broken. The chop is drawn still, so it
+ * reads with reduced motion too; only the rings and the sway move, and only while the page is in view. The rail's
+ * counts say the same in words, so the pond stays hidden from screen readers; its tooltip names the weather.
  */
+
+export type Weather = "calm" | "ripple" | "rough";
 
 const HORIZON = 43; // px from the top: steel "air" above, water below; level with the top bar's bottom rule
 /** The scene's horizon, as a share of its height (the CSS draws it at the same 42%). */
@@ -30,7 +39,25 @@ interface Splash {
   y: number;
   t0: number;
   near: number; // 0 far … 1 near
+  amp?: number; // a ring rising from below (the weather) is softer than a drop's
 }
+
+/** The chop: little crests standing on the water, at fixed places so they never jump (x, depth 0 far … 1 near). */
+const CHOP: [number, number][] = [
+  [0.3, 0.34],
+  [0.72, 0.62],
+  [0.53, 0.12],
+  [0.88, 0.28],
+  [0.12, 0.66],
+  [0.45, 0.82],
+  [0.66, 0.42],
+];
+/** How the weather shows: crests standing, how often a ring rises (seconds, from … to), and how strong it is. */
+const WEATHER: Record<Weather, { chop: number; every: [number, number]; amp: number } | null> = {
+  calm: null,
+  ripple: { chop: 2, every: [7, 13], amp: 0.5 },
+  rough: { chop: 7, every: [2.2, 4.5], amp: 0.8 },
+};
 
 const G = 520; // px/s², so a drop takes ~0.4s to fall
 const G_SCENE = 1600; // rain falls further, so faster: about 0.8s from the top of a window to the water
@@ -40,9 +67,11 @@ const RINGS = [
   { delay: 0.28, amp: 0.38 },
 ];
 
-export function Pond({ scene = false }: { scene?: boolean }) {
+export function Pond({ scene = false, weather = "calm", note }: { scene?: boolean; weather?: Weather; note?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const box = useRef<HTMLDivElement>(null);
+  const weatherRef = useRef(weather);
+  const settleTo = useRef<() => void>(() => {});
 
   useEffect(() => {
     const el = canvas.current;
@@ -94,6 +123,40 @@ export function Pond({ scene = false }: { scene?: boolean }) {
       else drops.push({ x, hitY, t0: now });
     };
 
+    // The weather's chop: short crests over their troughs, smaller and flatter further out.
+    const chop = () => {
+      const wx = WEATHER[weatherRef.current];
+      if (!wx || !w) return;
+      const top = horizon();
+      for (const [fx, near] of CHOP.slice(0, wx.chop)) {
+        const x = w * fx;
+        const y = top + 4 + (h - top - 14) * near;
+        // Long and flat, so they read as light caught on the water, not as birds over it.
+        const len = 6 + 9 * near;
+        const flat = 0.1 + 0.05 * near;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.85;
+        ctx.strokeStyle = colors.crest;
+        ctx.beginPath();
+        ctx.ellipse(x, y, len, len * flat, 0, Math.PI * 1.22, Math.PI * 1.78);
+        ctx.stroke();
+        ctx.globalAlpha = 0.45;
+        ctx.strokeStyle = colors.trough;
+        ctx.beginPath();
+        ctx.ellipse(x, y + 1, len * 0.9, len * flat * 0.9, 0, Math.PI * 1.25, Math.PI * 1.75);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+    // The water at rest: smooth in a calm, its chop standing otherwise.
+    const rest = () => {
+      if (!el.clientWidth) return; // a short window hides the water
+      size();
+      readColors();
+      ctx.clearRect(0, 0, w, h);
+      chop();
+    };
+
     const draw = (nowMs: number) => {
       const now = nowMs / 1000;
       while (queue > 0 && now >= nextAt) {
@@ -102,6 +165,7 @@ export function Pond({ scene = false }: { scene?: boolean }) {
         nextAt = now + 0.16; // several captures at once fall one after another
       }
       ctx.clearRect(0, 0, w, h);
+      chop();
 
       // Falling drops: a bead that stretches into a tear as it speeds up.
       drops = drops.filter((d) => {
@@ -145,7 +209,7 @@ export function Pond({ scene = false }: { scene?: boolean }) {
             continue;
           }
           const r = reduce.matches ? reach * 0.32 : 1.5 + reach * (1 - Math.exp(-a / 1.3));
-          const alpha = ring.amp * Math.exp(-a / (reduce.matches ? 0.7 : 1.05)) * (1 / (1 + r / 70));
+          const alpha = (s.amp ?? 1) * ring.amp * Math.exp(-a / (reduce.matches ? 0.7 : 1.05)) * (1 / (1 + r / 70));
           if (alpha < 0.02) continue;
           alive = true;
           ctx.globalAlpha = alpha;
@@ -182,7 +246,8 @@ export function Pond({ scene = false }: { scene?: boolean }) {
 
       if (drops.length || splashes.length || queue > 0) frame = requestAnimationFrame(draw);
       else {
-        ctx.clearRect(0, 0, w, h); // smooth water again; nothing runs until the next drop
+        ctx.clearRect(0, 0, w, h); // the water at rest again; nothing runs until the next drop
+        chop();
         frame = 0;
       }
     };
@@ -254,6 +319,43 @@ export function Pond({ scene = false }: { scene?: boolean }) {
     };
     if (scene && !reduce.matches) rain = window.setTimeout(nextRain, 900);
 
+    // The weather's rings: now and then one rises from below somewhere on the water (no drop falls), softer than a
+    // capture's. Not in a calm, not with reduced motion, and only while the page is in view.
+    let swell = 0;
+    const nextSwell = () => {
+      window.clearTimeout(swell);
+      const wx = WEATHER[weatherRef.current];
+      if (!wx || reduce.matches || scene) return;
+      const [a, b] = wx.every;
+      swell = window.setTimeout(() => {
+        if (!document.hidden && el.clientWidth) {
+          if (!frame) {
+            size();
+            readColors();
+          }
+          const top = horizon();
+          const near = 0.2 + Math.random() * 0.6;
+          splashes.push({ x: w * (0.12 + Math.random() * 0.76), y: top + 4 + (h - top - 14) * near, t0: performance.now() / 1000, near, amp: wx.amp });
+          if (!frame) frame = requestAnimationFrame(draw);
+        }
+        nextSwell();
+      }, (a + Math.random() * (b - a)) * 1000);
+    };
+    settleTo.current = () => {
+      if (!frame) rest();
+      nextSwell();
+    };
+    rest();
+    nextSwell();
+    // The canvas follows the rail's width and the theme (its colours are read from the page).
+    const resized = new ResizeObserver(() => !frame && rest());
+    resized.observe(el);
+    const scheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const recolor = () => !frame && rest();
+    scheme.addEventListener("change", recolor);
+    const themed = new MutationObserver(recolor);
+    themed.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
     return () => {
       window.removeEventListener("gtd:landed", onLanded);
       pond?.removeEventListener("pointerdown", onTouch);
@@ -261,11 +363,21 @@ export function Pond({ scene = false }: { scene?: boolean }) {
       cancelAnimationFrame(frame);
       window.clearTimeout(settle);
       window.clearTimeout(rain);
+      window.clearTimeout(swell);
+      resized.disconnect();
+      scheme.removeEventListener("change", recolor);
+      themed.disconnect();
     };
   }, [scene]);
 
+  // A change of weather settles in at once: the chop is redrawn and the rings keep their new pace.
+  useEffect(() => {
+    weatherRef.current = weather;
+    settleTo.current();
+  }, [weather]);
+
   return (
-    <div ref={box} className={`pond ${scene ? "is-scene" : ""}`} aria-hidden="true">
+    <div ref={box} className={`pond ${scene ? "is-scene" : ""}`} data-weather={scene ? undefined : weather} title={scene ? undefined : note} aria-hidden="true">
       <span className="pond-name">Stiltje</span>
       <span className="pond-name pond-mirror">Stiltje</span>
       <canvas ref={canvas} />

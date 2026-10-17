@@ -5,7 +5,7 @@ import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTable
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
 import { useCommands, keyLabel, keyAria, IS_MAC, VIM_ARROWS, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
 import { Kbd } from "./bits.tsx";
-import { Pond } from "./Pond.tsx";
+import { Pond, type Weather } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
 import { phoneAdder, type PhoneAdder } from "../phoneAdd.ts";
 import { useOpenChecklist } from "../checklists.ts";
@@ -87,11 +87,38 @@ function useRailSignals() {
     return { inbox: inboxItems.length, late, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);
-  const listMeta = (id: ViewId): { text: string; tone?: "due" | "quiet" } | null => {
+  const reviewAge = daysSinceReview(s);
+  const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
+  const oldestDue = sig.oldestDays !== null && sig.oldestDays >= 7;
+
+  // One red on the rail (owner's decision, 17 October: when every signal is red, none of them is): only the worst
+  // signal is in alert red, the rest in ink. Worst first: late work, stalled projects, chases, the review, the Inbox.
+  const asking: { key: string; on: boolean; text: string }[] = [
+    { key: "next", on: sig.late > 0, text: `${sig.late} late` },
+    { key: "projects", on: sig.stalled > 0, text: `${sig.stalled} stalled` },
+    { key: "waiting", on: sig.chase > 0, text: `${sig.chase} to chase` },
+    { key: "h-review", on: reviewDue, text: "Weekly Review due" },
+    { key: "h-oldest", on: oldestDue, text: `oldest in the Inbox ${sig.oldestDays}d` },
+  ];
+  const worst = asking.find((a) => a.on)?.key ?? null;
+  // The pond is the system's weather (owner's decision, 17 October): dead calm while nothing asks for anything, a
+  // ripple while something waits on you (a chase, the review, an old Inbox), rough water once work is late or a
+  // project has stalled. It adds nothing to keep up; the counts below still say the same in words.
+  const weather: Weather = sig.late > 0 || sig.stalled > 0 ? "rough" : asking.some((a) => a.on) ? "ripple" : "calm";
+  const weatherNote =
+    weather === "calm"
+      ? "Dead calm: nothing is late, stalled or waiting on you"
+      : `${weather === "rough" ? "Rough water" : "A ripple"}: ${asking
+          .filter((a) => a.on)
+          .map((a) => a.text)
+          .join(" · ")}`;
+
+  const listMeta = (id: ViewId): { text: string; tone?: "due" | "asking" | "quiet" } | null => {
+    const tone = worst === id ? ("due" as const) : ("asking" as const);
     if (id === "inbox") return sig.inbox ? { text: String(sig.inbox) } : null;
-    if (id === "next") return sig.late ? { text: `${sig.late} late`, tone: "due" } : null;
-    if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
-    if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone: "due" } : null;
+    if (id === "next") return sig.late ? { text: `${sig.late} late`, tone } : null;
+    if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone } : null;
+    if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
     // What today holds: what is to be done today (actions and projects on their day or due, follow-ups).
     // What the hard landscape asks of today; "today" stays Done's word for what was finished (rail critique).
@@ -99,16 +126,15 @@ function useRailSignals() {
     return null;
   };
 
-  return { s, sig, listMeta };
+  return { s, sig, listMeta, reviewAge, reviewDue, oldestDue, worst, weather, weatherNote };
 }
 
 export function Rail({ active }: { active: boolean }) {
   useHeldModifier();
   const ui = useUI();
-  const { s, sig, listMeta } = useRailSignals();
+  const { sig, listMeta, reviewAge, reviewDue, oldestDue, worst, weather, weatherNote } = useRailSignals();
   const { authRequired } = useMeta();
   const [cursor, setCursor] = useState(0);
-  const reviewAge = daysSinceReview(s);
   // The Inbox count is spoken only when it grows (something new landed), never as it is worked down.
   const lastInbox = useRef(sig.inbox);
   const [inboxNews, setInboxNews] = useState("");
@@ -116,7 +142,6 @@ export function Rail({ active }: { active: boolean }) {
     if (sig.inbox > lastInbox.current) setInboxNews(sig.inbox === 1 ? "1 item in the Inbox" : `${sig.inbox} items in the Inbox`);
     lastInbox.current = sig.inbox;
   }, [sig.inbox]);
-  const reviewDue = reviewAge === null ? sig.systemAge >= 7 : reviewAge >= 7;
 
   // Every stop the cursor can reach, in screen order.
   const health: Entry[] = [
@@ -127,7 +152,7 @@ export function Rail({ active }: { active: boolean }) {
       start: true,
       label: `Weekly Review, ${reviewAge === null ? "not done yet" : reviewAge === 0 ? "done today" : `last done ${reviewAge} days ago`}${reviewDue ? ", due" : ""}`,
     },
-    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} ${sig.oldestDays === 1 ? "day" : "days"}`}${sig.oldestDays >= 7 ? ", due" : ""}. Clarify` }] : []),
+    ...(sig.oldestDays !== null ? [{ key: "h-oldest", view: "inbox" as ViewId, name: "Oldest in Inbox", label: `Oldest in the Inbox: ${sig.oldestDays === 0 ? "today" : `${sig.oldestDays} ${sig.oldestDays === 1 ? "day" : "days"}`}${oldestDue ? ", due" : ""}. Clarify` }] : []),
   ];
   const entries: Entry[] = [
     ...LISTS.flat().map((id) => {
@@ -214,7 +239,7 @@ export function Rail({ active }: { active: boolean }) {
 
   return (
     <nav ref={navRef} className={`rail ${active ? "is-active" : ""}`} aria-label="Lists and status">
-      <Pond />
+      <Pond weather={weather} note={weatherNote} />
       {/* A polite live region, so a new capture is announced; clarifying it away is not (rail critique: every
           decrement was spoken while clarifying). */}
       <span className="visually-hidden" aria-live="polite">
@@ -230,7 +255,7 @@ export function Rail({ active }: { active: boolean }) {
                 <button type="button" {...stop(entries[idx(id)], "rail-item")}>
                   <span className="rail-name">{VIEW_TITLES[id]}</span>
                   <span className="rail-meta">
-                    {m && <span className={`num ${m.tone === "due" ? "is-due" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
+                    {m && <span className={`num ${m.tone === "due" ? "is-due" : m.tone === "asking" ? "is-asking" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
                     <RailKey k={keyOf(id)} />
                   </span>
                 </button>
@@ -254,20 +279,20 @@ export function Rail({ active }: { active: boolean }) {
               >
                 {e.key === "h-review" && (
                   <>
-                    <Gauge due={reviewDue} />
+                    <Gauge due={reviewDue} worst={worst === "h-review"} />
                     <span className="rail-name">Weekly Review</span>
                     <span className="rail-meta">
-                      <span className={`num ${reviewDue ? "is-due" : ""}`}>{reviewAge === null ? (reviewDue ? "due" : "not yet") : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
+                      <span className={`num ${worst === "h-review" ? "is-due" : reviewDue ? "is-asking" : ""}`}>{reviewAge === null ? (reviewDue ? "due" : "not yet") : reviewAge === 0 ? "today" : `${reviewAge}d ago`}</span>
                       <RailKey k="shift+r" />
                     </span>
                   </>
                 )}
                 {e.key === "h-oldest" && (
                   <>
-                    <Gauge due={sig.oldestDays !== null && sig.oldestDays >= 7} />
+                    <Gauge due={oldestDue} worst={worst === "h-oldest"} />
                     <span className="rail-name">Oldest in Inbox</span>
                     <span className="rail-meta">
-                      <span className={`num ${sig.oldestDays !== null && sig.oldestDays >= 7 ? "is-due" : ""}`}>{sig.oldestDays === 0 ? "today" : `${sig.oldestDays}d`}</span>
+                      <span className={`num ${worst === "h-oldest" ? "is-due" : oldestDue ? "is-asking" : ""}`}>{sig.oldestDays === 0 ? "today" : `${sig.oldestDays}d`}</span>
                       <RailKey k="k" />
                     </span>
                   </>
@@ -324,12 +349,13 @@ const keyOf = (v: ViewId) => RAIL.find((r) => r.id === v)?.key;
 
 /**
  * The system check's rows are gauges, not places (rail critique: they looked like two more lists). Each leads with a
- * small light: a quiet filled dot while all is well, an alert-red ring with a dot in it when due, so it reads by shape
- * as well as colour. Visual only: the row's name says "due".
+ * small light: a quiet filled dot while all is well, a ring with a dot in it when due, so it reads by shape as well as
+ * colour; the ring is alert red only when it is the rail's worst signal (one red on the rail). Visual only: the row's
+ * name says "due".
  */
-function Gauge({ due }: { due: boolean }) {
+function Gauge({ due, worst }: { due: boolean; worst: boolean }) {
   return (
-    <svg className={`rail-gauge ${due ? "is-due" : ""}`} viewBox="0 0 10 10" aria-hidden="true">
+    <svg className={`rail-gauge ${due ? "is-asking" : ""} ${worst ? "is-due" : ""}`} viewBox="0 0 10 10" aria-hidden="true">
       {due ? (
         <>
           <circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -416,7 +442,7 @@ function useKeyboardInset(on: boolean) {
 export function PhoneChrome() {
   const ui = useUI();
   useSyncExternalStore(subscribeLayers, layersVersion);
-  const { sig, listMeta } = useRailSignals();
+  const { sig, listMeta, weather, weatherNote } = useRailSignals();
   const { authRequired } = useMeta();
   const [sheet, setSheet] = useState<"menu" | "capture" | null>(null);
   // The list's own add, read as the capture sheet opens (what N does on the list beneath it), not on the Inbox, where
@@ -508,7 +534,7 @@ export function PhoneChrome() {
       {sheet === "menu" && (
         <div ref={menuRef} className="phone-sheet phone-menu" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="phone-menu-head">
-            <Pond />
+            <Pond weather={weather} note={weatherNote} />
             <button type="button" className="phone-close" aria-label="Close the menu" onClick={() => close()}>
               <X size={20} strokeWidth={2} aria-hidden="true" />
             </button>
@@ -534,7 +560,7 @@ export function PhoneChrome() {
                     <li key={v}>
                       <button type="button" className={here ? "is-current" : ""} aria-current={here ? "page" : undefined} onClick={() => go(v)}>
                         <span className="phone-menu-name">{VIEW_TITLES[v]}</span>
-                        {m && <span className={`num phone-menu-meta ${m.tone === "due" ? "is-due" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
+                        {m && <span className={`num phone-menu-meta ${m.tone === "due" ? "is-due" : m.tone === "asking" ? "is-asking" : m.tone === "quiet" ? "is-quiet" : ""}`}>{m.text}</span>}
                       </button>
                     </li>
                   );

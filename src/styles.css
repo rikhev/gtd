@@ -842,6 +842,58 @@ a:hover {
   -webkit-mask-image: linear-gradient(to top, #000, transparent 85%);
   mask-image: linear-gradient(to top, #000, transparent 85%);
 }
+/* The weather (owner's decision, 17 October): the water deepens a step toward its troughs in a ripple and two in
+   rough water, and the reflection sways, slowly in a ripple, broken in rough water. The canvas draws the chop. */
+.pond[data-weather="ripple"] {
+  background: linear-gradient(
+    to bottom,
+    transparent 43px,
+    color-mix(in srgb, var(--water-far) 90%, var(--water-trough)) 43px,
+    color-mix(in srgb, var(--water-near) 90%, var(--water-trough))
+  );
+}
+.pond[data-weather="rough"] {
+  background: linear-gradient(
+    to bottom,
+    transparent 43px,
+    color-mix(in srgb, var(--water-far) 76%, var(--water-trough)) 43px,
+    color-mix(in srgb, var(--water-near) 74%, var(--water-trough))
+  );
+}
+.pond[data-weather="ripple"] .pond-mirror {
+  animation: pond-sway 7s ease-in-out infinite;
+}
+.pond[data-weather="rough"] .pond-mirror {
+  opacity: 0.38;
+  filter: blur(0.8px);
+  animation: pond-chop 3.4s ease-in-out infinite;
+}
+@keyframes pond-sway {
+  0%,
+  100% {
+    transform: scaleY(-0.75) skewX(0deg);
+  }
+  50% {
+    transform: scaleY(-0.79) skewX(3deg);
+  }
+}
+@keyframes pond-chop {
+  0%,
+  100% {
+    transform: scaleY(-0.72) skewX(-4deg) translateX(-1px);
+  }
+  33% {
+    transform: scaleY(-0.86) skewX(6deg) translateX(1px);
+  }
+  66% {
+    transform: scaleY(-0.66) skewX(-2deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pond[data-weather] .pond-mirror {
+    animation: none;
+  }
+}
 /* A drop stirs the reflection: it sways and breaks up a little as the rings pass, then settles. */
 .pond.is-stirred .pond-mirror {
   animation: pond-stir 1.6s var(--ease) both;
@@ -919,7 +971,8 @@ a:hover {
   .rail-settings {
     padding-top: 6px;
   }
-  .pond {
+  .pond,
+  .pond[data-weather] {
     height: 44px;
     background: none;
     -webkit-mask-image: none;
@@ -1015,6 +1068,11 @@ body.keys-held .rail .rail-meta .num {
 .rail-meta .is-quiet {
   color: var(--ink-3);
 }
+/* A signal that asks for something but isn't the worst one: ink, set apart by weight (one red on the rail). */
+.rail-meta .is-asking {
+  color: var(--ink);
+  font-weight: 600;
+}
 /* On the open list's row, a hovered row and the cursor, a quiet count steps up to ink-2, so it keeps AA on the lifted
    surface in dark, on the hover fill in light (ink-3 there measured 4.39:1) and on Selection Blue in dark (4.5:1). */
 .rail-item.is-current .rail-meta .is-quiet,
@@ -1055,6 +1113,9 @@ body.keys-held .rail .rail-meta .num {
   fill: currentColor;
   color: var(--ink-3);
   overflow: visible;
+}
+.rail-gauge.is-asking {
+  color: var(--ink-2);
 }
 .rail-gauge.is-due {
   color: var(--alert);
@@ -1521,6 +1582,8 @@ body.is-col-resizing * {
 .is-focus .person-label {
   color: var(--select-ink);
 }
+/* Who a chase waits on, in ink (owner's decision, 17 October: one red mark a row): the dashed red ring before it
+   already says it is to chase. */
 .chase-label {
   font-family: var(--font-label);
   font-stretch: 75%;
@@ -1528,7 +1591,7 @@ body.is-col-resizing * {
   font-size: var(--fs-small);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--alert);
+  color: var(--ink);
   flex: none;
 }
 .is-focus .chase-label {
@@ -5207,8 +5270,14 @@ textarea.field-text {
   border-color: color-mix(in srgb, var(--alert) 55%, transparent);
   color: var(--alert);
 }
+/* A follow-up past its day is a chase, not late work: its words stay in ink and only its hourglass is red (one red
+   mark, as on the lists). */
 .cal-bar.is-overdue.is-quiet {
   border-color: transparent;
+  color: var(--ink);
+}
+.cal-bar.is-overdue.is-quiet svg {
+  color: var(--alert);
 }
 /* A Do on day is the day's plan, not a deadline: outlined in
    ink on the sheet, so a day with three planned calls doesn't read as three deadlines; red when the day has passed
@@ -5234,9 +5303,11 @@ textarea.field-text {
   border-color: var(--cursor-edge);
   color: var(--select-ink);
 }
-/* A due date is a deadline and must be seen at once (owner's request, 17 October): an item with only a due date (or
-   its Do on the same day) is inked solid (red when overdue), and every due end, alone or at the end of a Do on → due
-   bar, carries the planner's milestone mark: a solid diamond. */
+/* A due date is a deadline (owner's request, 17 October): an item with only a due date (or its Do on the same day) is
+   a bar on the quiet wash with an ink edge, and every due end, alone or at the end of a Do on → due bar, carries the
+   planner's milestone mark: a solid diamond. The owner's own dates stay quieter than the appointments, the calendar's
+   hard landscape (owner's decision, 17 October, replacing the solid ink bar): nothing on the Calendar is a solid fill.
+   Overdue, it takes a faint red wash, a red edge and red words, never a red block (one red, not a wall of it). */
 .cal-bar.has-due-end {
   padding-right: 18px;
 }
@@ -5256,22 +5327,18 @@ textarea.field-text {
 .cal-bar.has-due-end.is-overdue::after {
   background: var(--alert);
 }
-.cal-bar.role-due::after,
-.cal-bar.role-due.is-overdue::after {
-  background: var(--sheet);
-}
 .cal-bar.role-due {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--sheet);
+  background: var(--wash);
+  border-color: var(--ink-2);
+  color: var(--ink);
 }
 .cal-bar.role-due.is-overdue {
-  background: var(--alert);
+  background: color-mix(in srgb, var(--alert) 8%, var(--sheet));
   border-color: var(--alert);
-  color: var(--sheet);
+  color: var(--alert);
 }
 .cal-bar.role-due .cal-sub {
-  color: color-mix(in srgb, var(--sheet) 72%, transparent);
+  color: var(--ink-2);
 }
 .cal-bar.role-due:hover {
   border-color: var(--ink);
@@ -5991,11 +6058,14 @@ body.is-cal-dragging {
   padding: 4px 8px 12px;
 }
 
-/* Appointments (the subscribed Outlook calendar): the hard landscape, read-only. A faint accent wash and edge set
-   them apart from the system's own dates; the time leads in 600, in tabular figures; they never take the grab cursor. */
+/* Appointments (the subscribed calendars): the hard landscape, read-only, and the strongest marks on the Calendar
+   (owner's decision, 17 October: GTD's calendar is what is fixed in time; the owner's own dates sit quieter). Their
+   calendar's colour as a clear wash with a firm edge; the time leads in 600, in tabular figures; they never take the
+   grab cursor. */
 .cal-bar.is-event {
-  background: color-mix(in srgb, var(--feed, var(--accent)) 11%, var(--sheet));
-  border-color: color-mix(in srgb, var(--feed, var(--accent)) 45%, var(--rule-strong));
+  background: color-mix(in srgb, var(--feed, var(--accent)) 24%, var(--sheet));
+  border-color: color-mix(in srgb, var(--feed, var(--accent)) 75%, var(--ink-2));
+  font-weight: 500;
   cursor: default;
 }
 .cal-time {
@@ -6181,9 +6251,9 @@ body.is-cal-dragging {
   gap: 1px;
   padding: 3px 6px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--feed, var(--accent)) 45%, var(--rule-strong));
+  border: 1px solid color-mix(in srgb, var(--feed, var(--accent)) 75%, var(--ink-2));
   border-radius: 3px;
-  background: color-mix(in srgb, var(--feed, var(--accent)) 14%, var(--sheet));
+  background: color-mix(in srgb, var(--feed, var(--accent)) 24%, var(--sheet));
   font-size: var(--fs-small);
   line-height: 1.25;
   cursor: default;
@@ -6583,6 +6653,10 @@ body.is-cal-dragging {
   }
   .phone-menu-meta.is-due {
     color: var(--alert);
+    font-weight: 600;
+  }
+  .phone-menu-meta.is-asking {
+    color: var(--ink);
     font-weight: 600;
   }
   .phone-menu-meta.is-quiet {
