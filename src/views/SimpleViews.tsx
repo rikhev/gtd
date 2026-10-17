@@ -131,7 +131,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       row: true,
       label: focusRow?.kind === "project" ? "Jump to its next action" : "Jump to its project",
       group: "Someday",
-      keys: ["j"],
+      keys: ["u"],
       enabled: Boolean(focusRow),
       run: () => focusRow && (focusRow.kind === "project" ? ui.jumpToAction(focusRow.id) : ui.jumpToProject(focusRow.id)),
     },
@@ -140,7 +140,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
       row: true,
       label: supportLabel(ui, focusRow?.id),
       group: "Someday",
-      keys: ["shift+j"],
+      keys: ["shift+u"],
       enabled: focusRow?.kind === "project",
       run: () => focusRow?.kind === "project" && ui.jumpToSupport(focusRow.id),
     },
@@ -155,7 +155,7 @@ export function SomedayView({ regionActive }: { regionActive: boolean }) {
     { id: "some.move", row: true, label: "Move", group: "Someday", keys: ["v"], enabled: has, run: () => (pick("action").length ? aEd.move(pick("action")) : pEd.move(pick("project"))) },
     { id: "some.trash", row: true, label: "Trash", group: "Someday", keys: ["backspace", "delete"], enabled: has, run: () => trash(false) },
     { id: "some.delete", row: true, label: "Delete permanently", group: "Someday", keys: ["shift+backspace", "shift+delete"], enabled: has, run: () => trash(true) },
-    // A someday action takes the same field keys as anywhere else (C, P, S, M, G, R, H, ⇧P, ⇧F).
+    // A someday action takes the same field keys as anywhere else (C, P, S, D, M, G, R, O, ⇧P, ⇧F).
     ...actionRowCommands(ui, {
       targets: () => pick("action"),
       focusId: focusRow?.kind === "action" ? focusRow.id : null,
@@ -345,7 +345,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       keys: ["n"],
       run: () => create(),
     },
-    { id: "ref.newlist", label: "New list", group: "Reference", keys: ["l"], run: () => create("list") },
+    { id: "ref.newlist", label: "New list", group: "Reference", keys: ["x"], run: () => create("list") },
     { id: "ref.today", label: "Open today's note", group: "Reference", keys: ["d"], run: () => openTodayNote(ui) },
     {
       // Typing finds a note by its title or its words (the list's letters are its commands, so the typing happens in
@@ -370,7 +370,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     // Its own command only where Enter goes elsewhere (a list opens across the width, a document in the viewer).
     { id: "ref.details", row: true, label: "Open details", group: "Reference", enabled: Boolean(focusRef && (focusRef.form === "list" || kindOf(focusRef) === "document")), run: () => focusId && ui.openDetail({ kind: "ref", id: focusId }, true) },
     { id: "ref.rename", row: true, label: "Rename", group: "Reference", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing(focusId) },
-    { id: "ref.jump", row: true, label: "Jump to the project it supports", group: "Reference", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
+    { id: "ref.jump", row: true, label: "Jump to the project it supports", group: "Reference", keys: ["shift+u"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("ref", focusId) },
     {
       id: "ref.project",
       row: true,
@@ -381,7 +381,7 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
       run: () => setProject(ui, "refs", nav.targets()),
     },
     {
-      // ⇧L locks the reference (setting the lock password the first time); on a locked one it takes the lock off. L
+      // ⇧L locks the reference (setting the lock password the first time); on a locked one it takes the lock off. X
       // makes a new list, as N makes a note: making something new is one key (owner's rule).
       id: "ref.lock",
       row: true,

@@ -86,7 +86,7 @@ export function fileStuff(ui: UI, ids: ID[]) {
   // A tickler entry isn't filed: it brings back an item that is already filed, to be decided again.
   if (ids.length === 1 && reconsider(ui, ids[0])) return;
   if (ids.some((id) => reminderOf(getState(), getState().stuff.find((x) => x.id === id)))) {
-    notify("“Due back” entries are decided one at a time: V on one of them, or K to clarify.");
+    notify("“Due back” entries are decided one at a time: V on one of them, or ⇧K to clarify.");
     return;
   }
   ui.openPicker({

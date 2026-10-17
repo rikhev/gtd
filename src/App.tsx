@@ -167,9 +167,9 @@ export default function App() {
   const [clarifyRun, setClarifyRun] = useState(0);
   const clarifyReturn = useRef<ViewId>("inbox");
   const prevView = useRef<ViewId>("next");
-  // Where J came from (an action, or an appointment in the Calendar), so J on the project goes back there.
+  // Where U came from (an action, or an appointment in the Calendar), so U on the project goes back there.
   const jumpOrigin = useRef<{ actionId?: string; eventKey?: string; projectId: string } | null>(null);
-  // Where ⇧J came from (a reference or a checklist), so ⇧J on the project goes back there. Kept apart from J's,
+  // Where ⇧U came from (a reference or a checklist), so ⇧U on the project goes back there. Kept apart from U's,
   // so going out along one axis never changes where the other one comes back to.
   const supportOrigin = useRef<{ refId?: string; checklistId?: string; projectId: string } | null>(null);
   const captureRef = useRef<HTMLTextAreaElement>(null);
@@ -438,13 +438,13 @@ export default function App() {
         setRevealTarget({ kind: "project", id: p.id });
         notify(`Project: ${p.title}`);
       },
-      // Whether J on a project goes back to an appointment it came from, still linked (else it goes to its next action).
+      // Whether U on a project goes back to an appointment it came from, still linked (else it goes to its next action).
       jumpBackTo: (projectId) => {
         const o = jumpOrigin.current;
         if (o?.projectId !== projectId || !o.eventKey) return null;
         return getState().appointments.some((x) => x.id === o.eventKey && x.project_id === projectId) ? "appointment" : null;
       },
-      // Where ⇧J on a project goes: back to the reference or checklist it came from while still linked, else the
+      // Where ⇧U on a project goes: back to the reference or checklist it came from while still linked, else the
       // first of its support material in the pane's order (references first, A–Z).
       supportTarget: (projectId) => {
         const s = getState();
@@ -536,8 +536,8 @@ export default function App() {
     { id: "g.search", label: "Search", group: "Go to", keys: ["alt+q"], inInput: true, run: ui.openSearch },
     { id: "g.palette", label: "Open the command palette", group: "Help", keys: ["mod+k"], inInput: true, run: ui.openPalette },
     { id: "g.undo", label: "Undo", group: "Edit", keys: ["mod+z"], run: undo },
-    // K clarifies: you decide, one item at a time.
-    { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["k"], hidden: view === "inbox", run: () => ui.startClarify() },
+    // ⇧K clarifies (K is navigation, as in vim): you decide, one item at a time.
+    { id: "g.clarify", label: `Clarify${inboxCount ? ` (${inboxCount})` : ""}`, group: "Clarify", keys: ["shift+k"], hidden: view === "inbox", run: () => ui.startClarify() },
     // ⇧E archives what is done everywhere, not just on the list in view (owner's request); each list's View menu still
     // archives that list alone.
     { id: "g.archive", label: `Archive all done items to Done${archivable ? ` (${archivable})` : ""}`, group: "Actions", keys: ["shift+e"], run: archiveAllDone },

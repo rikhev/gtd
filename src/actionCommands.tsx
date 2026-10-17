@@ -521,7 +521,7 @@ export function editors(ui: UI) {
 /**
  * The keys a row that is an action answers to, the same on every list that shows actions (Next Actions, Waiting For,
  * Someday, Agendas, Done, the Calendar, the Weekly Review's steps), so a letter means one thing wherever the action
- * is: Enter opens it, J jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P S D M G R B H set its
+ * is: Enter opens it, U jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P S D M G R B O set its
  * fields (S sets the date: the follow-up on a waiting item, the day to do it otherwise; D the due date), ⇧F delegates, Delete trashes and ⇧Delete
  * deletes for good. Each list adds its own verbs (new, done, reorder) and leaves out with `skip` what it does its
  * own way. `targets` names the actions to act on: a heading under the cursor says so instead of doing nothing.
@@ -557,7 +557,7 @@ export function actionRowCommands(
   };
   const all: Command[] = [
     { id: "row.open", label: "Open details", group: o.group, keys: ["enter"], run: () => o.focusId && ui.openDetail({ kind: "action", id: o.focusId }, true) },
-    { id: "row.jump", label: "Jump to its project", group: o.group, keys: ["j"], run: () => o.focusId && ui.jumpToProject(o.focusId) },
+    { id: "row.jump", label: "Jump to its project", group: o.group, keys: ["u"], run: () => o.focusId && ui.jumpToProject(o.focusId) },
     { id: "row.rename", label: "Rename", group: o.group, keys: ["f2"], run: () => o.focusId && rename(o.focusId) },
     { id: "row.move", label: "Move to project or list", group: o.group, keys: ["v"], run: () => ed.move(ids()) },
     { id: "row.convert", label: "Turn into a project", group: o.group, keys: ["shift+p"], run: () => ed.convert(ids()) },
@@ -574,7 +574,7 @@ export function actionRowCommands(
     { id: "row.repeat", label: "Set repeat", group: "Fields", keys: ["r"], run: () => ed.recurrence(ids()) },
     // Bring back defers a decision, so only a someday item has one; anything current is already decided.
     { id: "row.bringback", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: focus?.status === "someday", run: () => ed.date(ids(), "bring_back") },
-    { id: "row.person", label: "Set who it's with", group: "Fields", keys: ["h"], run: () => ed.person(ids()) },
+    { id: "row.person", label: "Set who it's with", group: "Fields", keys: ["o"], run: () => ed.person(ids()) },
     { id: "row.delegate", label: "Delegate → Waiting For", group: o.group, keys: ["shift+f"], run: () => ed.delegate(ids()) },
     { id: "row.trash", label: "Trash", group: o.group, keys: ["backspace", "delete"], run: () => trash(false) },
     { id: "row.delete", label: "Delete permanently", group: o.group, keys: ["shift+backspace", "shift+delete"], run: () => trash(true) },

@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { Search, Check, LogOut, Plus, Menu, X, ArrowUp } from "lucide-react";
 import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, isLate, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { useCommands, keyLabel, keyAria, IS_MAC, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
+import { useCommands, keyLabel, keyAria, IS_MAC, VIM_ARROWS, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
 import { Kbd } from "./bits.tsx";
 import { Pond } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
@@ -145,7 +145,7 @@ export function Rail({ active }: { active: boolean }) {
   const here = Math.max(0, entries.findIndex((e) => e.view === ui.view));
   const open = (e: Entry) => {
     if (e.start) ui.startReview();
-    // The oldest item is waiting to be clarified: the row does what its key (K) does, not the Inbox row's job.
+    // The oldest item is waiting to be clarified: the row does what its key (⇧K) does, not the Inbox row's job.
     else if (e.key === "h-oldest") ui.startClarify();
     else ui.go(e.view);
     ui.setRegion("list");
@@ -156,9 +156,9 @@ export function Rail({ active }: { active: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Letter jump: the first letter of a stop's name moves the cursor to the next stop starting with it.
-  // K stays the app-wide "clarify" key, as the check line shows.
-  const letters = [...new Set(entries.map((e) => e.name[0].toLowerCase()))].filter((ch) => ch !== "k");
+  // Letter jump: the first letter of a stop's name moves the cursor to the next stop starting with it. H J K L are
+  // the arrows (vim's movement keys, owner's request), so they don't jump.
+  const letters = [...new Set(entries.map((e) => e.name[0].toLowerCase()))].filter((ch) => !VIM_ARROWS[ch]);
   const jump = (ch: string) =>
     setCursor((c) => {
       for (let n = 1; n <= entries.length; n++) {
@@ -250,7 +250,7 @@ export function Rail({ active }: { active: boolean }) {
                 type="button"
                 {...stop(e, "rail-item rail-check")}
                 // Check rows do something (list rows only go somewhere): the tooltip says what, and its key.
-                title={e.key === "h-review" ? `Start the Weekly Review (${keyLabel("shift+r")})` : `Clarify the Inbox, oldest first (${keyLabel("k")})`}
+                title={e.key === "h-review" ? `Start the Weekly Review (${keyLabel("shift+r")})` : `Clarify the Inbox, oldest first (${keyLabel("shift+k")})`}
               >
                 {e.key === "h-review" && (
                   <>

@@ -156,9 +156,9 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "done.reopen", row: true, label: "Mark not done", group: "Done", keys: ["e"], enabled: Boolean(focus), run: () => reopen(targets()) },
     { id: "done.open", row: true, label: "Open details", group: "Done", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: focus.kind, id: focus.id }, true) },
-    // P and J as on every list (for done actions; a done project has no project of its own).
+    // P and U as on every list (for done actions; a done project has no project of its own).
     { id: "done.project", row: true, label: "Set project", group: "Fields", keys: ["p"], enabled: targets().some((r) => r.kind === "action"), run: () => setProject(ui, "actions", targets().filter((r) => r.kind === "action").map((r) => r.id)) },
-    { id: "done.jump", row: true, label: "Jump to its project", group: "Done", keys: ["j"], enabled: focus?.kind === "action", run: () => focus?.kind === "action" && ui.jumpToProject(focus.id) },
+    { id: "done.jump", row: true, label: "Jump to its project", group: "Done", keys: ["u"], enabled: focus?.kind === "action", run: () => focus?.kind === "action" && ui.jumpToProject(focus.id) },
     { id: "done.rename", row: true, label: "Rename", group: "Done", keys: ["f2"], enabled: Boolean(focus), run: () => focus && rename(focus) },
     { id: "done.trash", row: true, label: "Trash", group: "Done", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => trash(targets()) },
     { id: "done.delete", row: true, label: "Delete permanently", group: "Done", keys: ["shift+backspace", "shift+delete"], enabled: Boolean(focus), run: () => trash(targets(), true) },

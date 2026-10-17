@@ -501,7 +501,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     ...nav.commands,
     { id: "rv.next", label: "Go to the next step", group: "Step", keys: ["mod+."], inInput: true, run: () => setStepIdx(Math.min(STEPS.length - 1, stepIdx + 1)) },
     { id: "rv.prev", label: "Go to the previous step", group: "Step", keys: ["mod+,"], inInput: true, run: () => setStepIdx(Math.max(0, stepIdx - 1)) },
-    { id: "rv.clarify", label: "Clarify", group: "Row", keys: ["k"], enabled: step.id === "clear" && inboxCount > 0, run: clarify },
+    { id: "rv.clarify", label: "Clarify", group: "Row", keys: ["shift+k"], enabled: step.id === "clear" && inboxCount > 0, run: clarify },
     {
       id: "rv.addnext",
       row: true,
@@ -586,7 +586,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       row: true,
       label: "Jump to its project",
       group: "Row",
-      keys: ["j"],
+      keys: ["u"],
       enabled: focusRow?.kind === "action" || focusRow?.kind === "event",
       run: () => focusRow && (focusRow.kind === "event" ? ui.jumpFromAppointment(focusRow.id) : ui.jumpToProject(focusRow.id)),
     },
@@ -655,8 +655,8 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       enabled: step.id === "creative" && (focusRow?.kind === "area" || focusRow?.kind === "goal"),
       run: () => focusRow && (focusRow.kind === "goal" ? newProjectFor(focusRow.id) : newProjectIn(focusRow.id)),
     },
-    // An action in a step takes the keys it takes on its list (V, C, S, M, G, B, H, ⇧P, ⇧F, ⇧Delete); R stays
-    // "still current" here (owner's decision), and Enter, J, F2, P and Delete are the review's own, for every kind of row.
+    // An action in a step takes the keys it takes on its list (V, C, S, D, M, G, B, O, ⇧P, ⇧F, ⇧Delete); R stays
+    // "still current" here (owner's decision), and Enter, U, F2, P and Delete are the review's own, for every kind of row.
     ...actionRowCommands(ui, {
       targets: () => targetsOf("action"),
       focusId: focusRow?.kind === "action" ? focusRow.id : null,

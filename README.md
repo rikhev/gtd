@@ -49,7 +49,7 @@ Everything works from the keyboard. `⌘K` lists every command and its keys for 
 |---|---|
 | `⌃1`–`6`, `⌃⇧1`–`5` | Go to a list, in the order of the rail |
 | `⇧N` | Capture to the Inbox |
-| `K` | Clarify the Inbox |
+| `⇧K` | Clarify the Inbox |
 | `N` | New item on the list you're on |
 | `⌥T` `⌥W` `⌥N` | New next action, waiting for or project, from anywhere |
 | `Enter` / `Esc` | Open details / go back |

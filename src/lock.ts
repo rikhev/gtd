@@ -390,7 +390,7 @@ export function choosePassword(ui: Ask, then?: () => void) {
   });
 }
 
-/** L: lock with the password, setting one the first time. */
+/** ⇧L: lock with the password, setting one the first time. */
 export function lockWithPassword(ui: Ask, ids: ID[]) {
   if (!getMeta().lock) return choosePassword(ui, () => void lockRefs(ids));
   if (!key) return askUnlock(ui, () => void lockRefs(ids));

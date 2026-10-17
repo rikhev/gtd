@@ -316,7 +316,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     ui.followDetail(focusItem ? { kind: focusItem.kind, id: focusItem.id } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusItem?.key]);
-  // An appointment J is bringing back to (see below), picked once its week has arrived from the calendars.
+  // An appointment U is bringing back to (see below), picked once its week has arrived from the calendars.
   const arriving = useRef<string | null>(null);
   // The item cursor lets go when its item leaves the cursor day (moved, completed).
   useEffect(() => {
@@ -590,7 +590,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       row: true,
       label: "Jump to its project",
       group: "Calendar",
-      keys: ["j"],
+      keys: ["u"],
       enabled: focusItem?.kind === "event" || focusItem?.kind === "action",
       run: () => focusItem && (focusItem.kind === "event" ? ui.jumpFromAppointment(focusItem.id) : focusItem.kind === "action" && ui.jumpToProject(focusItem.id)),
     },
@@ -607,7 +607,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           ? linkAppointment(ui, { key: focusItem.id, title: focusItem.title, date: focusItem.start, time: focusItem.time ?? null, endTime: focusItem.endTime ?? null, feed: focusItem.feed ?? "" })
           : focusItem?.kind === "action" && setProject(ui, "actions", [focusItem.id]),
     },
-    // An action under the cursor takes the rest of the keys an action takes on its list (F2, V, ⇧P, C, M, G, R, B, H, ⇧F).
+    // An action under the cursor takes the rest of the keys an action takes on its list (F2, V, ⇧P, C, M, G, R, B, O, ⇧F).
     ...actionRowCommands(ui, {
       targets: () => (focusItem?.kind === "action" ? [focusItem.id] : []),
       focusId: focusItem?.kind === "action" ? focusItem.id : null,
@@ -624,7 +624,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     if (!el || el === document.body) root.current?.focus({ preventScroll: true });
   });
 
-  // J from a project lands here on its appointment: that day, the appointment picked (its key ends in its day).
+  // U from a project lands here on its appointment: that day, the appointment picked (its key ends in its day).
   useEffect(() => {
     if (ui.revealTarget?.kind !== "event") return;
     const key = ui.revealTarget.id;
@@ -919,7 +919,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   } else if (mode === "day") {
     // The daily review (GTD): the hard landscape first (appointments, day-specific actions, deadlines, follow-ups),
     // what is still open from earlier days, then the next actions that fit now and the chases still to make. Every row is the same agenda
-    // row: ↑↓ walk them all, Enter opens the details beside the calendar, J goes to its project.
+    // row: ↑↓ walk them all, Enter opens the details beside the calendar, U goes to its project.
     const d = cursor;
     const here = onDay(d);
     const late = pastBefore(d);

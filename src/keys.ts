@@ -167,6 +167,12 @@ export function eventToKey(e: KeyboardEvent): string {
   return parts.join("+");
 }
 
+/**
+ * Vim's movement keys (owner's request: hjkl only, nothing else of vim): outside a text field, plain H J K L are the
+ * arrows ← ↓ ↑ →, wherever the arrows move. With a modifier they are letters as before.
+ */
+export const VIM_ARROWS: Record<string, string> = { h: "arrowleft", j: "arrowdown", k: "arrowup", l: "arrowright" };
+
 /** Mac aliases: the "Del" key on a MacBook reports Backspace. */
 function aliases(k: string): string[] {
   const out = [k];
@@ -187,9 +193,10 @@ export function isEditable(el: EventTarget | null): boolean {
 export function installKeyHandler() {
   const handler = (e: KeyboardEvent) => {
     if (e.isComposing) return;
-    const key = eventToKey(e);
-    const candidates = aliases(key);
     const editing = isEditable(e.target);
+    const typed = eventToKey(e);
+    const key = !editing && VIM_ARROWS[typed] ? VIM_ARROWS[typed] : typed;
+    const candidates = aliases(key);
     // While typing, Backspace and Delete belong to the text, with any modifier: the system's delete word (⌥⌫,
     // Ctrl+⌫), delete to line start (⌘⌫) and forward delete must never close a pane or remove a row instead.
     if (editing && /(^|\+)(backspace|delete)$/.test(key)) return;

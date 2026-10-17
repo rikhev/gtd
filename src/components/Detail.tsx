@@ -436,7 +436,7 @@ function ActionDetail({ a }: { a: Action }) {
     [
       { id: "detail.a.addnext", label: "Add a next action", group: "Details", keys: ["t"], run: () => (a.project_id ? projectEditors(ui).addNextAction(a.project_id) : quickAddNextAction(ui)) },
       { id: "detail.a.addwait", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => (a.project_id ? projectEditors(ui).addWaiting(a.project_id) : quickAddWaiting(ui)) },
-      // The pane is the row, bigger (owner's rule): E, J, V, ⇧P, ⇧F, Delete and ⇧Delete do what they do on the row.
+      // The pane is the row, bigger (owner's rule): E, U, V, ⇧P, ⇧F, Delete and ⇧Delete do what they do on the row.
       // The field keys are the pane's own fields, so they are left to them.
       { id: "detail.a.done", label: done ? "Mark not done" : "Mark done", group: "Details", keys: ["e"], enabled: a.status !== "trashed", run: () => (done ? reopenActions([a.id]) : completeActions([a.id])) },
       ...actionRowCommands(ui, {
@@ -520,7 +520,7 @@ function ActionDetail({ a }: { a: Action }) {
     [
       // Who it is for: it then shows on their agenda, beside what they owe you.
       "person",
-      <PickField key="person" label="With" k="H" onOpen={() => ed.person([a.id])}>
+      <PickField key="person" label="With" k="O" onOpen={() => ed.person([a.id])}>
         {a.person || none}
       </PickField>,
     ],
@@ -637,7 +637,7 @@ function EventDetail({ e }: { e: CalEvent }) {
     [
       { id: "detail.e.addnext", label: "Add a next action", group: "Details", keys: ["t"], run: () => quickAddNextAction(ui) },
       { id: "detail.e.addwait", label: "Add a waiting for", group: "Details", keys: ["w"], run: () => quickAddWaiting(ui) },
-      { id: "detail.e.jump", label: "Jump to its project", group: "Details", keys: ["j"], run: () => ui.jumpFromAppointment(e.key) },
+      { id: "detail.e.jump", label: "Jump to its project", group: "Details", keys: ["u"], run: () => ui.jumpFromAppointment(e.key) },
     ],
     { priority: 21, active },
   );
@@ -798,7 +798,7 @@ function ProjectDetail({ p }: { p: Project }) {
       // E, as on every list: the action under the pane's cursor is done (or not done after all); anywhere else in the
       // pane, the project is completed, as E does on its Projects row (the pane is the row, bigger).
       { id: "detail.actdone", label: p.status === "done" ? "Mark not done" : "Complete project, or the action under the cursor", group: "Details", keys: ["e"], run: () => (cursorAction() ? toggleDone(cursorAction()) : p.status === "done" ? ed.reopen([p.id]) : ed.complete([p.id])) },
-      { id: "detail.pjump", label: "Jump to its next action", group: "Details", keys: ["j"], run: () => ui.jumpToAction(p.id) },
+      { id: "detail.pjump", label: "Jump to its next action", group: "Details", keys: ["u"], run: () => ui.jumpToAction(p.id) },
       { id: "detail.ptrash", label: "Trash project", group: "Details", keys: ["backspace", "delete"], run: () => ed.trash([p.id], false) },
       { id: "detail.pdelete", label: "Delete permanently", group: "Details", keys: ["shift+backspace", "shift+delete"], run: () => ed.trash([p.id], true) },
     ],
@@ -1083,7 +1083,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
     [
       { id: "detail.cl.full", label: "Open in Checklists", group: "Details", run: openFull },
       { id: "detail.cl.add", label: "Add an item", group: "Details", keys: ["n"], run: () => addInput.current?.focus() },
-      ...(proj ? [{ id: "detail.cl.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+j"], run: () => ui.jumpFromSupport("checklist", c.id) }] : []),
+      ...(proj ? [{ id: "detail.cl.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+u"], run: () => ui.jumpFromSupport("checklist", c.id) }] : []),
       ...(!c.repeats && p.ticked > 0 ? [{ id: "detail.cl.over", label: "Start over", group: "Details", run: () => startOver([c.id]) }] : []),
     ],
     { priority: 21, active },
@@ -1462,12 +1462,12 @@ function RefDetail({ r }: { r: Ref }) {
   const s = useStore((x) => x);
   const lock = useLock();
   const notes = useOpenedNotes(r);
-  // ⇧J, as on the Reference list: to the project it supports, and ⇧J there comes back.
+  // ⇧U, as on the Reference list: to the project it supports, and ⇧U there comes back.
   const active = useContext(DetailActive);
   useCommands(
     "detail-ref",
     [
-      { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+j"], run: () => ui.jumpFromSupport("ref", r.id) },
+      { id: "detail.r.jump", label: "Jump to the project it supports", group: "Details", keys: ["shift+u"], run: () => ui.jumpFromSupport("ref", r.id) },
       // ⇧L and Delete, as on the Reference row (the pane is the row, bigger).
       r.sealed
         ? { id: "detail.r.unseal", label: "Remove the lock", group: "Details", keys: ["shift+l"], run: () => removeLock(ui, [r.id]) }
@@ -1709,7 +1709,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
         },
       },
       { id: "detail.close", label: "Close details, pinned or not", group: "Details", keys: ["mod+backspace"], run: () => ui.openDetail(null) },
-      // An Inbox item's pane takes the Inbox row's verbs (the pane is the row, bigger): V, K, E, Delete, ⇧Delete.
+      // An Inbox item's pane takes the Inbox row's verbs (the pane is the row, bigger): V, ⇧K, E, Delete, ⇧Delete.
       {
         id: "detail.file",
         label: "File",
@@ -1722,7 +1722,7 @@ export function Detail({ target, active }: { target: Target | null; active: bool
           runWhenReady("inbox.file");
         },
       },
-      { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["k"], enabled: target?.kind === "stuff", run: () => ui.startClarify() },
+      { id: "detail.clarify", label: "Clarify", group: "Details", keys: ["shift+k"], enabled: target?.kind === "stuff", run: () => ui.startClarify() },
       {
         id: "detail.stuffdone",
         label: target?.kind === "stuff" && getState().stuff.find((x) => x.id === target.id)?.status === "done" ? "Mark not done" : "Mark done (two-minute rule)",

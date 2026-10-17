@@ -16,7 +16,7 @@ type Row = Line & { draft?: boolean };
 const short = (t: string) => `“${t.length > 42 ? `${t.slice(0, 40).trimEnd()}…` : t || "Untitled"}”`;
 
 /**
- * A reference list across the whole width (owner's request): kept like a checklist (N adds below, L makes a section
+ * A reference list across the whole width (owner's request): kept like a checklist (N adds below, X makes a section
  * heading, F2 rewrites, ⌥↑↓ or a drag reorders, Delete removes, a pasted list becomes items) with nothing to tick: it
  * is reference, not action. Every change is one save of the list's lines, so ⌘Z takes back each.
  */
@@ -133,13 +133,13 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
     ...nav.commands,
     { id: "rl.new", label: "New item below", group: "List", keys: ["n"], enabled: text !== null, run: () => add(false) },
     { id: "rl.section", label: "New section heading below", group: "List", enabled: text !== null, run: () => add(true) },
-    { id: "rl.makesection", row: true, label: focus?.section ? "Make it an item" : "Make it a section heading", group: "List", keys: ["l"], enabled: Boolean(focus && !focus.draft), run: () => toggleSection(targets()) },
+    { id: "rl.makesection", row: true, label: focus?.section ? "Make it an item" : "Make it a section heading", group: "List", keys: ["x"], enabled: Boolean(focus && !focus.draft), run: () => toggleSection(targets()) },
     { id: "rl.rename", row: true, label: "Rewrite", group: "List", keys: ["f2", "enter"], enabled: Boolean(focus && !focus.draft), run: () => focus && setEditing({ key: focus.key }) },
     { id: "rl.remove", row: true, label: "Remove", group: "List", keys: ["backspace", "delete"], enabled: Boolean(focus && !focus.draft), run: () => remove(targets()) },
     { id: "rl.up", row: true, label: "Move row up", group: "List", keys: ["alt+arrowup"], enabled: Boolean(focus && !focus.draft), run: () => move(-1) },
     { id: "rl.down", row: true, label: "Move row down", group: "List", keys: ["alt+arrowdown"], enabled: Boolean(focus && !focus.draft), run: () => move(1) },
     { id: "rl.project", label: "Set the project it supports", group: "Fields", keys: ["p"], run: () => setProject(ui, "refs", [r.id]) },
-    { id: "rl.jump", label: "Jump to the project it supports", group: "List", keys: ["shift+j"], run: () => ui.jumpFromSupport("ref", r.id) },
+    { id: "rl.jump", label: "Jump to the project it supports", group: "List", keys: ["shift+u"], run: () => ui.jumpFromSupport("ref", r.id) },
     { id: "rl.details", label: "Open its details", group: "List", run: () => ui.openDetail({ kind: "ref", id: r.id }, true) },
     // After the selection is cleared (nav's Esc), Esc goes back up to every reference.
     { id: "rl.back", label: "Back to every reference", group: "Move", keys: ["escape"], run: back },

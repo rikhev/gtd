@@ -150,7 +150,7 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
     { id: "cl.open", row: true, label: "Open checklist", group: "Checklists", keys: ["enter"], enabled: Boolean(focusId), run: () => focusId && openChecklist(focusId) },
     { id: "cl.rename", row: true, label: "Rename", group: "Checklists", keys: ["f2"], enabled: Boolean(focusId), run: () => focusId && setEditing({ id: focusId, fresh: false }) },
     { id: "cl.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: Boolean(focusId), run: () => setArea(ui, targets()) },
-    { id: "cl.jump", row: true, label: "Jump to the project it supports", group: "Checklists", keys: ["shift+j"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
+    { id: "cl.jump", row: true, label: "Jump to the project it supports", group: "Checklists", keys: ["shift+u"], enabled: Boolean(focusId), run: () => focusId && ui.jumpFromSupport("checklist", focusId) },
     { id: "cl.project", row: true, label: "Set project", group: "Fields", keys: ["p"], enabled: Boolean(focusId), run: () => setChecklistProject(ui, targets()) },
     { id: "cl.repeat", row: true, label: "Set repeat", group: "Fields", keys: ["r"], enabled: Boolean(focusId), run: () => pickRepeats(ui, targets()) },
     { id: "cl.over", row: true, label: "Start over", group: "Checklists", enabled: anyTicked(targets()), run: () => startOver(targets()) },
@@ -417,7 +417,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
 
   const tick = (ids: ID[]) => {
     const rows = items.filter((i) => ids.includes(i.id) && !i.section);
-    if (!rows.length) return void (ids.length && notify("A section heading has nothing to tick. L makes it an item."));
+    if (!rows.length) return void (ids.length && notify("A section heading has nothing to tick. X makes it an item."));
     const ticking = rows.some((i) => !done(i));
     if (!ticking) return tickItems(rows.map((i) => i.id), day);
     // Running down the list: the cursor moves on to the next item still to tick.
@@ -523,7 +523,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.tick", row: true, label: "Tick, or untick", group: "Checklist", keys: ["e"], enabled: Boolean(focus), run: () => tick(targets()) },
     { id: "ci.new", label: "New item below", group: "Checklist", keys: ["n"], run: () => add(0) },
     { id: "ci.section", label: "New section heading below", group: "Checklist", run: () => add(1) },
-    { id: "ci.makesection", row: true, label: focus?.section ? "Make it an item" : "Make it a section heading", group: "Checklist", keys: ["l"], enabled: Boolean(focus), run: () => toggleSection(targets()) },
+    { id: "ci.makesection", row: true, label: focus?.section ? "Make it an item" : "Make it a section heading", group: "Checklist", keys: ["x"], enabled: Boolean(focus), run: () => toggleSection(targets()) },
     { id: "ci.open", row: true, label: "Open details", group: "Checklist", keys: ["enter"], enabled: Boolean(focus), run: () => focus && ui.openDetail({ kind: "checkitem", id: focus.id }, true) },
     { id: "ci.rename", row: true, label: "Rename", group: "Checklist", keys: ["f2"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
     // GTD: a checklist is a trigger for new actions. The item stays as it is; ticking still only ticks.
@@ -535,7 +535,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.repeat", label: repeats ? `Change repeat (now ${repeatsLabel(repeats).toLowerCase()})` : "Set repeat", group: "Fields", keys: ["r"], run: () => pickRepeats(ui, [list.id]) },
     { id: "ci.renamelist", label: "Rename checklist", group: "Checklist", run: rename },
     { id: "ci.area", label: "Set the checklist's area", group: "Fields", keys: ["a"], run: () => setArea(ui, [list.id]) },
-    { id: "ci.jump", label: "Jump to the project it supports", group: "Checklist", keys: ["shift+j"], run: () => ui.jumpFromSupport("checklist", list.id) },
+    { id: "ci.jump", label: "Jump to the project it supports", group: "Checklist", keys: ["shift+u"], run: () => ui.jumpFromSupport("checklist", list.id) },
     { id: "ci.project", label: "Set the project it supports", group: "Fields", keys: ["p"], run: () => setChecklistProject(ui, [list.id]) },
     {
       id: "ci.trashlist",
