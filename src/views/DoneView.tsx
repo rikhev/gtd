@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { LIST_NAMES, quote, mutate, plural, reopenActions, useStore } from "../store.ts";
+import { LIST_NAMES, quote, mutate, plural, reopenActions, useMeta, useStore } from "../store.ts";
 import { useUI } from "../ui.tsx";
 import { setProject } from "../actionCommands.tsx";
 import { useCommands, type Command } from "../keys.ts";
@@ -7,7 +7,7 @@ import { Grid, useListNav, usePersisted, useSort, sortGroups, type Column, type 
 import { EmptyState } from "../components/EmptyState.tsx";
 import { DoneBox } from "../components/bits.tsx";
 import { projectEditors } from "./ProjectsView.tsx";
-import { clockOf, dayHeading, formatDate, localDay } from "../../shared/dates.ts";
+import { clockOf, daysBetween, formatDate, localDay, periodOf } from "../../shared/dates.ts";
 import type { ID, Op, State } from "../../shared/types.ts";
 
 type Kind = "action" | "project";
@@ -50,15 +50,16 @@ function rowsOf(s: State): Row[] {
 }
 
 const clock = clockOf;
-const dayLabel = dayHeading;
 
 /**
- * Done: everything archived off its list, newest first, grouped by the day it was done (or by project), as the Trash
+ * Done: everything archived off its list, newest first, grouped by when it was done (Today, Yesterday, Last week, Last
+ * month, "August", Last year: owner's request) or by project, as the Trash
  * lists everything deleted. E puts it back as not done; Delete moves it to the Trash.
  */
 export function DoneView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
   const s = useStore((x) => x);
+  const meta = useMeta();
   const all = useMemo(() => rowsOf(s), [s]);
   const [groupBy, setGroupBy] = usePersisted<"day" | "project">("done:group", "day");
 
@@ -73,8 +74,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
         key = p?.id ?? "none";
         label = p ? p.title || "Untitled project" : "No project";
       } else {
-        key = localDay(r.at);
-        label = dayLabel(key);
+        ({ key, label } = periodOf(localDay(r.at), meta.today, meta.weekStart));
       }
       const g = map.get(key) ?? { label, rows: [] };
       g.rows.push(r);
@@ -84,7 +84,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
     // By project, the project that finished most recently comes first; loose actions go last.
     if (groupBy === "project") out = [...out.filter((g) => g.key !== "none"), ...out.filter((g) => g.key === "none")];
     return sortGroups(out, sorters, sort);
-  }, [all, groupBy, s.projects, sorters, sort]);
+  }, [all, groupBy, s.projects, sorters, sort, meta.today, meta.weekStart]);
   const multi = groups.length > 0;
   const nav = useListNav("done", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((r) => r.key), showHeader: multi })), [groups, multi]));
   const focus = all.find((r) => r.key === nav.focus);
@@ -140,7 +140,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
       type: "list",
       title: "View",
       items: [
-        { id: "day", label: "Group by day", hint: groupBy === "day" ? "Current" : "", section: "group" },
+        { id: "day", label: "Group by date", hint: groupBy === "day" ? "Current" : "", section: "group" },
         { id: "project", label: "Group by project", hint: groupBy === "project" ? "Current" : "", section: "group" },
         { id: "s:", label: "Sort by when done", hint: !sort ? "Current" : "", section: "sort" },
         { id: "s:subject", label: "Sort by subject", hint: sort?.key === "subject" ? "Current" : "", section: "sort" },
@@ -177,8 +177,11 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
       width: "100px",
       align: "end",
       drop: 1,
-      // Grouped by day the heading has the date, so the row gives the time; by project, the date.
-      render: (r) => <span className="date">{groupBy === "day" ? clock(r.at) : formatDate(localDay(r.at))}</span>,
+      // Under Today and Yesterday the heading has the day, so the row gives the time; elsewhere, the date.
+      render: (r) => {
+        const d = localDay(r.at);
+        return <span className="date">{groupBy === "day" && Math.abs(daysBetween(meta.today, d)) <= 1 ? clock(r.at) : formatDate(d, meta.today)}</span>;
+      },
     },
   ];
 
@@ -198,7 +201,7 @@ export function DoneView({ regionActive }: { regionActive: boolean }) {
         const r = all.find((x) => x.key === k);
         if (r) ui.openDetail({ kind: r.kind, id: r.id }, true);
       }}
-      empty={<EmptyState title="Nothing done yet" lines={["Finished actions and completed projects are logged here by day once they are archived from their list."]} />}
+      empty={<EmptyState title="Nothing done yet" lines={["Finished actions and completed projects are logged here by date once they are archived from their list."]} />}
     />
   );
 }

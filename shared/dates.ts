@@ -154,6 +154,31 @@ export function dayHeading(d: string, base = today()): string {
   return diff === 0 || diff === -1 ? `${formatDate(d, base)} · ${formatLong(d)}` : formatLong(d);
 }
 
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/**
+ * The stretch of time a past day falls in, as Done groups its log (owner's request): "Today", "Yesterday",
+ * "Earlier this week", "Last week", "Earlier this month", "Last month", then this year's months by name ("August"),
+ * "Last year", and older years by number. The key is stable while the stretch means the same days.
+ */
+export function periodOf(d: string, base = today(), weekStart: 0 | 1 = 1): { key: string; label: string } {
+  if (!d) return { key: "undated", label: "Undated" };
+  const diff = daysBetween(base, d);
+  if (diff >= 0) return { key: "today", label: "Today" };
+  if (diff === -1) return { key: "yesterday", label: "Yesterday" };
+  const week = addDays(base, -((fromIso(base).getDay() - weekStart + 7) % 7));
+  if (d >= week) return { key: "week", label: "Earlier this week" };
+  if (d >= addDays(week, -7)) return { key: "lastweek", label: "Last week" };
+  const month = `${base.slice(0, 7)}-01`;
+  if (d >= month) return { key: "month", label: "Earlier this month" };
+  if (d >= addMonths(month, -1)) return { key: "lastmonth", label: "Last month" };
+  const year = Number(base.slice(0, 4));
+  const y = Number(d.slice(0, 4));
+  if (y === year) return { key: `m:${d.slice(0, 7)}`, label: MONTH_NAMES[Number(d.slice(5, 7)) - 1] };
+  if (y === year - 1) return { key: "lastyear", label: "Last year" };
+  return { key: `y:${y}`, label: String(y) };
+}
+
 /** The ISO date with its weekday in front, "Mon 2026-09-28": for fields, headings and tooltips, where there is room. */
 export function formatLong(s: string | null): string {
   if (!s) return "";
