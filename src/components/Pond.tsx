@@ -16,11 +16,12 @@ import { useEffect, useRef } from "react";
  * the pond never takes focus from where it was (a list, the password field).
  *
  * The water is the system's weather (owner's decision, 17 October: mind like water, read at a glance). Dead calm while
- * nothing asks for anything; a ripple while something waits on you (a chase, the review, an old Inbox): a little chop
- * on the water, a ring rising now and then, the reflection swaying; rough water once work is late or a project has
- * stalled: darker, choppier water, rings coming more often, the reflection broken. The chop is drawn still, so it
- * reads with reduced motion too; only the rings and the sway move, and only while the page is in view. The rail's
- * counts say the same in words, so the pond stays hidden from screen readers; its tooltip names the weather.
+ * nothing asks for anything; a ripple while something waits on you (a chase, the review, an old Inbox): rings rising
+ * gently on the water every few seconds, the reflection swaying; rough water once work is late or a project has
+ * stalled: darker water, rings coming one after another, the reflection broken. The weather is told by movement
+ * (owner's bug report: standing glints read as smudges, and a ring every 7–13s looked like nothing moved); with
+ * reduced motion only the water's tone and the reflection tell it. It moves only while the page is in view. The
+ * rail's counts say the same in words, so the pond stays hidden from screen readers; its tooltip names the weather.
  */
 
 export type Weather = "calm" | "ripple" | "rough";
@@ -42,21 +43,11 @@ interface Splash {
   amp?: number; // a ring rising from below (the weather) is softer than a drop's
 }
 
-/** The chop: little crests standing on the water, at fixed places so they never jump (x, depth 0 far … 1 near). */
-const CHOP: [number, number][] = [
-  [0.3, 0.34],
-  [0.72, 0.62],
-  [0.53, 0.12],
-  [0.88, 0.28],
-  [0.12, 0.66],
-  [0.45, 0.82],
-  [0.66, 0.42],
-];
-/** How the weather shows: crests standing, how often a ring rises (seconds, from … to), and how strong it is. */
-const WEATHER: Record<Weather, { chop: number; every: [number, number]; amp: number } | null> = {
+/** How the weather moves: how often a ring rises (seconds, from … to), how strong it is, and how often two rise together. */
+const WEATHER: Record<Weather, { every: [number, number]; amp: number; pair: number } | null> = {
   calm: null,
-  ripple: { chop: 2, every: [7, 13], amp: 0.5 },
-  rough: { chop: 7, every: [2.2, 4.5], amp: 0.8 },
+  ripple: { every: [2.4, 4.2], amp: 0.75, pair: 0 },
+  rough: { every: [0.7, 1.5], amp: 1, pair: 0.35 },
 };
 
 const G = 520; // px/s², so a drop takes ~0.4s to fall
@@ -123,39 +114,6 @@ export function Pond({ scene = false, weather = "calm", note }: { scene?: boolea
       else drops.push({ x, hitY, t0: now });
     };
 
-    // The weather's chop: short crests over their troughs, smaller and flatter further out.
-    const chop = () => {
-      const wx = WEATHER[weatherRef.current];
-      if (!wx || !w) return;
-      const top = horizon();
-      for (const [fx, near] of CHOP.slice(0, wx.chop)) {
-        const x = w * fx;
-        const y = top + 4 + (h - top - 14) * near;
-        // Long and flat, so they read as light caught on the water, not as birds over it.
-        const len = 6 + 9 * near;
-        const flat = 0.1 + 0.05 * near;
-        ctx.lineWidth = 1;
-        ctx.globalAlpha = 0.85;
-        ctx.strokeStyle = colors.crest;
-        ctx.beginPath();
-        ctx.ellipse(x, y, len, len * flat, 0, Math.PI * 1.22, Math.PI * 1.78);
-        ctx.stroke();
-        ctx.globalAlpha = 0.45;
-        ctx.strokeStyle = colors.trough;
-        ctx.beginPath();
-        ctx.ellipse(x, y + 1, len * 0.9, len * flat * 0.9, 0, Math.PI * 1.25, Math.PI * 1.75);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-    };
-    // The water at rest: smooth in a calm, its chop standing otherwise.
-    const rest = () => {
-      if (!el.clientWidth) return; // a short window hides the water
-      size();
-      readColors();
-      ctx.clearRect(0, 0, w, h);
-      chop();
-    };
 
     const draw = (nowMs: number) => {
       const now = nowMs / 1000;
@@ -165,7 +123,6 @@ export function Pond({ scene = false, weather = "calm", note }: { scene?: boolea
         nextAt = now + 0.16; // several captures at once fall one after another
       }
       ctx.clearRect(0, 0, w, h);
-      chop();
 
       // Falling drops: a bead that stretches into a tear as it speeds up.
       drops = drops.filter((d) => {
@@ -246,8 +203,7 @@ export function Pond({ scene = false, weather = "calm", note }: { scene?: boolea
 
       if (drops.length || splashes.length || queue > 0) frame = requestAnimationFrame(draw);
       else {
-        ctx.clearRect(0, 0, w, h); // the water at rest again; nothing runs until the next drop
-        chop();
+        ctx.clearRect(0, 0, w, h); // smooth water again; nothing runs until the next drop or ring
         frame = 0;
       }
     };
@@ -319,42 +275,43 @@ export function Pond({ scene = false, weather = "calm", note }: { scene?: boolea
     };
     if (scene && !reduce.matches) rain = window.setTimeout(nextRain, 900);
 
-    // The weather's rings: now and then one rises from below somewhere on the water (no drop falls), softer than a
-    // capture's. Not in a calm, not with reduced motion, and only while the page is in view.
+    // The weather's rings: they rise from below across the water (no drop falls), one after another, away from the
+    // last. Not in a calm, not with reduced motion, and only while the page is in view.
     let swell = 0;
-    const nextSwell = () => {
+    const rise = (amp: number) => {
+      const top = horizon();
+      const near = 0.15 + Math.random() * 0.7;
+      let x = 0;
+      for (let i = 0; i < 6; i++) {
+        x = w * (0.1 + Math.random() * 0.8);
+        if (lastX < 0 || Math.abs(x - lastX) > 40) break;
+      }
+      lastX = x;
+      splashes.push({ x, y: top + 3 + (h - top - 12) * near, t0: performance.now() / 1000, near, amp });
+    };
+    const nextSwell = (soon = false) => {
       window.clearTimeout(swell);
       const wx = WEATHER[weatherRef.current];
       if (!wx || reduce.matches || scene) return;
       const [a, b] = wx.every;
-      swell = window.setTimeout(() => {
-        if (!document.hidden && el.clientWidth) {
-          if (!frame) {
-            size();
-            readColors();
+      swell = window.setTimeout(
+        () => {
+          if (!document.hidden && el.clientWidth) {
+            if (!frame) {
+              size();
+              readColors();
+            }
+            rise(wx.amp);
+            if (Math.random() < wx.pair) rise(wx.amp * 0.7);
+            if (!frame) frame = requestAnimationFrame(draw);
           }
-          const top = horizon();
-          const near = 0.2 + Math.random() * 0.6;
-          splashes.push({ x: w * (0.12 + Math.random() * 0.76), y: top + 4 + (h - top - 14) * near, t0: performance.now() / 1000, near, amp: wx.amp });
-          if (!frame) frame = requestAnimationFrame(draw);
-        }
-        nextSwell();
-      }, (a + Math.random() * (b - a)) * 1000);
+          nextSwell();
+        },
+        soon ? 400 : (a + Math.random() * (b - a)) * 1000,
+      );
     };
-    settleTo.current = () => {
-      if (!frame) rest();
-      nextSwell();
-    };
-    rest();
-    nextSwell();
-    // The canvas follows the rail's width and the theme (its colours are read from the page).
-    const resized = new ResizeObserver(() => !frame && rest());
-    resized.observe(el);
-    const scheme = window.matchMedia("(prefers-color-scheme: dark)");
-    const recolor = () => !frame && rest();
-    scheme.addEventListener("change", recolor);
-    const themed = new MutationObserver(recolor);
-    themed.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    settleTo.current = () => nextSwell(true);
+    nextSwell(true);
 
     return () => {
       window.removeEventListener("gtd:landed", onLanded);
@@ -364,13 +321,10 @@ export function Pond({ scene = false, weather = "calm", note }: { scene?: boolea
       window.clearTimeout(settle);
       window.clearTimeout(rain);
       window.clearTimeout(swell);
-      resized.disconnect();
-      scheme.removeEventListener("change", recolor);
-      themed.disconnect();
     };
   }, [scene]);
 
-  // A change of weather settles in at once: the chop is redrawn and the rings keep their new pace.
+  // A change of weather shows at once: the rings take up their new pace (or stop, in a calm).
   useEffect(() => {
     weatherRef.current = weather;
     settleTo.current();
