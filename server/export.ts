@@ -15,6 +15,7 @@ function actionLine(s: State, a: Action): string {
   if (ctx) bits.push(ctx);
   if (proj) bits.push(`project: ${proj}`);
   if (a.defer) bits.push(`do on ${a.defer}`);
+  if (a.due) bits.push(`due ${a.due}`);
   if (a.time_min) bits.push(formatTime(a.time_min));
   if (a.energy) bits.push(["", "low", "medium", "high"][a.energy] + " energy");
   if (a.waiting_who) bits.push(`waiting on ${a.waiting_who} since ${a.waiting_since ?? "?"}`);

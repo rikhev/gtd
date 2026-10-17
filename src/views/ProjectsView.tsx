@@ -108,10 +108,10 @@ export function projectEditors(ui: ReturnType<typeof useUI>) {
         onPick: (id) => patchMany("projects", ids, { area_id: id }, `${n(ids)} → ${areaName(getState().areas.find((a) => a.id === id)?.name) ?? "no area"}`),
       });
     },
-    date(ids: ID[], field: "start" | "bring_back") {
+    date(ids: ID[], field: "start" | "due" | "bring_back") {
       if (!ids.length) return;
-      const title = { start: "Do on", bring_back: "Bring back to the Inbox on" }[field];
-      const what = { start: "do on", bring_back: "bring back" }[field];
+      const title = { start: "Do on", due: "Project due date", bring_back: "Bring back to the Inbox on" }[field];
+      const what = { start: "do on", due: "due", bring_back: "bring back" }[field];
       ui.openPicker({
         type: "date",
         title,
@@ -281,6 +281,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
       next: (p) => firstNext.get(p.id),
       open: (p) => openCount.get(p.id) ?? 0,
       start: (p) => p.start,
+      due: (p) => p.due,
       back: (p) => p.bring_back,
       created: (p) => p.created_at,
     }),
@@ -380,6 +381,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
     { id: "proj.area", row: true, label: "Set area", group: "Fields", keys: ["a"], enabled: has, run: () => ed.area(nav.targets()) },
     { id: "proj.goal", row: true, label: "Set the goal it serves", group: "Fields", keys: ["g"], enabled: has, run: () => pickGoal(ui, nav.targets()) },
     { id: "proj.start", row: true, label: "Set the day to do it", group: "Fields", keys: ["s"], enabled: has, run: () => ed.date(nav.targets(), "start") },
+    { id: "proj.due", row: true, label: "Set due date", group: "Fields", keys: ["d"], enabled: has, run: () => ed.date(nav.targets(), "due") },
     { id: "proj.back", row: true, label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: has && s.projects.find((p) => p.id === focusId)?.status === "someday", run: () => ed.date(nav.targets(), "bring_back") },
     { id: "proj.move", row: true, label: "Move or merge", group: "Projects", keys: ["v"], enabled: has, run: () => ed.move(nav.targets()) },
     { id: "proj.trash", row: true, label: "Trash project", group: "Projects", keys: ["backspace", "delete"], enabled: has, run: () => ed.trash(nav.targets(), false) },
@@ -399,6 +401,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
             { id: "area", label: groupByArea ? "Don't group by area" : "Group by area", section: "group" },
             { id: "s:mark", label: "Sort by status", hint: sort?.key === "mark" ? "Current" : "", section: "sort" },
             { id: "s:start", label: "Sort by Do on", hint: sort?.key === "start" ? "Current" : "", section: "sort" },
+            { id: "s:due", label: "Sort by due date", hint: sort?.key === "due" ? "Current" : "", section: "sort" },
             { id: "s:", label: "Sort by manual order", hint: !sort ? "Current" : "", section: "sort" },
             { id: "areas", label: areas ? `Areas: ${areaFilterLabel(areas)}` : "Filter by area…", hint: areas ? "On" : "", section: "show" },
             { id: "filter", label: filter === "active" ? "Show someday projects too" : "Show active projects only", section: "show" },
@@ -496,6 +499,7 @@ export function ProjectsView({ regionActive }: { regionActive: boolean }) {
         ),
     },
     { key: "open", label: "Open", width: "60px", align: "end", drop: 1, render: (p) => <span className="num">{openCount.get(p.id) ?? 0}</span> },
+    { key: "due", label: "Due", width: "100px", blank: (p) => !p.due, render: (p) => <DateCell date={p.due} kind={p.status === "active" ? "due" : "plain"} /> },
     // Offered but hidden until shown (right-click a heading, or ⌘K › Show or hide columns…).
     { key: "start", label: "Do on", width: "100px", optional: true, render: (p) => <DateCell date={p.start ?? null} kind="plain" /> },
     { key: "back", label: "Bring back", width: "100px", optional: true, render: (p) => <DateCell date={p.bring_back} kind="plain" /> },

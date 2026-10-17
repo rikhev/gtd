@@ -41,11 +41,11 @@ type Stacked<T> = Column<T> & { stack?: Column<T>[]; lead?: Column<T>[] };
  */
 const PHONE_LABEL: Record<string, string> = { due: "Due", follow: "Follow up", since: "Since", back: "Comes back", start: "Do on", defer: "Do on", target: "By", updated: "Updated" };
 /** The order of a phone row's second line: when first, then how long and how hard, then where it belongs (cut short). */
-const PHONE_ORDER = ["defer", "start", "follow", "since", "back", "target", "date", "when", "at", "updated", "left", "time", "energy", "ctx", "who"];
+const PHONE_ORDER = ["due", "defer", "start", "follow", "since", "back", "target", "date", "when", "at", "updated", "left", "time", "energy", "ctx", "who"];
 const phoneRank = (key: string) => (PHONE_ORDER.includes(key) ? PHONE_ORDER.indexOf(key) : PHONE_ORDER.length);
 /** Names for the unlabelled lead columns, for screen readers. */
 const LEAD_NAME: Record<string, string> = { mark: "Status", done: "Done", kind: "Kind" };
-const COMPACT_TAIL = ["defer", "start", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
+const COMPACT_TAIL = ["due", "defer", "start", "follow", "when", "date", "left", "at", "state", "since", "back", "updated", "created"];
 
 /** Whether a point is over a glyph of text (not merely inside an element that holds text): where a press selects text. */
 function overText(x: number, y: number): boolean {

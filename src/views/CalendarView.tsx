@@ -20,7 +20,7 @@ import type { Appointment, ID, State } from "../../shared/types.ts";
 
 /** Day is the daily review (GTD: the calendar first, then the action lists); week, month and year the landscape. */
 type Mode = "day" | "week" | "month" | "year";
-type Role = "day" | "followup" | "tickler" | "event" | "next";
+type Role = "day" | "due" | "span" | "followup" | "tickler" | "event" | "next";
 interface Item {
   key: string;
   /** An appointment from the subscribed Outlook calendar: read-only, never dragged or opened. */
@@ -36,7 +36,8 @@ interface Item {
   start: string;
   end: string;
   role: Role;
-  /** The fields its two ends are stored in (the same field for a Do on day); null for an appointment or a next action. */
+  /** The fields its two ends are stored in (the same field for a Do on day; Do on and due for a bar from one to the
+   * other, or a due date on its Do on day, so both move together); null for an appointment or a next action. */
   startField: string | null;
   endField: string | null;
   waiting?: string | null;
@@ -82,8 +83,10 @@ const max = (a: string, b: string) => (a > b ? a : b);
 
 /**
  * Every dated thing the landscape holds. Done and deleted work stays off it. GTD's calendar is the hard landscape: by
- * default it shows appointments, what is to be done on a day (an action's or a project's Do on: owner's decision,
- * 8 October, one date only, no start or due) and follow-ups, each on its day. `soft` adds the ticklers (bring back).
+ * default it shows appointments, what is to be done on a day (an action's or a project's Do on), what is due on a day
+ * (owner's decision, 17 October: due dates are back) and follow-ups, each on its day. An item with a Do on before its
+ * due date is one bar from the one to the other (owner's request), its due end marked with a diamond; one whose Do on
+ * is its due date is one day. `soft` adds the ticklers (bring back).
  */
 function itemsOf(s: State, t: string, soft: boolean): Item[] {
   const out: Item[] = [];
@@ -94,8 +97,15 @@ function itemsOf(s: State, t: string, soft: boolean): Item[] {
     if (open) {
       const sub = [a.project_id ? proj.get(a.project_id)?.title : null, a.context_id ? ctx.get(a.context_id) : null].filter(Boolean).join(" · ");
       const base = { kind: "action" as const, id: a.id, title: a.title || "Untitled action", waiting: a.status === "waiting" ? a.waiting_who || "someone" : null, sub };
-      // The day to do it; passed with the action still open, it is late.
-      if (a.status === "next" && a.defer) out.push({ ...base, key: `a:${a.id}`, start: a.defer, end: a.defer, role: "day", startField: "defer", endField: "defer", overdue: a.defer < t });
+      // The day to do it; passed with the action still open, it is late. Its due date, passed, is overdue. With both,
+      // one bar runs from the day to do it to the due date (late only once the due date has passed).
+      const defer = a.status === "next" ? a.defer : null;
+      if (defer && a.due && defer < a.due) out.push({ ...base, key: `a:${a.id}`, start: defer, end: a.due, role: "span", startField: "defer", endField: "due", overdue: a.due < t });
+      else {
+        const sameDay = Boolean(defer && defer === a.due);
+        if (defer && !sameDay) out.push({ ...base, key: `a:${a.id}`, start: defer, end: defer, role: "day", startField: "defer", endField: "defer", overdue: defer < t });
+        if (a.due) out.push({ ...base, key: `d:${a.id}`, start: a.due, end: a.due, role: "due", startField: sameDay ? "defer" : "due", endField: "due", overdue: a.due < t });
+      }
       // A follow-up date is day-specific information (GTD), so it is on the hard landscape, not a soft date.
       if (a.status === "waiting" && a.followup) out.push({ ...base, key: `f:${a.id}`, start: a.followup, end: a.followup, role: "followup", startField: "followup", endField: "followup", overdue: a.followup < t });
     }
@@ -105,8 +115,14 @@ function itemsOf(s: State, t: string, soft: boolean): Item[] {
   for (const p of s.projects) {
     if (p.status === "active") {
       const base = { kind: "project" as const, id: p.id, title: p.title || "Untitled project", health: projectHealth(s, p), projectStart: p.start, projectAppt: nextAppointment(s, p), stalled: isStalled(s, p) };
-      // A project's day: when it begins (it is off Projects until then). Once begun it is simply active, never late.
-      if (p.start) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.start, role: "day", startField: "start", endField: "start" });
+      // A project's day: when it begins (it is off Projects until then). Once begun it is simply active, never late;
+      // its due date, passed with it still open, is overdue.
+      if (p.start && p.due && p.start < p.due) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.due, role: "span", startField: "start", endField: "due", overdue: p.due < t });
+      else {
+        const sameDay = Boolean(p.start && p.start === p.due);
+        if (p.start && !sameDay) out.push({ ...base, key: `p:${p.id}`, start: p.start, end: p.start, role: "day", startField: "start", endField: "start" });
+        if (p.due) out.push({ ...base, key: `pd:${p.id}`, start: p.due, end: p.due, role: "due", startField: sameDay ? "start" : "due", endField: "due", overdue: p.due < t });
+      }
     }
     if (soft && p.status === "someday" && p.bring_back)
       out.push({ key: `pb:${p.id}`, kind: "project", id: p.id, title: p.title || "Untitled project", start: p.bring_back, end: p.bring_back, role: "tickler", startField: "bring_back", endField: "bring_back" });
@@ -269,24 +285,31 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   // While a bar is dragged it is drawn where it would land.
   const items = useMemo(() => (drag ? all.map((i) => (i.key === drag.key ? { ...i, start: drag.start, end: drag.end } : i)) : all), [all, drag]);
   const onDay = (d: string) => items.filter((i) => i.start <= d && i.end >= d);
-  // The Day tab's day reads its overdue work too (on today only): what should already have happened.
-  const overdueBefore = (d: string) => (d === t ? items.filter((i) => i.kind !== "event" && i.role !== "followup" && i.overdue && i.end < d) : []);
+  // Every Day tab also lists what is still open from earlier days (owner's decision, 17 October): actions and projects
+  // whose Do on or due date is before today (or before the day shown, for a past day) and that aren't done. One row per
+  // item: an item past both dates is listed by its due date.
+  const pastBefore = (d: string) => {
+    const cut = min(d, t);
+    const past = items.filter((i) => (i.role === "day" || i.role === "due" || i.role === "span") && i.end < cut);
+    const due = new Set(past.filter((i) => i.role === "due").map((i) => `${i.kind}:${i.id}`));
+    return past.filter((i) => i.role !== "day" || !due.has(`${i.kind}:${i.id}`));
+  };
   // Follow-ups already past their day (today's are in the day's landscape): chases to make, on today only.
   const lateFollowups = (d: string) => (d === t ? items.filter((i) => i.role === "followup" && i.end < d) : []);
   const fitNow = useFit();
   // "Late" means one thing everywhere: an action's day to do it passed with it still open. Follow-ups past their day are
   // chases (the rail's "to chase"), counted on Waiting For, not here; the count is what the Day tab's Late section lists.
-  const overdueCount = overdueBefore(t).length;
+  const overdueCount = pastBefore(t).filter((i) => i.overdue).length;
   // The Day tab's next actions (what fits now, else anywhere) as items too, so the keyboard reaches every row.
   const nextNow: Item[] = useMemo(() => {
     if (mode !== "day" || cursor !== t) return [];
     const ctx = new Map(s.contexts.map((c) => [c.id, c.name]));
     return s.actions
-      .filter((a) => a.status === "next" && !onHold(a, s) && !(a.defer && a.defer <= t) && !isDeferred(a, t) && (!fitNow || fits(a, fitNow) === "fits"))
+      .filter((a) => a.status === "next" && !onHold(a, s) && !(a.defer && a.defer <= t) && !(a.due && a.due <= t) && !isDeferred(a, t) && (!fitNow || fits(a, fitNow) === "fits"))
       .sort((a, b) => a.sort - b.sort)
       .map((a) => ({ key: `n:${a.id}`, kind: "action" as const, id: a.id, title: a.title || "Untitled action", start: t, end: t, role: "next" as const, startField: null, endField: null, sub: a.context_id ? (ctx.get(a.context_id) ?? "") : "" }));
   }, [mode, cursor, t, s, fitNow]);
-  const cursorItems = mode === "day" ? [...onDay(cursor), ...overdueBefore(cursor), ...nextNow.slice(0, 12), ...lateFollowups(cursor)] : onDay(cursor);
+  const cursorItems = mode === "day" ? [...onDay(cursor), ...pastBefore(cursor), ...nextNow.slice(0, 12), ...lateFollowups(cursor)] : onDay(cursor);
   const focusItem = itemKey ? (items.find((i) => i.key === itemKey) ?? nextNow.find((i) => i.key === itemKey)) : undefined;
 
   useEffect(() => {
@@ -340,8 +363,23 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     if (start === item.start && end === item.end) return;
     const table = item.kind === "action" ? "actions" : "projects";
     const data: Record<string, string> = {};
-    // Every dated item is one day (a Do on, a follow-up, a tickler): moved, it takes the day it was dropped on.
-    if (how === "move" && item.startField) data[item.startField] = start;
+    const startF = item.kind === "action" ? "defer" : "start";
+    if (item.role === "followup" || item.role === "tickler") data[item.startField!] = start;
+    else if (how === "move") {
+      // Moved, it takes the days it was dropped on: a bar keeps its length, both its dates moving together.
+      if (item.startField) data[item.startField] = start;
+      if (item.endField) data[item.endField] = end;
+    } else if (item.role === "span") {
+      // A bar's end dragged: that date changes. Dragged onto one day, the Do on and the due date are that day.
+      if (how === "start") data[item.startField!] = start;
+      else data[item.endField!] = end;
+    } else if (start < end) {
+      // A one-day item stretched across days becomes a bar: the day it had stays where it is on screen and the
+      // dropped end becomes the other date (a Do on stretched right gets a due date; a due date stretched left gets
+      // its Do on). Dropped back on its own day, it keeps its single date.
+      data[startF] = start;
+      data.due = end;
+    }
     if (!Object.keys(data).length) return;
     const when = start === end ? formatShort(start) : `${formatShort(start)} – ${formatShort(end)}`;
     mutate(`“${item.title}” → ${when}`, [{ type: "patch", table, id: item.id, data }]);
@@ -506,6 +544,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     { id: "cal.wait", label: "New waiting for on this day", group: "Calendar", keys: ["w"], run: () => waitOn(cursor) },
     { id: "cal.later", row: true, label: "Move a day later", group: "Calendar", keys: ["alt+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "move") },
     { id: "cal.earlier", row: true, label: "Move a day earlier", group: "Calendar", keys: ["alt+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "move") },
+    { id: "cal.longer", row: true, label: "End a day later", group: "Calendar", keys: ["alt+shift+arrowright"], enabled: editable, run: () => shift(focusItem, 1, "end") },
+    { id: "cal.shorter", row: true, label: "End a day earlier", group: "Calendar", keys: ["alt+shift+arrowleft"], enabled: editable, run: () => shift(focusItem, -1, "end") },
     {
       id: "cal.done",
       row: true,
@@ -527,13 +567,23 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     },
     {
       // S sets the date, as on the lists: the follow-up on a waiting item, the day to do it on anything else.
-      id: "cal.due",
+      id: "cal.date",
       row: true,
       label: focusWaiting ? "Set follow-up date" : "Set the day to do it",
       group: "Fields",
       keys: ["s"],
       enabled: editable,
       run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], focusWaiting ? "followup" : "defer") : ped.date([focusItem.id], "start")),
+    },
+    {
+      // D sets the due date, as on the lists.
+      id: "cal.due",
+      row: true,
+      label: "Set due date",
+      group: "Fields",
+      keys: ["d"],
+      enabled: editable,
+      run: () => focusItem && (focusItem.kind === "action" ? ed.date([focusItem.id], "due") : ped.date([focusItem.id], "due")),
     },
     {
       id: "cal.jump",
@@ -562,7 +612,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       targets: () => (focusItem?.kind === "action" ? [focusItem.id] : []),
       focusId: focusItem?.kind === "action" ? focusItem.id : null,
       group: "Calendar",
-      skip: ["row.open", "row.jump", "row.project", "row.date", "row.trash", "row.delete"],
+      skip: ["row.open", "row.jump", "row.project", "row.date", "row.due", "row.trash", "row.delete"],
     }),
   ];
   useCommands("list:calendar", commands, { priority: 10, active: regionActive });
@@ -619,7 +669,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
 
   const bar = (p: Placed, rich: boolean) => {
     const i = p.item;
-    const single = i.role === "followup" || i.role === "tickler" || i.role === "event" || i.role === "day";
+    // A waiting item has no Do on, so its due date isn't stretched into a bar.
+    const single = i.role === "followup" || i.role === "tickler" || i.role === "event" || Boolean(i.waiting);
     const quiet = i.role === "followup" || i.role === "tickler";
     const canStart = !single && !p.contL;
     const canEnd = !single && !p.contR;
@@ -632,13 +683,15 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
       i.waiting ? "is-waiting" : "",
       p.contL ? "cont-l" : "",
       p.contR ? "cont-r" : "",
+      // The due end carries the milestone diamond wherever it falls on screen: deadlines stand out in every view.
+      (i.role === "due" || i.role === "span") && !p.contR ? "has-due-end" : "",
       itemKey === i.key ? "is-focus" : "",
       drag?.key === i.key ? "is-dragging" : "",
     ].join(" ");
     const label =
       i.role === "event" ? `${i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""} ` : ""}${i.title}${i.location ? ` · ${i.location}` : ""}` : i.role === "followup" ? `Follow up: ${i.waiting ?? ""} · ${i.title}` : i.role === "tickler" ? `Comes back: ${i.title}` : i.waiting ? `${i.title} · waiting on ${i.waiting}` : i.title;
     const dates =
-      i.role === "event" ? (i.start === i.end ? formatLong(i.start) : `${formatLong(i.start)} to ${formatLong(i.end)}`) : i.role === "day" ? `on ${formatLong(i.start)}` : formatLong(i.start);
+      i.role === "event" ? (i.start === i.end ? formatLong(i.start) : `${formatLong(i.start)} to ${formatLong(i.end)}`) : i.role === "day" ? `on ${formatLong(i.start)}` : i.role === "due" ? `due ${formatLong(i.end)}` : i.role === "span" ? `${formatLong(i.start)} to ${formatLong(i.end)}, due ${formatLong(i.end)}` : formatLong(i.start);
     return (
       <div
         key={i.key}
@@ -646,8 +699,8 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         // What has focus, so a picker opened from the keyboard (P, S…) opens at it.
         data-focused={itemKey === i.key || undefined}
         style={{ gridColumn: `${p.col} / span ${p.span}`, gridRow: p.lane + 1, ...(i.color ? { ["--feed" as string]: i.color } : {}) }}
-        title={`${label}\n${dates}${i.overdue ? (i.role === "followup" ? " · to chase" : " · late") : ""}`}
-        aria-label={`${i.kind === "project" ? "Project" : i.kind === "event" ? `Appointment${i.feedName ? `, ${i.feedName}` : ""}` : "Action"}: ${label}, ${dates}${i.overdue ? (i.role === "followup" ? ", to chase" : ", late") : ""}`}
+        title={`${label}\n${dates}${i.overdue ? ` · ${pastWord(i)}` : ""}`}
+        aria-label={`${i.kind === "project" ? "Project" : i.kind === "event" ? `Appointment${i.feedName ? `, ${i.feedName}` : ""}` : "Action"}: ${label}, ${dates}${i.overdue ? `, ${pastWord(i)}` : ""}`}
         onMouseDown={(e) => startDrag(e, i, "move")}
         onDoubleClick={() => ui.openDetail({ kind: i.kind, id: i.id }, true)}
       >
@@ -696,7 +749,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
   const agendaRow = (i: Item, d: string, label?: string) => {
     const what =
       label ??
-      (i.role === "event" ? (i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""}` : "All day") : i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : "On the day");
+      (i.role === "event" ? (i.time ? `${i.time}${i.endTime ? `–${i.endTime}` : ""}` : "All day") : i.role === "followup" ? `Follow up ${i.waiting ?? ""}` : i.role === "tickler" ? "Comes back" : i.role === "due" ? "Due" : i.role === "span" ? (d === i.start ? "Do on" : d === i.end ? "Due" : `Due ${formatShort(i.end)}`) : "On the day");
     // Your own work has the lists' Complete box (owner's request), ahead of its mark; an appointment belongs to its calendar.
     const doable = i.kind === "action" || i.kind === "project";
     const going = striking.has(i.key);
@@ -709,7 +762,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
         )}
         <button
           type="button"
-          className={`cal-agenda-row ${i.overdue && i.end === d ? "is-overdue" : ""} ${itemKey === i.key ? "is-focus" : ""}`}
+          className={`cal-agenda-row ${i.overdue && i.end <= d ? "is-overdue" : ""} ${itemKey === i.key ? "is-focus" : ""}`}
           data-focused={itemKey === i.key || undefined}
           onClick={() => {
             setCursor(d);
@@ -736,7 +789,7 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     return on.length ? (
       <span className="cal-dots" aria-hidden="true">
         {on.map((i) => (
-          <i key={i.key} style={i.kind === "event" && i.color ? { background: i.color } : undefined} className={i.kind === "event" ? "is-event" : i.overdue ? "is-due" : i.role === "followup" ? "is-follow" : i.kind === "project" ? "is-project" : ""} />
+          <i key={i.key} style={i.kind === "event" && i.color ? { background: i.color } : undefined} className={i.kind === "event" ? "is-event" : i.overdue ? "is-due" : (i.role === "due" || i.role === "span") && i.end === d ? "is-deadline" : i.role === "followup" ? "is-follow" : i.kind === "project" ? "is-project" : ""} />
         ))}
       </span>
     ) : null;
@@ -865,11 +918,11 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
     );
   } else if (mode === "day") {
     // The daily review (GTD): the hard landscape first (appointments, day-specific actions, deadlines, follow-ups),
-    // what is overdue, then the next actions that fit now and the chases still to make. Every row is the same agenda
+    // what is still open from earlier days, then the next actions that fit now and the chases still to make. Every row is the same agenda
     // row: ↑↓ walk them all, Enter opens the details beside the calendar, J goes to its project.
     const d = cursor;
     const here = onDay(d);
-    const late = overdueBefore(d);
+    const late = pastBefore(d);
     const chases = lateFollowups(d);
     body = (
       <div className="cal-day-view">
@@ -878,9 +931,9 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
           {here.length ? <ul className="cal-agenda">{here.map((i) => agendaRow(i, d))}</ul> : <p className="cal-agenda-none">Nothing scheduled.</p>}
         </section>
         {late.length > 0 && (
-          <section aria-label="Late">
-            <h3 className="cal-day-h">Late</h3>
-            <ul className="cal-agenda">{late.map((i) => agendaRow(i, d, `Do on ${formatShort(i.end)}`))}</ul>
+          <section aria-label="Past their date">
+            <h3 className="cal-day-h">Past their date</h3>
+            <ul className="cal-agenda">{late.map((i) => agendaRow(i, d, `${i.role === "day" ? "Do on" : "Due"} ${formatShort(i.end)}`))}</ul>
           </section>
         )}
         {d === t && (
@@ -1114,15 +1167,24 @@ export function CalendarView({ regionActive }: { regionActive: boolean }) {
  * What an item is, said whole for a screen reader (Calendar critique: the live line gave only the title and date):
  * its kind, its title, when, and anything that asks for attention.
  */
+/** What a passed date makes an item: a follow-up to chase, a due date overdue, a Do on day late. */
+function pastWord(i: Item): string {
+  return i.role === "followup" ? "to chase" : i.role === "due" || i.role === "span" ? "overdue" : "late";
+}
+
 function describe(i: Item): string {
   const when = i.start === i.end ? formatLong(i.start) : `${formatLong(i.start)} to ${formatLong(i.end)}`;
-  const late = i.overdue ? (i.role === "followup" ? ", to chase" : ", late") : "";
+  const late = i.overdue ? `, ${pastWord(i)}` : "";
   const what = i.kind === "project" ? "Project" : "Action";
   switch (i.role) {
     case "event":
       return `Appointment${i.feedName ? `, ${i.feedName}` : ""}: ${i.title}, ${when}${i.time ? `, ${i.time}${i.endTime ? ` to ${i.endTime}` : ""}` : ", all day"}${i.location ? `, ${i.location}` : ""}`;
     case "day":
       return `${what}: ${i.title}, on ${when}${late}`;
+    case "span":
+      return `${what}: ${i.title}, from ${when}, due ${formatLong(i.end)}${late}`;
+    case "due":
+      return `${what}: ${i.title}, ${i.startField === "defer" || i.startField === "start" ? "on the day and " : ""}due ${when}${late}`;
     case "followup":
       return `Follow up${i.waiting ? ` with ${i.waiting}` : ""}: ${i.title}, ${when}${late}`;
     case "tickler":
@@ -1144,7 +1206,7 @@ function YearGrid({ year, ws, items, cursor, t, phone, onPick, onCursor }: { yea
     for (const i of items) {
       if (i.end < lo || i.start > hi) continue;
       for (let d = max(i.start, lo); d <= min(i.end, hi); d = addDays(d, 1)) load.set(d, (load.get(d) ?? 0) + 1);
-      if (i.role === "day") due.set(i.end, i.overdue ? "overdue" : due.get(i.end) === "overdue" ? "overdue" : "due");
+      if (i.role === "day" || i.role === "due" || i.role === "span") due.set(i.end, i.overdue ? "overdue" : due.get(i.end) === "overdue" ? "overdue" : "due");
     }
     return { load, due, peak: Math.max(3, ...load.values()) };
   }, [items, year]);

@@ -1,7 +1,7 @@
 import type { FeedInfo } from "./calendarFeed.ts";
 import { useMemo, useSyncExternalStore } from "react";
 import type { Action, Appointment, ID, Op, Project, State, TableName, Tables, Ref } from "../shared/types.ts";
-import { nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
+import { addDays, nextOccurrence, parseRecurrence, today, daysBetween } from "../shared/dates.ts";
 import { uploadSealed } from "./lock.ts";
 
 const empty: State = {
@@ -438,14 +438,23 @@ export function completeActions(ids: ID[]) {
     const r = a.recurrence ? parseRecurrence(a.recurrence) : null;
     if (r) {
       // The next one is done on its next day: the day after its own Do on (or today) by the rule, never in the past
-      // when catching up late. Until then it stays off Next Actions.
+      // when catching up late. Until then it stays off Next Actions. With a due date, the due date moves on by the
+      // rule and the Do on day keeps its distance before it.
       const t = today();
-      let nextDay = nextOccurrence(a.defer ?? t, r);
-      while (nextDay < t) nextDay = nextOccurrence(nextDay, r);
+      let nextDue: string | null = null;
+      let nextDay: string | null;
+      if (a.due) {
+        nextDue = nextOccurrence(a.due, r);
+        while (nextDue < t) nextDue = nextOccurrence(nextDue, r);
+        nextDay = a.defer ? addDays(nextDue, -daysBetween(a.defer, a.due)) : null;
+      } else {
+        nextDay = nextOccurrence(a.defer ?? t, r);
+        while (nextDay < t) nextDay = nextOccurrence(nextDay, r);
+      }
       ops.push({
         type: "create",
         table: "actions",
-        row: { ...newAction({ ...a, id: uid(), status: "next", completed_at: null, due: null, defer: nextDay, created_at: stamp(), flagged: 0 }) },
+        row: { ...newAction({ ...a, id: uid(), status: "next", completed_at: null, due: nextDue, defer: nextDay, created_at: stamp(), flagged: 0 }) },
       });
       spawned++;
     }
@@ -641,15 +650,21 @@ export function daysSinceReview(s: State): number | null {
 }
 
 /**
- * "Do on" (owner's decision, 8 October: one date, the day to do it; start and due dates are gone). An action with a
- * day still ahead is off Next Actions until then (it shows on the Calendar on its day); one whose day has passed
- * undone is late, in red.
+ * "Do on", the day to do it: an action with a day still ahead is off Next Actions until then (it shows on the
+ * Calendar on its day). A due date is the deadline beside it (owner's decision, 17 October: due dates are back).
+ * An action is late, in red, when its Do on day has passed undone (and no due date still ahead gives it until then),
+ * or its due date has with it still open.
  */
 export function isDeferred(a: Action, t = today()) {
   return Boolean(a.defer && a.defer > t);
 }
-export function isLate(a: Pick<Action, "status" | "defer">, t = today()) {
-  return a.status === "next" && Boolean(a.defer && a.defer < t);
+/** An open action whose due date has passed. */
+export function isOverdue(a: Pick<Action, "status" | "due">, t = today()) {
+  return (a.status === "next" || a.status === "waiting") && Boolean(a.due && a.due < t);
+}
+/** Its Do on day passed undone (unless a due date still ahead gives it until then), or its due date passed. */
+export function isLate(a: Pick<Action, "status" | "defer" | "due">, t = today()) {
+  return (a.status === "next" && Boolean(a.defer && a.defer < t) && !(a.due && a.due >= t)) || isOverdue(a, t);
 }
 
 /**

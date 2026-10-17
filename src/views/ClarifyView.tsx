@@ -280,7 +280,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           completed_at: a.done ? stamp() : null,
           project_id: projectId,
           context_id: ctxId(a.context),
-          due: null,
+          due: a.due,
           defer: a.defer,
           bring_back: a.kind === "someday" ? (a.bring_back ?? null) : null,
           time_min: a.time_min,
@@ -320,11 +320,11 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     finishItem(current.id, `${quote(current.text)} trashed`, [{ type: "patch", table: "stuff", id: current.id, data: { status: "trashed", processed_at: stamp() } }]);
   };
 
-  const pickFor = (i: number, field: "context" | "project" | "defer" | "back" | "time" | "energy" | "kind" | "who") => {
+  const pickFor = (i: number, field: "context" | "project" | "defer" | "due" | "back" | "time" | "energy" | "kind" | "who") => {
     if (!draft || !draft.actions[i]) return;
     const a = draft.actions[i];
     // A field's key takes the cursor to its field, as in the details pane.
-    const named = { context: "Context", project: "Project", defer: "Do on", back: "Bring back", time: "Time", energy: "Energy", who: "Waiting on" }[field as string];
+    const named = { context: "Context", project: "Project", defer: "Do on", due: "Due", back: "Bring back", time: "Time", energy: "Energy", who: "Waiting on" }[field as string];
     if (named) cursorTo(`[data-row='${i}'] [data-field='${named}']`);
     if (field === "context")
       ui.openPicker({
@@ -363,6 +363,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
           }),
       });
     if (field === "defer") ui.openPicker({ type: "date", title: "Do on", current: a.defer, onPick: (d) => updateRow(i, { defer: d }) });
+    if (field === "due") ui.openPicker({ type: "date", title: "Due date", current: a.due, onPick: (d) => updateRow(i, { due: d }) });
     // Only a someday row has a bring back day: anything current is already decided.
     if (field === "back" && a.kind === "someday") ui.openPicker({ type: "date", title: "Bring back on a day", current: a.bring_back ?? null, onPick: (d) => updateRow(i, { bring_back: d }) });
     if (field === "time") ui.openPicker({ type: "time", current: a.time_min, onPick: (m) => updateRow(i, { time_min: m }) });
@@ -686,6 +687,7 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
     { id: "cl.makeproject", label: draft?.new_project ? "Make it a single next action" : "Make it a project", group: "Clarify", keys: ["shift+p"], inInput: false, enabled: ready, run: () => setProject(!draft?.new_project) },
     { id: "cl.area", label: "Set area", group: "Fields", keys: ["a"], enabled: ready && Boolean(draft?.new_project), run: pickArea },
     { id: "cl.defer", label: "Set the day to do it", group: "Fields", keys: ["s"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "defer") },
+    { id: "cl.due", label: "Set due date", group: "Fields", keys: ["d"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "due") },
     { id: "cl.back", label: "Bring back on a day", group: "Fields", keys: ["b"], enabled: ready && !onProject && Boolean(draft?.actions.some((a) => a.kind === "someday")), run: () => pickFor(rowOfFocus(), "back") },
     { id: "cl.time", label: "Set time estimate", group: "Fields", keys: ["m"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "time") },
     { id: "cl.energy", label: "Set energy", group: "Fields", keys: ["g"], enabled: ready && !onProject, run: () => pickFor(rowOfFocus(), "energy") },
@@ -982,14 +984,14 @@ export function ClarifyView({ regionActive, host: hosted }: { regionActive: bool
                         </p>
                       )}
                       {/* The details pane's grid, row by row: what it belongs to and where, the day to do it (or when
-                          to bring it back), then time and energy. */}
+                          to bring it back) beside when it is due, then time and energy. */}
                       <div className="field-grid">
                         {pick("Project", projectName ?? none, () => pickFor(i, "project"))}
                         {a.kind === "waiting"
                           ? pick("Waiting on", a.waiting_who ?? none, () => pickFor(i, "who"))
                           : pick("Context", ctx ? <ContextCode ctx={ctx} /> : needsCtx ? <span className="p-needed">Needed</span> : none, () => pickFor(i, "context"), needsCtx)}
                         {a.kind === "someday" ? pick("Bring back", a.bring_back ? formatLong(a.bring_back) : none, () => pickFor(i, "back")) : pick("Do on", a.defer ? formatLong(a.defer) : none, () => pickFor(i, "defer"))}
-                        <span className="field-gap" aria-hidden="true" />
+                        {pick("Due", a.due ? formatLong(a.due) : none, () => pickFor(i, "due"))}
                         {pick("Time", a.time_min ? formatTime(a.time_min) : none, () => pickFor(i, "time"))}
                         {pick("Energy", a.energy ? <Energy level={a.energy} /> : none, () => pickFor(i, "energy"))}
                       </div>

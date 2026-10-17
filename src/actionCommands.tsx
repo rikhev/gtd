@@ -324,9 +324,9 @@ export function editors(ui: UI) {
     project(ids: ID[]) {
       setProject(ui, "actions", ids);
     },
-    date(ids: ID[], field: "defer" | "followup" | "bring_back" | "waiting_since") {
+    date(ids: ID[], field: "defer" | "due" | "followup" | "bring_back" | "waiting_since") {
       if (!ids.length) return;
-      const titles = { defer: "Do on", followup: "Follow up on", bring_back: "Bring back to the Inbox on", waiting_since: "Waiting since" };
+      const titles = { defer: "Do on", due: "Due date", followup: "Follow up on", bring_back: "Bring back to the Inbox on", waiting_since: "Waiting since" };
       ui.openPicker({
         type: "date",
         title: titles[field],
@@ -341,7 +341,7 @@ export function editors(ui: UI) {
             if (day > today()) return notify("Waiting can't start in the future. Pick today or an earlier day.", { tone: "error" });
             return patchMany("actions", ids, { waiting_since: day }, `${n(ids)}: waiting since ${formatLong(day)}`);
           }
-          const what = { defer: "do on", followup: "follow-up", bring_back: "bring back" }[field];
+          const what = { defer: "do on", due: "due", followup: "follow-up", bring_back: "bring back" }[field];
           patchMany("actions", ids, { [field]: d }, d ? `${n(ids)}: ${what} ${formatLong(d)}` : `${n(ids)}: ${what} date cleared`);
         },
       });
@@ -409,6 +409,7 @@ export function editors(ui: UI) {
           notes: parent ? [a.notes, `Split out of “${parent.title}”.`].filter((x) => x.trim()).join("\n\n") : a.notes,
           area_id: parent?.area_id ?? null,
           status: a.status === "someday" ? "someday" : "active",
+          due: a.due,
           start: a.defer,
           bring_back: a.bring_back,
         });
@@ -520,8 +521,8 @@ export function editors(ui: UI) {
 /**
  * The keys a row that is an action answers to, the same on every list that shows actions (Next Actions, Waiting For,
  * Someday, Agendas, Done, the Calendar, the Weekly Review's steps), so a letter means one thing wherever the action
- * is: Enter opens it, J jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P S M G R B H set its
- * fields (S sets the date: the follow-up on a waiting item, the day to do it otherwise), ⇧F delegates, Delete trashes and ⇧Delete
+ * is: Enter opens it, J jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P S D M G R B H set its
+ * fields (S sets the date: the follow-up on a waiting item, the day to do it otherwise; D the due date), ⇧F delegates, Delete trashes and ⇧Delete
  * deletes for good. Each list adds its own verbs (new, done, reorder) and leaves out with `skip` what it does its
  * own way. `targets` names the actions to act on: a heading under the cursor says so instead of doing nothing.
  */
@@ -565,6 +566,7 @@ export function actionRowCommands(
     waiting
       ? { id: "row.date", label: "Set follow-up date", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "followup") }
       : { id: "row.date", label: "Set the day to do it", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "defer") },
+    { id: "row.due", label: "Set due date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "due") },
     ...(waiting ? [{ id: "row.since", label: "Set waiting since", group: "Fields", keys: ["i"], run: () => ed.date(ids(), "waiting_since") }] : []),
     // M for minutes: T and W add, everywhere (owner's decision after the critique found T editing here and adding elsewhere).
     { id: "row.time", label: "Set time estimate", group: "Fields", keys: ["m"], run: () => ed.time(ids()) },

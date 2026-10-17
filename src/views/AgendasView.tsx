@@ -169,7 +169,7 @@ export function AgendasView({ regionActive }: { regionActive: boolean }) {
     },
     { key: "project", label: "Project", width: "minmax(120px, 1fr)", drop: 1, blank: (r) => !r.a.project_id, render: (r) => <span className="muted-text">{projById.get(r.a.project_id ?? "")?.title ?? ""}</span> },
     // Yours by the day to do it; theirs by when to follow up.
-    { key: "date", label: "Do on / follow up", width: "120px", render: (r) => <DateCell date={r.side === "theirs" ? r.a.followup : r.a.defer} kind={r.side === "theirs" ? "due" : "doon"} /> },
+    { key: "date", label: "Do on / follow up", width: "120px", render: (r) => <DateCell date={r.side === "theirs" ? r.a.followup : r.a.defer} kind={r.side === "theirs" ? "followup" : "doon"} /> },
   ];
 
   return (

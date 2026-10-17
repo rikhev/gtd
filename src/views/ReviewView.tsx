@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, ListChecks, Mail, Paperclip, StickyNote, Target } from "lucide-react";
-import { quote, capture, uid, mutate, newProject, completeActions, isChase, isCurrentStep, onHold, isStale, lastReview, nextAppointment, notStarted, isLate, projectHealth, patchMany, named, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
+import { quote, capture, uid, mutate, newProject, completeActions, isChase, isCurrentStep, onHold, isStale, lastReview, nextAppointment, notStarted, isLate, isOverdue, projectHealth, patchMany, named, plural, stallReason, useMeta, useStore, load, notify } from "../store.ts";
 import { clearSession, loadSession, newSession, saveSession, type ReviewSession } from "../reviewSession.ts";
 import { useUI } from "../ui.tsx";
 import { useEvents } from "../calendarFeed.ts";
@@ -174,6 +174,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     return r === "no-next" ? "No next action" : r === "idle" ? `Nothing touched in ${weeks}+ weeks` : undefined;
   };
   const actionNote = (a: Action) => {
+    if (isOverdue(a, t)) return "Overdue";
     if (isLate(a, t)) return "Late";
     if (a.status === "waiting" && isChase(a, t)) return "Follow-up due";
     if (isStale(a)) return a.status === "waiting" ? `Waiting ${weeks}+ weeks without change` : `Untouched for ${weeks}+ weeks`;
@@ -323,6 +324,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         for (const a of s.actions.filter((a) => ["next", "waiting", "someday"].includes(a.status))) {
           const pairs: [string, string | null][] = [
             ["Do on", a.status === "next" ? a.defer : null],
+            ["Due", a.status === "someday" ? null : a.due],
             ["Follow up", a.status === "waiting" ? a.followup : null],
             ["Comes back", a.status === "someday" ? a.bring_back : null],
           ];
@@ -330,6 +332,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
         }
         for (const p of s.projects.filter((p) => p.status === "active" || p.status === "someday")) {
           if (p.status === "active" && within(p.start ?? null)) out.push({ key: `${p.id}:start`, kind: "project", id: p.id, title: p.title, info: "Project: do on", date: p.start ?? null });
+          if (p.status === "active" && within(p.due)) out.push({ key: `${p.id}:due`, kind: "project", id: p.id, title: p.title, info: "Project due", date: p.due });
           if (p.status === "someday" && within(p.bring_back)) out.push({ key: `${p.id}:back`, kind: "project", id: p.id, title: p.title, info: "Comes back", date: p.bring_back });
         }
         for (const e of events.filter((e) => e.date >= t)) out.push(eventRow(e));
@@ -393,10 +396,10 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
       case "someday":
         return [...s.projects, ...s.actions].filter((x) => x.status === "someday" && dueBack(x.id, x.bring_back)).length;
       case "upcoming": {
-        // Anything whose date has already passed is open: a missed day (late), a follow-up or a tickler.
+        // Anything whose date has already passed is open: a missed day (late), a missed due date, a follow-up or a tickler.
         const past = (d: string | null) => Boolean(d && d < t);
         const acts = s.actions.filter((a) => ["next", "waiting", "someday"].includes(a.status) && (isLate(a, t) || (a.status === "waiting" && past(a.followup)) || (a.status === "someday" && past(a.bring_back))));
-        const projs = s.projects.filter((p) => p.status === "someday" && past(p.bring_back));
+        const projs = s.projects.filter((p) => (p.status === "active" && past(p.due)) || (p.status === "someday" && past(p.bring_back)));
         return acts.length + projs.length;
       }
       default:

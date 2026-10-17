@@ -164,14 +164,15 @@ export function AreaName({ name, color }: { name: string; color?: string | null 
 }
 
 /**
- * A date in a list cell. "doon", a next action's day to do it: passed, it is late (red); today, it reads in ink. "due",
- * a follow-up: passed, it is to chase. "plain" is just the date.
+ * A date in a list cell. "due", a due date: passed, it is overdue (red); today or tomorrow, it reads in ink. "doon", a
+ * next action's day to do it: passed, it is late; today, it reads in ink. "followup": passed, it is to chase. "plain"
+ * is just the date.
  */
-export function DateCell({ date, kind = "due" }: { date: string | null; kind?: "due" | "doon" | "plain" }) {
+export function DateCell({ date, kind = "due" }: { date: string | null; kind?: "due" | "doon" | "followup" | "plain" }) {
   if (!date) return <span className="dash" aria-hidden="true">–</span>;
   const d = daysBetween(today(), date);
   const past = kind !== "plain" && d < 0;
-  const word = kind === "doon" ? "late" : "to chase";
+  const word = kind === "doon" ? "late" : kind === "due" ? "overdue" : "to chase";
   const soon = kind !== "plain" && d >= 0 && d <= (kind === "doon" ? 0 : 1);
   return (
     <span className={`date ${past ? "is-overdue" : ""} ${soon ? "is-soon" : ""}`} title={past ? `${formatLong(date)}, ${word}` : formatLong(date)}>

@@ -70,7 +70,7 @@ function useRailSignals() {
   const sig = useMemo(() => {
     const inboxItems = s.stuff.filter((x) => x.status === "inbox");
     const nextActs = s.actions.filter((a) => a.status === "next" && !onHold(a, s));
-    // Late: next actions whose day to do them has passed (owner's decision: one date, Do on).
+    // Late: next actions whose day to do them, or whose due date, has passed.
     const late = nextActs.filter((a) => isLate(a, t)).length;
     const chase = s.actions.filter((a) => isChase(a, t)).length;
     const stalled = s.projects.filter((p) => isStalled(s, p)).length;
@@ -80,10 +80,10 @@ function useRailSignals() {
     // The oldest thing in the whole system: a review is only "due" once there is a week's worth to review.
     const firstDay = [...s.actions, ...s.projects, ...s.stuff].reduce<string | null>((m, x) => (m === null || x.created_at < m ? x.created_at : m), null);
     const systemAge = firstDay ? daysBetween(firstDay.slice(0, 10), t) : 0;
-    // What the Calendar holds for today: actions and projects to do today, and follow-ups to make today.
+    // What the Calendar holds for today: actions and projects to do or due today, and follow-ups to make today.
     const scheduled =
-      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && !onHold(a, s) && ((a.status === "next" && a.defer === t) || (a.status === "waiting" && a.followup === t))).length +
-      s.projects.filter((p) => p.status === "active" && p.start === t).length;
+      s.actions.filter((a) => ["next", "waiting"].includes(a.status) && !onHold(a, s) && (a.due === t || (a.status === "next" && a.defer === t) || (a.status === "waiting" && a.followup === t))).length +
+      s.projects.filter((p) => p.status === "active" && (p.start === t || p.due === t)).length;
     return { inbox: inboxItems.length, late, chase, stalled, doneToday, oldestDays, systemAge, scheduled };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s, t, stallWeeks]);
@@ -93,7 +93,7 @@ function useRailSignals() {
     if (id === "waiting") return sig.chase ? { text: `${sig.chase} to chase`, tone: "due" } : null;
     if (id === "projects") return sig.stalled ? { text: `${sig.stalled} stalled`, tone: "due" } : null;
     if (id === "done") return sig.doneToday ? { text: `${sig.doneToday} today`, tone: "quiet" } : null;
-    // What today holds: what is to be done today (actions and projects on their day, follow-ups).
+    // What today holds: what is to be done today (actions and projects on their day or due, follow-ups).
     // What the hard landscape asks of today; "today" stays Done's word for what was finished (rail critique).
     if (id === "calendar") return sig.scheduled ? { text: `${sig.scheduled} to do`, tone: "quiet" } : null;
     return null;
