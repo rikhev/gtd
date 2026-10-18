@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { Search, Check, LogOut, Plus, Menu, X, ArrowUp } from "lucide-react";
 import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, isLate, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { useCommands, keyLabel, keyAria, IS_MAC, VIM_ARROWS, vimShadowed, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
+import { useCommands, keyLabel, keyAria, IS_MAC, VIM_ARROWS, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
 import { Kbd } from "./bits.tsx";
 import { Pond, type Weather } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
@@ -197,8 +197,8 @@ export function Rail({ active }: { active: boolean }) {
     [
       { id: "rail.down", label: "Go down the rail", group: "Move", keys: ["arrowdown"], run: () => setCursor((c) => Math.min(entries.length - 1, c + 1)) },
       { id: "rail.up", label: "Go up the rail", group: "Move", keys: ["arrowup"], run: () => setCursor((c) => Math.max(0, c - 1)) },
-      { id: "rail.first", label: "Go to the top of the rail", group: "Move", keys: ["home", "ctrl+shift+arrowup", "mod+arrowup"], run: () => setCursor(0) },
-      { id: "rail.last", label: "Go to the foot of the rail", group: "Move", keys: ["end", "ctrl+shift+arrowdown", "mod+arrowdown"], run: () => setCursor(entries.length - 1) },
+      { id: "rail.first", label: "Go to the top of the rail", group: "Move", keys: ["home"], run: () => setCursor(0) },
+      { id: "rail.last", label: "Go to the foot of the rail", group: "Move", keys: ["end"], run: () => setCursor(entries.length - 1) },
       { id: "rail.open", label: "Open", group: "Move", keys: ["enter", "arrowright", "space"], run: () => entries[cursor] && open(entries[cursor]) },
       { id: "rail.leave", label: "Back to the list", group: "Move", keys: ["escape"], run: () => ui.setRegion("list") },
       ...letters.map((ch) => ({ id: `rail.jump.${ch}`, label: `Jump to “${ch.toUpperCase()}…”`, group: "Move", keys: [ch], hidden: true, run: () => jump(ch) })),
@@ -931,12 +931,10 @@ export function Palette({ entries, where, close }: { entries: LayeredCommand[]; 
     close();
     window.setTimeout(() => c.run(), 0);
   };
-  // Every key a command answers to, once each as it reads (Backspace and Delete are both "Del"), arrows as their
-  // letters; an arrow whose letter is another command's (⌘↑ would read ⌘K, the palette) is left out.
-  const bound = useMemo(() => new Set(entries.flatMap((e) => e.command.keys ?? [])), [entries]);
+  // Every key a command answers to, once each as it reads (Backspace and Delete are both "Del").
   const keysOf = (c: Command) => {
     const seen = new Set<string>();
-    return [...(c.keys ?? []), ...(c.displayKeys ?? [])].filter((k) => !vimShadowed(k, bound) && !seen.has(keyLabel(k)) && Boolean(seen.add(keyLabel(k))));
+    return [...(c.keys ?? []), ...(c.displayKeys ?? [])].filter((k) => !seen.has(keyLabel(k)) && Boolean(seen.add(keyLabel(k))));
   };
 
   return (

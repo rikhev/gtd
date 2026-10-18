@@ -194,12 +194,6 @@ export function vimForm(k: string): string {
   return letter ? [...parts.slice(0, -1), letter].join("+") : k;
 }
 
-/** Whether an arrow key's letter is bound in its own right among these keys (⌘↑'s ⌘K is the palette), so its legend would lie. */
-export function vimShadowed(k: string, bound: Set<string>): boolean {
-  const v = vimForm(k);
-  return v !== k && bound.has(v);
-}
-
 /** Mac aliases: the "Del" key on a MacBook reports Backspace. */
 function aliases(k: string): string[] {
   const out = [k];
