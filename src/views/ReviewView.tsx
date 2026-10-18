@@ -828,7 +828,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             ...(["next", "waiting", "projects"].includes(step.id) && rows.some(isStaleRow) ? [{ k: "r", label: "Still current" }] : []),
             ...(step.id === "next" && rows.length > 0 ? [{ k: "f2", label: "Rewrite" }] : []),
             ...(step.id === "creative" && (focusRow?.kind === "area" || focusRow?.kind === "goal") ? [{ k: "n", label: focusRow?.kind === "goal" ? "New project for it" : "New project here" }] : []),
-            ...(step.id === "clear" && inboxCount > 0 ? [{ k: "k", label: "Clarify" }, { k: "v", label: "File" }] : []),
+            ...(step.id === "clear" && inboxCount > 0 ? [{ k: "z", label: "Clarify" }, { k: "v", label: "File" }] : []),
             ...(step.id === "finish" ? [{ k: "mod+enter", label: "Record the review" }] : []),
             ...(step.id === "lookback" && rows.length > 0 ? [{ k: "enter", label: "Open" }, { k: "t", label: "Add follow-up" }, { k: "w", label: "Add waiting for" }] : []),
             ...(step.id === "checklists" ? [...(rows.length > 0 ? [{ k: "enter", label: "Open" }] : []), { k: "t", label: "Add a next action" }] : []),

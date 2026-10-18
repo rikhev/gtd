@@ -139,7 +139,7 @@ export function Picker({ spec, close }: Props) {
     "picker",
     [
       { id: "picker.close", label: "Cancel", group: "Picker", keys: ["escape"], inInput: true, run: close },
-      { id: "picker.move", label: "Move up or down the choices", group: "Picker", displayKeys: ["arrowup", "arrowdown"], run: noop },
+      { id: "picker.move", label: "Move up or down the choices", group: "Picker", displayKeys: ["ctrl+k", "ctrl+j"], run: noop },
       { id: "picker.pick", label: spec.type === "text" ? "Save" : "Pick", group: "Picker", displayKeys: ["enter"], run: noop },
       ...(spec.type === "list" && spec.onPickMore ? [{ id: "picker.more", label: "Pick this and keep choosing", group: "Picker", displayKeys: ["shift+enter"], run: noop }] : []),
       ...(spec.type === "time" ? [{ id: "picker.digits", label: "Pick a length by number", group: "Picker", displayKeys: ["1–6"], run: noop }] : []),

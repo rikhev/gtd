@@ -169,19 +169,35 @@ export function eventToKey(e: KeyboardEvent): string {
 
 /**
  * Vim's movement keys (owner's request: hjkl only, and / for search, nothing else of vim): outside a text field, H J K L are the arrows
- * ← ↓ ↑ →, wherever the arrows move, and ⇧H J K L are ⇧ with the arrows. In a field that picks from a list (the
- * palette, a picker, search) letters type, so ⌃H J K L are the arrows there (as in fzf). Any other modifier keeps the letter.
+ * ← ↓ ↑ →, wherever the arrows move, with any modifiers (⇧K is ⇧↑, ⌥J is ⌥↓), so every arrow key has its letter. A
+ * letter combo bound in its own right (⌘K, the palette) keeps it. In a field that picks from a list (the palette, a
+ * picker, search) letters type, so ⌃H J K L are the arrows there (as in fzf). Legends name the letters, never the arrows.
  */
 export const VIM_ARROWS: Record<string, string> = { h: "arrowleft", j: "arrowdown", k: "arrowup", l: "arrowright" };
 const ARROW_KEY: Record<string, string> = { h: "ArrowLeft", j: "ArrowDown", k: "ArrowUp", l: "ArrowRight" };
 /** The fields that pick from a list under them, where ⌃H J K L move. */
 const PICKING_FIELD = ".palette-input, .picker-input, .search input";
 
-/** Outside a field, H J K L and ⇧H J K L read as the arrows. */
+const LETTER_OF: Record<string, string> = Object.fromEntries(Object.entries(VIM_ARROWS).map(([l, a]) => [a, l]));
+
+/** Outside a field, H J K L read as the arrows, whatever the modifiers. */
 function vimKey(k: string): string {
-  const shift = k.startsWith("shift+");
-  const letter = shift ? k.slice(6) : k;
-  return VIM_ARROWS[letter] ? `${shift ? "shift+" : ""}${VIM_ARROWS[letter]}` : k;
+  const parts = k.split("+");
+  const arrow = VIM_ARROWS[parts[parts.length - 1]];
+  return arrow ? [...parts.slice(0, -1), arrow].join("+") : k;
+}
+
+/** An arrow key as its letter ("alt+arrowup" → "alt+k"), the form every legend shows. */
+export function vimForm(k: string): string {
+  const parts = k.split("+");
+  const letter = LETTER_OF[parts[parts.length - 1]];
+  return letter ? [...parts.slice(0, -1), letter].join("+") : k;
+}
+
+/** Whether an arrow key's letter is bound in its own right among these keys (⌘↑'s ⌘K is the palette), so its legend would lie. */
+export function vimShadowed(k: string, bound: Set<string>): boolean {
+  const v = vimForm(k);
+  return v !== k && bound.has(v);
 }
 
 /** Mac aliases: the "Del" key on a MacBook reports Backspace. */
@@ -214,7 +230,9 @@ export function installKeyHandler() {
       return;
     }
     const typed = eventToKey(e);
-    const key = editing ? typed : vimKey(typed);
+    // A letter combo bound in its own right (⌘K) keeps it; otherwise H J K L are the arrows, modifiers and all.
+    const own = /(^|\+)(mod|ctrl|alt)\+/.test(typed) && activeCommands().some((c) => c.keys?.includes(typed) && (!editing || c.inInput));
+    const key = editing || own ? typed : vimKey(typed);
     const candidates = aliases(key);
     // While typing, Backspace and Delete belong to the text, with any modifier: the system's delete word (⌥⌫,
     // Ctrl+⌫), delete to line start (⌘⌫) and forward delete must never close a pane or remove a row instead.
@@ -240,10 +258,6 @@ const SYMBOLS: Record<string, string> = {
   shift: "⇧",
   enter: "↵",
   escape: "Esc",
-  arrowup: "↑",
-  arrowdown: "↓",
-  arrowleft: "←",
-  arrowright: "→",
   backspace: "Del",
   delete: "Del",
   space: "Space",
@@ -261,7 +275,7 @@ const SYMBOLS: Record<string, string> = {
  * pressed there. Screen readers get the spelled-out names from keyAria.
  */
 export function keyLabel(k: string): string {
-  return k
+  return vimForm(k)
     .split("+")
     .map((p) => (p === "mod" && !IS_MAC ? "⌃" : p === "alt" && !IS_MAC ? "◇" : (SYMBOLS[p] ?? p.toUpperCase())))
     .join("");
@@ -276,10 +290,6 @@ const SPOKEN: Record<string, string> = {
   shift: "Shift",
   enter: "Return",
   escape: "Escape",
-  arrowup: "Up arrow",
-  arrowdown: "Down arrow",
-  arrowleft: "Left arrow",
-  arrowright: "Right arrow",
   backspace: "Delete",
   delete: "Delete",
   pageup: "Page up",
@@ -290,9 +300,9 @@ const SPOKEN: Record<string, string> = {
   "/": "Slash",
 };
 
-/** A key as a screen reader should say it ("Command Shift K", "Option Up arrow"), not its glyphs' names. */
+/** A key as a screen reader should say it ("Command Shift K", "Option K"), not its glyphs' names. */
 export function keySpoken(k: string): string {
-  return k
+  return vimForm(k)
     .split("+")
     .map((p) => SPOKEN[p] ?? (p.length === 1 ? p.toUpperCase() : p[0].toUpperCase() + p.slice(1)))
     .join(" ");

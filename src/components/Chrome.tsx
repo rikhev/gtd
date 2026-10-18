@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { Search, Check, LogOut, Plus, Menu, X, ArrowUp } from "lucide-react";
 import { capture, daysSinceReview, notify, signOut, useMeta, useNotice, useTables, isStalled, isChase, isLate, onHold } from "../store.ts";
 import { useUI, VIEW_TITLES, type ViewId } from "../ui.tsx";
-import { useCommands, keyLabel, keyAria, IS_MAC, VIM_ARROWS, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
+import { useCommands, keyLabel, keyAria, IS_MAC, VIM_ARROWS, vimShadowed, activeCommands, layersVersion, subscribeLayers, type Command, type LayeredCommand } from "../keys.ts";
 import { Kbd } from "./bits.tsx";
 import { Pond, type Weather } from "./Pond.tsx";
 import { daysBetween, today } from "../../shared/dates.ts";
@@ -229,7 +229,7 @@ export function Rail({ active }: { active: boolean }) {
       tabIndex: (active ? cursor : here) === i ? 0 : -1,
       "aria-current": current ? ("page" as const) : undefined,
       "aria-label": e.label,
-      "aria-keyshortcuts": keyAria(e.start ? "shift+r" : e.key === "h-oldest" ? "k" : e.view === "settings" ? "mod+shift+," : (keyOf(e.view) ?? "")) || undefined,
+      "aria-keyshortcuts": keyAria(e.start ? "shift+r" : e.key === "h-oldest" ? "z" : e.view === "settings" ? "mod+shift+," : (keyOf(e.view) ?? "")) || undefined,
       className: `${extra} ${current ? "is-current" : ""} ${active && cursor === i ? "is-cursor" : ""}`,
       onFocus: onFocusStop(i),
       onClick: () => open(e),
@@ -292,7 +292,7 @@ export function Rail({ active }: { active: boolean }) {
                     <span className="rail-name">Oldest in Inbox</span>
                     <span className="rail-meta">
                       <span className={`num ${worst === "h-oldest" ? "is-due" : oldestDue ? "is-asking" : ""}`}>{sig.oldestDays === 0 ? "today" : `${sig.oldestDays}d`}</span>
-                      <RailKey k="k" />
+                      <RailKey k="z" />
                     </span>
                   </>
                 )}
@@ -931,10 +931,12 @@ export function Palette({ entries, where, close }: { entries: LayeredCommand[]; 
     close();
     window.setTimeout(() => c.run(), 0);
   };
-  // Every key a command answers to, once each as it reads (Backspace and Delete are both "Del").
+  // Every key a command answers to, once each as it reads (Backspace and Delete are both "Del"), arrows as their
+  // letters; an arrow whose letter is another command's (⌘↑ would read ⌘K, the palette) is left out.
+  const bound = useMemo(() => new Set(entries.flatMap((e) => e.command.keys ?? [])), [entries]);
   const keysOf = (c: Command) => {
     const seen = new Set<string>();
-    return [...(c.keys ?? []), ...(c.displayKeys ?? [])].filter((k) => !seen.has(keyLabel(k)) && Boolean(seen.add(keyLabel(k))));
+    return [...(c.keys ?? []), ...(c.displayKeys ?? [])].filter((k) => !vimShadowed(k, bound) && !seen.has(keyLabel(k)) && Boolean(seen.add(keyLabel(k))));
   };
 
   return (

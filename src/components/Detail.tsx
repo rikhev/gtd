@@ -212,7 +212,7 @@ function NotesField({
 // touch screen an Inbox item's two ways forward stay, as buttons to tap.
 const STUFF_TOUCH: { k: string; label: string }[] = [
   { k: "v", label: "File as" },
-  { k: "k", label: "Clarify" },
+  { k: "z", label: "Clarify" },
 ];
 
 /** What the pane's cursor stops on, top to bottom: fields, the timeline's rows, the add line, the meeting link, files. */
@@ -809,7 +809,7 @@ function ProjectDetail({ p }: { p: Project }) {
   const cursorAction = () => actionsRef.current?.closest(".detail")?.querySelector<HTMLElement>("[data-cursor][data-action]")?.dataset.action;
   const toggleDone = (id: string | undefined) => {
     const a = id && s.actions.find((x) => x.id === id);
-    if (!a) return notify("Put the cursor on an action (↑↓), then E marks it done.");
+    if (!a) return notify("Put the cursor on an action (J K), then E marks it done.");
     if (a.status === "done") reopenActions([a.id]);
     else completeActions([a.id]);
   };

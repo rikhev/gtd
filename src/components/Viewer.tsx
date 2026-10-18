@@ -244,13 +244,13 @@ export function Viewer({ ids, at, active, onStep, embedded = false }: { ids: str
           )}
           {ids.length > 1 && (
             <span className="viewer-step">
-              <button type="button" className="icon-btn" onClick={() => step(-1)} aria-label="Previous file" title="Previous file (←)">
+              <button type="button" className="icon-btn" onClick={() => step(-1)} aria-label="Previous file" title="Previous file (H)">
                 <ChevronLeft size={16} strokeWidth={2} />
               </button>
               <span className="num">
                 {at + 1} of {ids.length}
               </span>
-              <button type="button" className="icon-btn" onClick={() => step(1)} aria-label="Next file" title="Next file (→)">
+              <button type="button" className="icon-btn" onClick={() => step(1)} aria-label="Next file" title="Next file (L)">
                 <ChevronRight size={16} strokeWidth={2} />
               </button>
             </span>
