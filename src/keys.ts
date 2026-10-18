@@ -171,11 +171,12 @@ export function eventToKey(e: KeyboardEvent): string {
  * Vim's movement keys (owner's request: hjkl only, and / for search, nothing else of vim): outside a text field, H J K L are the arrows
  * ← ↓ ↑ →, wherever the arrows move, with any modifiers (⇧K is ⇧↑, ⌥J is ⌥↓), so every arrow key has its letter. A
  * letter combo bound in its own right (⌘K, the palette) keeps it. In a field that picks from a list (the palette, a
- * picker, search) letters type, so ⌃H J K L are the arrows there (as in fzf). Legends name the letters, never the arrows.
+ * picker, search) letters type, so ⌥H J K L are the arrows there, the same on every system (owner's decision: Ctrl+K
+ * is the palette on Windows). Legends name the letters, never the arrows.
  */
 export const VIM_ARROWS: Record<string, string> = { h: "arrowleft", j: "arrowdown", k: "arrowup", l: "arrowright" };
 const ARROW_KEY: Record<string, string> = { h: "ArrowLeft", j: "ArrowDown", k: "ArrowUp", l: "ArrowRight" };
-/** The fields that pick from a list under them, where ⌃H J K L move. */
+/** The fields that pick from a list under them, where ⌥H J K L move. */
 const PICKING_FIELD = ".palette-input, .picker-input, .search input";
 
 const LETTER_OF: Record<string, string> = Object.fromEntries(Object.entries(VIM_ARROWS).map(([l, a]) => [a, l]));
@@ -215,9 +216,9 @@ export function installKeyHandler() {
   const handler = (e: KeyboardEvent) => {
     if (e.isComposing) return;
     const editing = isEditable(e.target);
-    // ⌃H J K L in a picking field: pressed again as the arrow, so the field's own list moves as it does for ↓ and ↑.
+    // ⌥H J K L in a picking field: pressed again as the arrow, so the field's own list moves as it does for ↓ and ↑.
     const letter = /^Key[HJKL]$/.test(e.code) ? e.code.slice(3).toLowerCase() : "";
-    if (editing && letter && e.ctrlKey && !e.metaKey && !e.altKey && e.target instanceof HTMLElement && e.target.matches(PICKING_FIELD)) {
+    if (editing && letter && e.altKey && !e.ctrlKey && !e.metaKey && e.target instanceof HTMLElement && e.target.matches(PICKING_FIELD)) {
       e.preventDefault();
       e.stopPropagation();
       e.target.dispatchEvent(new KeyboardEvent("keydown", { key: ARROW_KEY[letter], code: ARROW_KEY[letter], shiftKey: e.shiftKey, bubbles: true, cancelable: true }));
