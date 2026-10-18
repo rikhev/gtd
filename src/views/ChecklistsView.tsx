@@ -62,14 +62,21 @@ export function ChecklistsView({ regionActive }: { regionActive: boolean }) {
     if (!openId) ui.followDetail(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId]);
-  return open ? <ChecklistItems key={open.id} list={open} regionActive={regionActive} /> : <ChecklistIndex regionActive={regionActive} />;
+  // The checklist just left, for every checklist to put its cursor back on.
+  const [left, setLeft] = useState<ID | null>(null);
+  const [was, setWas] = useState(openId);
+  if (openId !== was) {
+    setWas(openId);
+    setLeft(was);
+  }
+  return open ? <ChecklistItems key={open.id} list={open} regionActive={regionActive} /> : <ChecklistIndex regionActive={regionActive} back={left} />;
 }
 
 /* ------------------------------------------------------------------ */
 /* Every checklist                                                      */
 /* ------------------------------------------------------------------ */
 
-function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
+function ChecklistIndex({ regionActive, back }: { regionActive: boolean; back: ID | null }) {
   const ui = useUI();
   const s = useTables("checklists", "checklist_items", "checklist_ticks", "areas", "projects");
   const [editing, setEditing] = useState<{ id: ID; fresh: boolean } | null>(null);
@@ -111,6 +118,11 @@ function ChecklistIndex({ regionActive }: { regionActive: boolean }) {
   const nav = useListNav("checklists", useMemo(() => groups.map((g) => ({ key: g.key, rowKeys: g.rows.map((c) => c.id), showHeader: grouped })), [groups, grouped]));
   const focusId = nav.focus && !isGroupKey(nav.focus) ? nav.focus : null;
   const targets = () => nav.targets().filter((k) => !isGroupKey(k));
+  // Back from a checklist, the cursor is on the checklist again.
+  useEffect(() => {
+    if (back && groups.some((g) => g.rows.some((c) => c.id === back))) nav.setFocus(back);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Start over is for a checklist run by hand; a repeating one starts over by itself.
   const anyTicked = (ids: ID[]) => s.checklist_items.some((i) => ids.includes(i.checklist_id) && i.checked_at && !s.checklists.find((c) => c.id === i.checklist_id)?.repeats);
 

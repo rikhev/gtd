@@ -248,7 +248,14 @@ export function ReferenceView({ regionActive }: { regionActive: boolean }) {
       openRefList(null, false);
     }
   }, [openId, open]);
-  return open ? <RefListView key={open.id} r={open} regionActive={regionActive} /> : <ReferenceIndex regionActive={regionActive} />;
+  // The list just left, for every reference to put its cursor back on.
+  const [left, setLeft] = useState<ID | null>(null);
+  const [was, setWas] = useState(openId);
+  if (openId !== was) {
+    setWas(openId);
+    setLeft(was);
+  }
+  return open ? <RefListView key={open.id} r={open} regionActive={regionActive} /> : <ReferenceIndex regionActive={regionActive} back={left} />;
 }
 
 /**
@@ -273,7 +280,7 @@ function findNote(ui: UI, current: ID | null, onPick: (id: ID) => void) {
   });
 }
 
-function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
+function ReferenceIndex({ regionActive, back }: { regionActive: boolean; back: ID | null }) {
   const ui = useUI();
   const s = useStore((x) => x);
   const [editing, setEditing] = useState<ID | null>(null);
@@ -310,6 +317,11 @@ function ReferenceIndex({ regionActive }: { regionActive: boolean }) {
     ui.followDetail(focusId ? { kind: "ref", id: focusId } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId]);
+  // Back from a list, the cursor is on the list again.
+  useEffect(() => {
+    if (back && rows.some((r) => r.id === back)) nav.setFocus(back);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (ui.revealTarget?.kind === "ref") {
       nav.setFocus(ui.revealTarget.id);
