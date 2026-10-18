@@ -197,8 +197,8 @@ export function Rail({ active }: { active: boolean }) {
     [
       { id: "rail.down", label: "Go down the rail", group: "Move", keys: ["arrowdown"], run: () => setCursor((c) => Math.min(entries.length - 1, c + 1)) },
       { id: "rail.up", label: "Go up the rail", group: "Move", keys: ["arrowup"], run: () => setCursor((c) => Math.max(0, c - 1)) },
-      { id: "rail.first", label: "Go to the top of the rail", group: "Move", keys: ["home", "mod+arrowup"], run: () => setCursor(0) },
-      { id: "rail.last", label: "Go to the foot of the rail", group: "Move", keys: ["end", "mod+arrowdown"], run: () => setCursor(entries.length - 1) },
+      { id: "rail.first", label: "Go to the top of the rail", group: "Move", keys: ["home", "ctrl+shift+arrowup", "mod+arrowup"], run: () => setCursor(0) },
+      { id: "rail.last", label: "Go to the foot of the rail", group: "Move", keys: ["end", "ctrl+shift+arrowdown", "mod+arrowdown"], run: () => setCursor(entries.length - 1) },
       { id: "rail.open", label: "Open", group: "Move", keys: ["enter", "arrowright", "space"], run: () => entries[cursor] && open(entries[cursor]) },
       { id: "rail.leave", label: "Back to the list", group: "Move", keys: ["escape"], run: () => ui.setRegion("list") },
       ...letters.map((ch) => ({ id: `rail.jump.${ch}`, label: `Jump to “${ch.toUpperCase()}…”`, group: "Move", keys: [ch], hidden: true, run: () => jump(ch) })),

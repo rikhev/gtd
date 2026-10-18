@@ -408,8 +408,8 @@ export function useListNav(
       [
         { id: "nav.down", label: "Go to the next row", group: "Move", keys: ["arrowdown"], run: () => move(1) },
         { id: "nav.up", label: "Go to the previous row", group: "Move", keys: ["arrowup"], run: () => move(-1) },
-        { id: "nav.first", label: "Go to the first row", group: "Move", keys: ["mod+arrowup", "home"], run: () => move(-1e6) },
-        { id: "nav.last", label: "Go to the last row", group: "Move", keys: ["mod+arrowdown", "end"], run: () => move(1e6) },
+        { id: "nav.first", label: "Go to the first row", group: "Move", keys: ["ctrl+shift+arrowup", "mod+arrowup", "home"], run: () => move(-1e6) },
+        { id: "nav.last", label: "Go to the last row", group: "Move", keys: ["ctrl+shift+arrowdown", "mod+arrowdown", "end"], run: () => move(1e6) },
         { id: "nav.pagedown", label: "Go down a page", group: "Move", keys: ["pagedown"], run: () => move(page()) },
         { id: "nav.pageup", label: "Go up a page", group: "Move", keys: ["pageup"], run: () => move(-page()) },
       ],
