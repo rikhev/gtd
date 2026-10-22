@@ -9,7 +9,7 @@ import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { actionRowCommands, askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { doneNow, trashNow } from "../fileStuff.ts";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, progress, progressLabel, repeatsLabel, setChecklistDay, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
+import { atStake, habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, progress, progressLabel, repeatsLabel, setChecklistDay, stakeLabel, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
 import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
@@ -1108,6 +1108,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
               (() => {
                 const done = isTicked(s, i);
                 const run = c.repeats ? streakLabel(streak(s, i, c.repeats), c.repeats) : "";
+                const due = c.repeats ? atStake(s, i, c.repeats) : false;
                 return (
                   <li key={i.id}>
                     <button
@@ -1115,7 +1116,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
                       role="checkbox"
                       aria-checked={done}
                       className={`mini-row is-tickable ${done ? "is-done" : ""}`}
-                      title={run ? `${run} in a row` : undefined}
+                      title={run ? `${run} in a row${due ? ` · ${stakeLabel(c.repeats!)}` : ""}` : undefined}
                       onClick={() => tickItems([i.id])}
                     >
                       <span className={`done-box ${done ? "is-checked" : ""}`} aria-hidden="true">
@@ -1125,7 +1126,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
                         </svg>
                       </span>
                       <span className="mini-title">{i.title || "Untitled"}</span>
-                      <span className="mini-meta num">{run}</span>
+                      <span className={`mini-meta num run ${due ? "is-due" : ""}`}>{run}</span>
                     </button>
                   </li>
                 );
@@ -1230,7 +1231,11 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
               <p>
                 Longest run <strong>{plural(stats.longest, unit)}</strong>
                 {stats.longestEnd && stats.longest > stats.current ? <span className="muted-text">, to {formatLong(stats.longestEnd)}</span> : null}
-                <span className="muted-text"> · now {plural(stats.current, unit)}</span>
+                <span className="muted-text">
+                  {" "}
+                  · now {plural(stats.current, unit)}
+                  {stats.current > 0 && atStake(s, item, repeats) ? `, ${stakeLabel(repeats).toLowerCase()}` : ""}
+                </span>
               </p>
             )}
           </section>

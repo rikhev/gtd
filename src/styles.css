@@ -1984,6 +1984,15 @@ body.is-col-resizing * {
 .is-focus .hstrip i.is-now.is-on {
   box-shadow: none;
 }
+/* Never miss twice: a run that hangs on today (the last day or week was missed) stands in full ink, as the stepped-back
+   count does, so it isn't missed. */
+.run.is-due {
+  color: var(--ink);
+  font-weight: 600;
+}
+.is-focus .run.is-due {
+  color: inherit;
+}
 /* A habit done today greys like a ticked item, but its history doesn't: the record stays full strength. */
 .row.is-done .hstrip i.is-on {
   background-color: var(--mark);

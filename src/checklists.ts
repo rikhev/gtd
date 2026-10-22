@@ -160,8 +160,9 @@ export function history(s: Lists, item: ChecklistItem, repeats: Repeats, t = tod
 }
 
 /**
- * How many days (or weeks) in a row it has been done, up to now. Today not done yet doesn't break the run: it counts
- * back from yesterday until the day is over.
+ * How many days (or weeks) in a row it has been done, up to now. Never miss twice (owner's request): one missed day
+ * (or week) doesn't end the run, two in a row do; the run counts the days it was done. Today not done yet is no miss:
+ * it counts back from yesterday until the day is over.
  */
 export function streak(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()): number {
   const done = new Set(s.checklist_ticks.filter((k) => k.item_id === item.id).map((k) => periodOf(k.day, repeats)));
@@ -169,12 +170,25 @@ export function streak(s: Lists, item: ChecklistItem, repeats: Repeats, t = toda
   let at = periodOf(t, repeats);
   if (!done.has(at)) at = addDays(at, -step);
   let n = 0;
-  while (done.has(at)) {
-    n++;
-    at = addDays(at, -step);
+  for (let missed = 0; missed < 2; at = addDays(at, -step)) {
+    if (done.has(at)) {
+      n++;
+      missed = 0;
+    } else missed++;
   }
   return n;
 }
+
+/** Whether a run hangs on today (or this week): the last one was missed, so missing this one too ends it. */
+export function atStake(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()): boolean {
+  const now = periodOf(t, repeats);
+  const last = addDays(now, repeats === "day" ? -1 : -7);
+  const done = (d: string) => s.checklist_ticks.some((k) => k.item_id === item.id && periodOf(k.day, repeats) === d);
+  return !done(now) && !done(last) && streak(s, item, repeats, t) > 0;
+}
+
+/** What a run at stake says on hover and in the record: "Missed yesterday", "Missed last week". */
+export const stakeLabel = (repeats: Repeats) => (repeats === "day" ? "Missed yesterday" : "Missed last week");
 
 /** The local day a stored stamp falls on. */
 const dayOf = (stamp: string) => iso(new Date(stamp));
@@ -203,15 +217,18 @@ export function habitStats(s: Lists, item: ChecklistItem, repeats: Repeats, t = 
   const before = past.slice(-2 * span, -span);
   let longest = 0;
   let longestEnd: string | null = null;
+  // Runs as the strip's run counts them: one missed period is forgiven, two in a row end it.
   let run = 0;
+  let missed = 0;
   for (const d of periods) {
     if (done.has(d)) {
       run++;
+      missed = 0;
       if (run > longest) {
         longest = run;
         longestEnd = d;
       }
-    } else if (d < now) run = 0;
+    } else if (d < now && ++missed === 2) run = 0;
   }
   // On a daily habit, how each weekday went, in the week's own order.
   const first = getMeta().weekStart;

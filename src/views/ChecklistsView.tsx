@@ -11,6 +11,7 @@ import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, createAreaOp, quickAddNextAction } from "../actionCommands.tsx";
 import {
   checklistNamed,
+  atStake,
   history,
   historyTitle,
   isTicked,
@@ -27,6 +28,7 @@ import {
   setChecklistDay,
   setRepeats,
   startOver,
+  stakeLabel,
   streak,
   streakLabel,
   tickItems,
@@ -641,7 +643,16 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
             label: "In a row",
             width: "72px",
             align: "end" as const,
-            render: (i: ChecklistItem) => (i.section ? null : <span className="num muted-text">{streakLabel(streak(s, i, repeats), repeats)}</span>),
+            // A run that hangs on today (yesterday was missed) stands in full ink: never miss twice.
+            render: (i: ChecklistItem) => {
+              if (i.section) return null;
+              const due = atStake(s, i, repeats);
+              return (
+                <span className={`num muted-text run ${due ? "is-due" : ""}`} title={due ? `${stakeLabel(repeats)}: ${repeats === "day" ? "today" : "this week"} keeps the run` : undefined}>
+                  {streakLabel(streak(s, i, repeats), repeats)}
+                </span>
+              );
+            },
           },
         ]
       : []),
