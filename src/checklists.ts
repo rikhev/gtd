@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { routePath, routeView, setRoute } from "./route.ts";
 import { getMeta, getState, mutate, notify, plural, stamp, uid } from "./store.ts";
-import { addDays, formatLong, fromIso, iso, today } from "../shared/dates.ts";
+import { addDays, formatLong, fromIso, iso, parseRecurrence, recurrenceLabel, today } from "../shared/dates.ts";
 import type { Checklist, ChecklistItem, ChecklistTick, ID, Op, State } from "../shared/types.ts";
 
 /**
@@ -135,6 +135,54 @@ export function periodOf(day: string, repeats: Repeats): string {
 
 const repeatsOf = (s: Lists, id: ID): Repeats | null => s.checklists.find((c) => c.id === id)?.repeats ?? null;
 
+/**
+ * The weekdays a habit is done on (0 is Sunday), or null for every day (owner's request: strength training on Mon, Wed
+ * and Fri). Only a daily routine keeps to them; the other days are no misses, and a tick on one is kept but not counted.
+ */
+function daysOf(item: Pick<ChecklistItem, "days">, repeats: Repeats | null): number[] | null {
+  if (repeats !== "day" || !item.days) return null;
+  const d = item.days.split(",").map(Number).filter((n) => n >= 0 && n <= 6);
+  return d.length ? d : null;
+}
+
+/** Whether a habit is due on a day (or in a week): every one, unless it keeps to some weekdays. */
+export function isDue(item: Pick<ChecklistItem, "days">, repeats: Repeats | null, day: string): boolean {
+  const d = daysOf(item, repeats);
+  return !d || d.includes(fromIso(day).getDay());
+}
+
+/** The due day (or week) before one: the day or week before, or the last of its weekdays. */
+function dueBefore(item: Pick<ChecklistItem, "days">, repeats: Repeats, day: string): string {
+  let d = addDays(day, repeats === "day" ? -1 : -7);
+  for (let i = 0; i < 7 && !isDue(item, repeats, d); i++) d = addDays(d, -1);
+  return d;
+}
+
+const SHORT = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+/** "every mon, wed, fri", "weekdays": the weekdays as kept ("1,3,5"); null is every day, undefined not understood. */
+export function parseDays(input: string): string | null | undefined {
+  const r = parseRecurrence(input);
+  if (r === null) return null;
+  if (!r || r.n !== 1) return undefined;
+  if (r.unit === "day") return null;
+  if (r.unit !== "week" || !r.weekdays.length) return undefined;
+  return r.weekdays.length === 7 ? null : r.weekdays.join(",");
+}
+
+/** "Every day", "Every Mon, Wed, Fri", "Every weekday". */
+export const daysLabel = (days: string | null | undefined) =>
+  days ? recurrenceLabel({ n: 1, unit: "week", weekdays: days.split(",").map(Number) }) : "Every day";
+
+/** The weekdays as typed back into the picker: "every mon, wed, fri", or nothing for every day. */
+export const daysText = (days: string | null | undefined) => (days ? `every ${days.split(",").map((d) => SHORT[Number(d)]).join(", ")}` : "");
+
+/** Sets the weekdays a habit is done on (null: every day). */
+export function setDays(item: ChecklistItem, days: string | null) {
+  if ((item.days ?? null) === days) return;
+  mutate(`${itemName([item])} ${daysLabel(days).toLowerCase()}`, [{ type: "patch", table: "checklist_items", id: item.id, data: { days } }]);
+}
+
 /** This period's ticks of an item on a repeating checklist. */
 function ticksNow(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()): ChecklistTick[] {
   const now = periodOf(t, repeats);
@@ -155,22 +203,21 @@ export function history(s: Lists, item: ChecklistItem, repeats: Repeats, t = tod
   const step = repeats === "day" ? 1 : 7;
   return Array.from({ length: n }, (_, i) => {
     const day = addDays(now, -(n - 1 - i) * step);
-    return { day, done: done.has(day), now: day === now };
+    return { day, done: done.has(day), now: day === now, off: !isDue(item, repeats, day) };
   });
 }
 
 /**
  * How many days (or weeks) in a row it has been done, up to now. Never miss twice (owner's request): one missed day
  * (or week) doesn't end the run, two in a row do; the run counts the days it was done. Today not done yet is no miss:
- * it counts back from yesterday until the day is over.
+ * it counts back from yesterday until the day is over. A habit kept to some weekdays counts those days only.
  */
 export function streak(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()): number {
   const done = new Set(s.checklist_ticks.filter((k) => k.item_id === item.id).map((k) => periodOf(k.day, repeats)));
-  const step = repeats === "day" ? 1 : 7;
   let at = periodOf(t, repeats);
-  if (!done.has(at)) at = addDays(at, -step);
+  if (!done.has(at) || !isDue(item, repeats, at)) at = dueBefore(item, repeats, at);
   let n = 0;
-  for (let missed = 0; missed < 2; at = addDays(at, -step)) {
+  for (let missed = 0; missed < 2; at = dueBefore(item, repeats, at)) {
     if (done.has(at)) {
       n++;
       missed = 0;
@@ -182,13 +229,20 @@ export function streak(s: Lists, item: ChecklistItem, repeats: Repeats, t = toda
 /** Whether a run hangs on today (or this week): the last one was missed, so missing this one too ends it. */
 export function atStake(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()): boolean {
   const now = periodOf(t, repeats);
-  const last = addDays(now, repeats === "day" ? -1 : -7);
+  if (!isDue(item, repeats, now)) return false;
+  const last = dueBefore(item, repeats, now);
   const done = (d: string) => s.checklist_ticks.some((k) => k.item_id === item.id && periodOf(k.day, repeats) === d);
   return !done(now) && !done(last) && streak(s, item, repeats, t) > 0;
 }
 
-/** What a run at stake says on hover and in the record: "Missed yesterday", "Missed last week". */
-export const stakeLabel = (repeats: Repeats) => (repeats === "day" ? "Missed yesterday" : "Missed last week");
+const WEEKDAY = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** What a run at stake says on hover and in the record: "Missed yesterday", "Missed Monday", "Missed last week". */
+export function stakeLabel(item: ChecklistItem, repeats: Repeats, t = today()): string {
+  if (repeats === "week") return "Missed last week";
+  const last = dueBefore(item, repeats, t);
+  return last === addDays(t, -1) ? "Missed yesterday" : `Missed ${WEEKDAY[fromIso(last).getDay()]}`;
+}
 
 /** The local day a stored stamp falls on. */
 const dayOf = (stamp: string) => iso(new Date(stamp));
@@ -196,8 +250,8 @@ const dayOf = (stamp: string) => iso(new Date(stamp));
 /**
  * A habit's record, from the day it became one (the routine began repeating, or the habit was added since): how often
  * it was done, how the last four weeks compare with the four before, its longest run, and on a daily habit the
- * weekdays it slips. Only past periods are counted; this one counts once it is done. Nothing here is kept: it is all
- * read from the ticks.
+ * weekdays it slips. Only past periods are counted; this one counts once it is done. A habit kept to some weekdays
+ * counts those days only. Nothing here is kept: it is all read from the ticks.
  */
 export function habitStats(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()) {
   const list = s.checklists.find((c) => c.id === item.checklist_id);
@@ -208,13 +262,13 @@ export function habitStats(s: Lists, item: ChecklistItem, repeats: Repeats, t = 
   const done = new Set(s.checklist_ticks.filter((k) => k.item_id === item.id).map((k) => periodOf(k.day, repeats)));
   // Every period from the first to this one; this one only counts once it is done (the day isn't over).
   const periods: string[] = [];
-  for (let d = since; d <= now; d = addDays(d, step)) periods.push(d);
+  for (let d = since; d <= now; d = addDays(d, step)) if (isDue(item, repeats, d)) periods.push(d);
   const counted = periods.filter((d) => d < now || done.has(d));
   const kept = counted.filter((d) => done.has(d)).length;
-  const span = repeats === "day" ? 28 : 4;
   const past = periods.filter((d) => d < now);
-  const recent = past.slice(-span);
-  const before = past.slice(-2 * span, -span);
+  // The last four weeks, and the four before.
+  const recent = past.filter((d) => d >= addDays(now, -28));
+  const before = past.filter((d) => d >= addDays(now, -56) && d < addDays(now, -28));
   let longest = 0;
   let longestEnd: string | null = null;
   // Runs as the strip's run counts them: one missed period is forgiven, two in a row end it.
@@ -230,15 +284,16 @@ export function habitStats(s: Lists, item: ChecklistItem, repeats: Repeats, t = 
       }
     } else if (d < now && ++missed === 2) run = 0;
   }
-  // On a daily habit, how each weekday went, in the week's own order.
+  // On a daily habit, how each weekday it is done on went, in the week's own order.
   const first = getMeta().weekStart;
   const weekdays =
     repeats === "day"
-      ? Array.from({ length: 7 }, (_, n) => {
-          const wd = (first + n) % 7;
-          const days = past.filter((d) => fromIso(d).getDay() === wd);
-          return { wd, done: days.filter((d) => done.has(d)).length, of: days.length };
-        })
+      ? Array.from({ length: 7 }, (_, n) => (first + n) % 7)
+          .filter((wd) => daysOf(item, repeats)?.includes(wd) ?? true)
+          .map((wd) => {
+            const days = past.filter((d) => fromIso(d).getDay() === wd);
+            return { wd, done: days.filter((d) => done.has(d)).length, of: days.length };
+          })
       : [];
   return {
     since,
@@ -260,29 +315,34 @@ export function longHistory(s: Lists, item: ChecklistItem, repeats: Repeats, t =
   if (repeats === "week")
     return Array.from({ length: 26 }, (_, i) => {
       const day = addDays(now, -(25 - i) * 7);
-      return { day, done: done.has(day), now: day === now, future: false };
+      return { day, done: done.has(day), now: day === now, future: false, off: false };
     });
   // Days: whole weeks from the week's first day, 26 of them, so each column is a week.
   const start = addDays(periodOf(t, "week"), -25 * 7);
   return Array.from({ length: 26 * 7 }, (_, i) => {
     const day = addDays(start, i);
-    return { day, done: done.has(day), now: day === now, future: day > now };
+    return { day, done: done.has(day), now: day === now, future: day > now, off: !isDue(item, repeats, day) };
   });
 }
 
 export const streakLabel = (n: number, repeats: Repeats) => (n ? plural(n, repeats === "day" ? "day" : "week") : "");
 
-/** A square of the strip, named for its hover: "Tue 29 Sep: done", "Week of 21 Sep: not done". */
-export const historyTitle = (c: { day: string; done: boolean; now: boolean }, repeats: Repeats) =>
-  `${repeats === "day" ? formatLong(c.day) : `Week of ${formatLong(c.day)}`}${c.now ? (repeats === "day" ? " (today)" : " (this week)") : ""}: ${c.done ? "done" : "not done"}`;
+/** A square of the strip, named for its hover: "Tue 29 Sep: done", "Week of 21 Sep: not done", "Sun 27 Sep: a day off". */
+export const historyTitle = (c: { day: string; done: boolean; now: boolean; off?: boolean }, repeats: Repeats) =>
+  `${repeats === "day" ? formatLong(c.day) : `Week of ${formatLong(c.day)}`}${c.now ? (repeats === "day" ? " (today)" : " (this week)") : ""}: ${c.done ? "done" : c.off ? "a day off" : "not done"}`;
 
 /** "Every day", "Every week". */
 export const repeatsLabel = (r: Repeats | null | undefined) => (r === "day" ? "Every day" : r === "week" ? "Every week" : "");
 
-/** How far the current run has got: ticked of everything that can be ticked (section headings aside). */
+/**
+ * How far the current run has got: ticked of everything that can be ticked (section headings aside). On a routine,
+ * a habit on its day off counts only once it is ticked; `count` is every item, whatever the day.
+ */
 export function progress(s: Lists, id: ID, t = today()) {
-  const items = itemsOf(s, id).filter((i) => !i.section);
-  return { ticked: items.filter((i) => isTicked(s, i, t)).length, total: items.length, repeats: repeatsOf(s, id) };
+  const r = repeatsOf(s, id);
+  const all = itemsOf(s, id).filter((i) => !i.section);
+  const items = all.filter((i) => isDue(i, r, t) || isTicked(s, i, t));
+  return { ticked: items.filter((i) => isTicked(s, i, t)).length, total: items.length, count: all.length, repeats: r };
 }
 
 /**
@@ -395,7 +455,9 @@ export function tickItems(ids: ID[], day: string | null = null) {
   let label = tick ? `${itemName(change)} ticked${past}` : `${itemName(change)} unticked${past}`;
   if (tick && list) {
     const p = progress(s, list.id, t);
-    if (p.ticked + change.length === p.total) {
+    // A habit ticked on its day off finishes nothing: the day's run is the habits due on it.
+    const due = change.filter((i) => isDue(i, r, t)).length;
+    if (due && p.ticked + due === p.total) {
       // A day caught up afterwards finishes nothing now: "last finished" stays the latest real run.
       if (!past) ops.push({ type: "patch", table: "checklists", id: list.id, data: { finished_at: at } });
       label = r ? `${title(list)}: all ${p.total} done ${dayWords(day, r)}` : `${title(list)}: all ${p.total} ticked. Start over when you run it again.`;

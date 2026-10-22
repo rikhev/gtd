@@ -1938,6 +1938,10 @@ body.is-col-resizing * {
   background: var(--mark);
   box-shadow: none;
 }
+/* A habit's day off is no miss: it fades, as the days before it was a habit do in the half year. */
+.hstrip i.is-off {
+  opacity: 0.3;
+}
 .habit-year i.is-now {
   --now-dot: var(--ink);
   box-shadow: inset 0 0 0 1px var(--ink-3);

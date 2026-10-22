@@ -12,7 +12,7 @@ import { projectEditors } from "./ProjectsView.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
 import { stuffTitle } from "./InboxView.tsx";
-import { isTicked, itemsOf, openChecklist, periodOf, progress, progressLabel, repeatsLabel } from "../checklists.ts";
+import { isDue, isTicked, itemsOf, openChecklist, periodOf, progress, progressLabel, repeatsLabel } from "../checklists.ts";
 import { doneNow, fileStuff, trashNow } from "../fileStuff.ts";
 import { addDays, formatLong, today, daysBetween } from "../../shared/dates.ts";
 import type { Action, ID, Stuff } from "../../shared/types.ts";
@@ -195,19 +195,21 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
     const n = repeats === "day" ? 7 : 4;
     const now = periodOf(t, repeats);
     const periods = Array.from({ length: n }, (_, k) => addDays(now, -(k + 1) * step));
-    const kept = (i: (typeof habits)[number]) => {
+    // A habit kept to some weekdays is counted on those days only.
+    const counts = habits.map((i) => {
       const done = new Set(s.checklist_ticks.filter((k) => k.item_id === i.id).map((k) => periodOf(k.day, repeats)));
-      return periods.filter((d) => done.has(d)).length;
-    };
-    const counts = habits.map((i) => ({ i, n: kept(i) }));
-    const least = counts.reduce((a, b) => (b.n < a.n ? b : a));
-    const lags = habits.length > 1 && least.n < Math.max(...counts.map((c) => c.n));
-    const laggard = lags ? ` · ${least.i.title || "Untitled"} ${least.n} of ${n}${repeats === "week" ? " weeks" : ""}` : "";
+      const due = periods.filter((d) => isDue(i, repeats, d));
+      return { i, n: due.filter((d) => done.has(d)).length, of: due.length };
+    });
+    const rate = (c: (typeof counts)[number]) => (c.of ? c.n / c.of : 1);
+    const least = counts.reduce((a, b) => (rate(b) < rate(a) ? b : a));
+    const lags = habits.length > 1 && rate(least) < Math.max(...counts.map(rate));
+    const laggard = lags ? ` · ${least.i.title || "Untitled"} ${least.n} of ${least.of}${repeats === "week" ? " weeks" : ""}` : "";
     if (repeats === "week") {
       const ticked = habits.filter((i) => isTicked(s, i, t)).length;
       return `${repeatsLabel(repeats)} · ${ticked === habits.length ? "all done this week" : `${ticked} of ${habits.length} done this week`}${laggard}`;
     }
-    const full = periods.filter((d) => habits.every((i) => s.checklist_ticks.some((k) => k.item_id === i.id && k.day === d))).length;
+    const full = periods.filter((d) => habits.every((i) => !isDue(i, repeats, d) || s.checklist_ticks.some((k) => k.item_id === i.id && k.day === d))).length;
     return `${repeatsLabel(repeats)} · all done ${full} of the last 7 days${laggard}`;
   };
 

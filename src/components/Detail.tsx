@@ -9,7 +9,7 @@ import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { actionRowCommands, askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { doneNow, trashNow } from "../fileStuff.ts";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { atStake, habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, progress, progressLabel, repeatsLabel, setChecklistDay, stakeLabel, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
+import { atStake, daysLabel, daysText, habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, parseDays, progress, progressLabel, repeatsLabel, setChecklistDay, setDays, stakeLabel, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
 import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
@@ -1095,7 +1095,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
       <TextField label="Checklist" value={c.title} onCommit={(v) => patch("checklists", c.id, { title: v.trim(), updated_at: stamp() }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
       <section className="detail-actions">
         <h3 className="detail-h">
-          {c.repeats ? "Habits" : "Items"} <span className="count">{p.total || ""}</span>
+          {c.repeats ? "Habits" : "Items"} <span className="count">{p.count || ""}</span>
           <span className="detail-h-note">{[repeatsLabel(c.repeats), p.total ? progressLabel(p) || (c.repeats ? `0 of ${p.total} ${c.repeats === "week" ? "this week" : "today"}` : "") : ""].filter(Boolean).join(" · ")}</span>
         </h3>
         <ul className="timeline">
@@ -1116,7 +1116,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
                       role="checkbox"
                       aria-checked={done}
                       className={`mini-row is-tickable ${done ? "is-done" : ""}`}
-                      title={run ? `${run} in a row${due ? ` · ${stakeLabel(c.repeats!)}` : ""}` : undefined}
+                      title={run ? `${run} in a row${due ? ` · ${stakeLabel(i, c.repeats!)}` : ""}` : undefined}
                       onClick={() => tickItems([i.id])}
                     >
                       <span className={`done-box ${done ? "is-checked" : ""}`} aria-hidden="true">
@@ -1161,6 +1161,7 @@ const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
  * ticks; nothing here asks for upkeep, and nothing celebrates (no totals that only grow, no badges).
  */
 function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
+  const ui = useUI();
   const s = useStore((x) => x);
   // E and Delete, as on the checklist's row (the pane is the row, bigger): tick (on the day the checklist is shown
   // for), or remove it with its record.
@@ -1194,20 +1195,42 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
   const slip = (() => {
     if (!stats || stats.weekdays.length === 0) return null;
     const seen = stats.weekdays.filter((d) => d.of >= 3);
-    if (seen.length < 7) return null;
+    if (seen.length < 2 || seen.length < stats.weekdays.length) return null;
     const avg = stats.kept / Math.max(1, stats.of);
     const worst = [...seen].sort((a, b) => a.done / a.of - b.done / b.of)[0];
     return worst.done / worst.of < Math.min(0.6, avg - 0.2) ? worst : null;
   })();
   const ticked = !repeats && item.checked_at;
+  // On a daily routine a habit can keep to some weekdays, typed as an action's repeat is: "every mon, wed, fri".
+  const pickDays = () =>
+    ui.openPicker({
+      type: "text",
+      title: "Repeat",
+      current: daysText(item.days),
+      preview: (v) => {
+        const d = parseDays(v);
+        if (d === undefined) return { ok: false, text: "Try “every mon, wed, fri”, “weekdays” or “daily”" };
+        return { ok: true, text: d ? `${daysLabel(d)} · the other days are no misses` : "Every day" };
+      },
+      onPick: (v) => {
+        const d = parseDays(v);
+        if (d !== undefined) setDays(item, d);
+      },
+    });
+  const keepsDays = repeats === "day" && !item.section;
   return (
     <>
       <TextField label={item.section ? "Section" : repeats ? "Habit" : "Item"} value={item.title} onCommit={(v) => patch("checklist_items", item.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
       <p className="detail-meta">
         In {quote(list?.title ?? "", "Untitled checklist")}
-        {repeats ? ` · ${repeatsLabel(repeats)}` : ""}
+        {repeats && !keepsDays ? ` · ${repeatsLabel(repeats)}` : ""}
         {ticked ? ` · ticked ${formatLong(item.checked_at!.slice(0, 10))}` : ""}
       </p>
+      {keepsDays && (
+        <PickField label="Repeat" k="R" onOpen={pickDays}>
+          {daysLabel(item.days)}
+        </PickField>
+      )}
       {stats && repeats && (
         <>
           <section className="habit-record" aria-label="Record">
@@ -1234,7 +1257,7 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
                 <span className="muted-text">
                   {" "}
                   · now {plural(stats.current, unit)}
-                  {stats.current > 0 && atStake(s, item, repeats) ? `, ${stakeLabel(repeats).toLowerCase()}` : ""}
+                  {stats.current > 0 && atStake(s, item, repeats) ? `, ${stakeLabel(item, repeats).replace(/^M/, "m")}` : ""}
                 </span>
               </p>
             )}
@@ -1268,8 +1291,8 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
               {longHistory(s, item, repeats).map((c) => (
                 <i
                   key={c.day}
-                  // Days before it was a habit are no misses: they fade.
-                  className={`${c.done ? "is-on" : ""} ${(viewDay ? c.day === viewDay : c.now) ? "is-now" : ""} ${c.future ? "is-future" : ""} ${c.day < stats.since && !c.done ? "is-before" : ""}`}
+                  // Days before it was a habit, and its days off, are no misses: they fade.
+                  className={`${c.done ? "is-on" : ""} ${(viewDay ? c.day === viewDay : c.now) ? "is-now" : ""} ${c.future ? "is-future" : ""} ${(c.day < stats.since || c.off) && !c.done ? "is-before" : ""}`}
                   title={c.future ? undefined : historyTitle(c, repeats)}
                   onClick={() => !c.future && setChecklistDay(c.day, repeats)}
                 />

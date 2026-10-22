@@ -151,14 +151,22 @@ export function exportZip({ day = today(), weekStart = 1 }: { day?: string; week
         // A routine lists each habit with how often it was done in the last four weeks: in days, or in weeks.
         const weekOf = (d: string) => addDays(d, -((fromIso(d).getDay() - weekStart + 7) % 7));
         const since = c.repeats === "week" ? addDays(weekOf(day), -21) : addDays(day, -27);
-        const kept = (id: string) =>
-          new Set(s.checklist_ticks.filter((k) => k.item_id === id && k.day >= since && k.day <= day).map((k) => (c.repeats === "week" ? weekOf(k.day) : k.day))).size;
-        const record = (id: string) => (c.repeats === "week" ? `done in ${kept(id)} of the last 4 weeks` : `done on ${kept(id)} of the last 28 days`);
+        // A daily habit kept to some weekdays ("1,3,5") counts those days only.
+        const on = (days: string | null | undefined) => (d: string) => !days || days.split(",").includes(String(fromIso(d).getDay()));
+        const kept = (i: { id: string; days?: string | null }) =>
+          new Set(
+            s.checklist_ticks
+              .filter((k) => k.item_id === i.id && k.day >= since && k.day <= day && (c.repeats === "week" || on(i.days)(k.day)))
+              .map((k) => (c.repeats === "week" ? weekOf(k.day) : k.day)),
+          ).size;
+        const dueDays = (days: string | null | undefined) => Array.from({ length: 28 }, (_, n) => addDays(day, -n)).filter(on(days)).length;
+        const record = (i: { id: string; days?: string | null }) =>
+          c.repeats === "week" ? `done in ${kept(i)} of the last 4 weeks` : i.days ? `done on ${kept(i)} of its last ${dueDays(i.days)} days` : `done on ${kept(i)} of the last 28 days`;
         const items = s.checklist_items
           .filter((i) => i.checklist_id === c.id)
           .sort((a, b) => a.sort - b.sort)
           .map((i) =>
-            i.section ? `\n### ${i.title}\n` : c.repeats ? `- ${i.title}  _(${record(i.id)})_` : `- [${i.checked_at ? "x" : " "}] ${i.title}`,
+            i.section ? `\n### ${i.title}\n` : c.repeats ? `- ${i.title}  _(${record(i)})_` : `- [${i.checked_at ? "x" : " "}] ${i.title}`,
           );
         const repeats = c.repeats === "day" ? "Repeats every day\n" : c.repeats === "week" ? "Repeats every week\n" : "";
         const project = s.projects.find((p) => p.id === c.project_id)?.title;

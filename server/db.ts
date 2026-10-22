@@ -27,7 +27,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
   checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id", "repeats_since"],
-  checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at"],
+  checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at", "days"],
   checklist_ticks: ["id", "item_id", "checklist_id", "day", "created_at"],
   horizons: ["id", "kind", "title", "notes", "area_id", "target", "status", "sort", "created_at", "completed_at", "trashed_at", "trashed_from"],
 };
@@ -190,6 +190,11 @@ if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).s
   db.exec(
     "UPDATE checklists SET repeats_since = COALESCE((SELECT MIN(day) FROM checklist_ticks t WHERE t.checklist_id = checklists.id), substr(created_at, 1, 10)) WHERE repeats IS NOT NULL",
   );
+}
+
+// A habit can be done on some weekdays only (strength training Mon, Wed, Fri).
+if (!(db.prepare("PRAGMA table_info(checklist_items)").all() as { name: string }[]).some((c) => c.name === "days")) {
+  db.exec("ALTER TABLE checklist_items ADD COLUMN days TEXT");
 }
 
 /** Owner preferences kept on the server (so every browser agrees). */

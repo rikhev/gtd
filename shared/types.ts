@@ -188,6 +188,11 @@ export interface ChecklistItem {
   checked_at: string | null;
   sort: number;
   created_at: string;
+  /**
+   * On a daily routine, the weekdays a habit is done on ("1,3,5" for Mon, Wed, Fri; 0 is Sunday). Other days are no
+   * misses. Null is every day.
+   */
+  days?: string | null;
 }
 
 /**

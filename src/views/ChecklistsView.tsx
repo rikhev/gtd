@@ -95,7 +95,7 @@ function ChecklistIndex({ regionActive, back }: { regionActive: boolean; back: I
       area: (c) => areaById.get(c.area_id ?? "")?.name,
       repeats: (c) => (c.repeats === "day" ? 1 : c.repeats === "week" ? 2 : null),
       proj: (c) => s.projects.find((p) => p.id === c.project_id)?.title,
-      items: (c) => progress(s, c.id).total,
+      items: (c) => progress(s, c.id).count,
       run: (c) => {
         const p = progress(s, c.id);
         return p.ticked ? p.ticked / Math.max(1, p.total) : null;
@@ -250,7 +250,7 @@ function ChecklistIndex({ regionActive, back }: { regionActive: boolean; back: I
         return p ? <span className="proj-cell">{p.title || "Untitled project"}</span> : <span className="dash" aria-hidden="true">–</span>;
       },
     },
-    { key: "items", label: "Items", width: "64px", align: "end", render: (c) => <span className="num muted-text">{progress(s, c.id).total}</span> },
+    { key: "items", label: "Items", width: "64px", align: "end", render: (c) => <span className="num muted-text">{progress(s, c.id).count}</span> },
     {
       key: "repeats",
       label: "Repeats",
@@ -648,7 +648,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
               if (i.section) return null;
               const due = atStake(s, i, repeats);
               return (
-                <span className={`num muted-text run ${due ? "is-due" : ""}`} title={due ? `${stakeLabel(repeats)}: ${repeats === "day" ? "today" : "this week"} keeps the run` : undefined}>
+                <span className={`num muted-text run ${due ? "is-due" : ""}`} title={due ? `${stakeLabel(i, repeats)}: ${repeats === "day" ? "today" : "this week"} keeps the run` : undefined}>
                   {streakLabel(streak(s, i, repeats), repeats)}
                 </span>
               );
@@ -720,7 +720,7 @@ function pickRepeats(ui: UI, ids: ID[]) {
 
 /**
  * A habit's last four weeks as a strip of small squares, oldest first: filled in ink where it was done, empty where
- * not, the current day or week set a step apart and dotted. No colour: green belongs to project health.
+ * not, the current day or week set a step apart and dotted; a habit's days off fade. No colour: green belongs to project health.
  */
 function Strip({ s, item, repeats, viewing }: { s: Parameters<typeof history>[0]; item: ChecklistItem; repeats: Repeats; viewing: string | null }) {
   const cells = history(s, item, repeats);
@@ -731,7 +731,7 @@ function Strip({ s, item, repeats, viewing }: { s: Parameters<typeof history>[0]
       {cells.map((c) => (
         <i
           key={c.day}
-          className={`${c.done ? "is-on" : ""} ${(viewing ? c.day === viewing : c.now) ? "is-now" : ""}`}
+          className={`${c.done ? "is-on" : ""} ${(viewing ? c.day === viewing : c.now) ? "is-now" : ""} ${c.off && !c.done ? "is-off" : ""}`}
           title={historyTitle(c, repeats)}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
