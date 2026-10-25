@@ -1,7 +1,7 @@
 import { useEvent, type CalEvent } from "../calendarFeed.ts";
 import { createContext, forwardRef, useContext, useEffect, useId, useImperativeHandle, useRef, useState, type ClipboardEvent, type ReactNode } from "react";
 import { X, Plus, Paperclip, Pin, Check, ChevronLeft, CircleHelp, CircleDashed, Video, BookOpen, ListChecks, Lock, StickyNote } from "lucide-react";
-import { linesOf, noteAsList, openRefList, textOf, useRefText } from "../refList.ts";
+import { linesFrom, linesOf, openRefList, textOf, useRefText } from "../refList.ts";
 import { lockNow, lockWithPassword, removeLock, saveSealedNotes, sealFile, unlock, useLock, useOpenedFile, useOpenedNotes } from "../lock.ts";
 import { type MutateOpts, getState, quote, plural, completeActions, mutate, newAction, nextAppointment, notify, notStarted, projectHealth, refUpdated, reopenActions, stallReason, stamp, uid, upload, useMeta, useStore } from "../store.ts";
 import { useUI, type Target } from "../ui.tsx";
@@ -1437,7 +1437,18 @@ function RefListPane({ r }: { r: Ref }) {
   const [edit, setEdit] = useState<{ key: string; v: string } | null>(null);
   const [draft, setDraft] = useState("");
   const addInput = useRef<AddLineHandle>(null);
-  useCommands("detail-reflist", [{ id: "detail.rl.add", label: "Add an item", group: "Details", keys: ["n"], run: () => addInput.current?.focus() }], { priority: 21, active });
+  const openFull = () => {
+    ui.go("reference");
+    openRefList(r.id);
+  };
+  useCommands(
+    "detail-reflist",
+    [
+      { id: "detail.rl.full", label: "Open in Reference", group: "Details", run: openFull },
+      { id: "detail.rl.add", label: "Add an item", group: "Details", keys: ["n"], run: () => addInput.current?.focus() },
+    ],
+    { priority: 21, active },
+  );
   if (text === null) return null;
   const commitEdit = () => {
     if (!edit) return;
@@ -1450,7 +1461,7 @@ function RefListPane({ r }: { r: Ref }) {
     save(textOf(next), edit.v.trim() ? "Rewritten" : `“${lines[i].text}” removed`);
   };
   const addItems = (raw: string) => {
-    const incoming = raw.includes("\n") ? linesOf(noteAsList(raw)) : raw.trim() ? [{ key: "", text: raw.trim(), section: false }] : [];
+    const incoming = linesFrom(raw);
     if (!incoming.length) return;
     save(textOf([...lines, ...incoming]), incoming.length === 1 ? `Added “${incoming[0].text}”` : `${plural(incoming.length, "item")} added`);
     setDraft("");
@@ -1508,10 +1519,10 @@ function RefListPane({ r }: { r: Ref }) {
         }}
       />
       <p className="checklist-pane-foot">
-        <button type="button" className="text-btn" onClick={() => (ui.go("reference"), openRefList(r.id))}>
-          Open the list
+        <button type="button" className="text-btn" onClick={openFull}>
+          Open in Reference
         </button>
-        <span className="muted-text">Sections and order are kept there</span>
+        <span className="muted-text">Sections and order are there</span>
       </p>
     </section>
   );

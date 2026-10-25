@@ -474,9 +474,10 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     const rows = items.filter((i) => ids.includes(i.id));
     if (!rows.length) return;
     const name = rows.length === 1 ? `“${rows[0].title || "Untitled"}”` : plural(rows.length, "item");
-    // A habit's record goes with it (⌘Z brings both back).
+    // A habit's record goes with it (⌘Z brings both back), and the toast says how much went.
     const records = s.checklist_ticks.filter((k) => rows.some((i) => i.id === k.item_id));
-    mutate(`${name} removed`, [
+    const lost = records.length ? ` with ${plural(records.length, repeats === "week" ? "week" : "day")} of record` : "";
+    mutate(`${name} removed${lost}`, [
       ...rows.map((i): Op => ({ type: "delete", table: "checklist_items", id: i.id })),
       ...records.map((k): Op => ({ type: "delete", table: "checklist_ticks", id: k.id })),
       touchChecklist(list.id),

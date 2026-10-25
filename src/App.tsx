@@ -885,7 +885,6 @@ export default function App() {
               {/* Touch has no ⌥V: the list's View menu (group, sort, show, and on a phone what fits, areas and starting
                   over) as a button; on a phone one icon button the thumb can hit. */}
               {LISTS_WITH_VIEW.includes(view) &&
-                !(view === "reference" && openRef) &&
                 (phone ? (
                   <button type="button" className="icon-btn view-btn" aria-label="View" onClick={() => runKey("alt+v")}>
                     <SlidersHorizontal size={20} strokeWidth={1.75} aria-hidden />

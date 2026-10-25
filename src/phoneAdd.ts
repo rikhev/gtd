@@ -4,6 +4,8 @@ import type { useUI, ViewId } from "./ui.tsx";
 import { addNextActionNamed, addWaitingNamed } from "./actionCommands.tsx";
 import { projectEditors } from "./views/ProjectsView.tsx";
 import { itemsFromText, newChecklist, openChecklist, touchChecklist } from "./checklists.ts";
+import { addToList } from "./refList.ts";
+import { isUnlocked } from "./lock.ts";
 
 type UI = ReturnType<typeof useUI>;
 
@@ -12,7 +14,7 @@ type UI = ReturnType<typeof useUI>;
  * no real way to add to a list; the desktop names a new row in place, which a phone can't do well). The words are
  * written first, then the list's own questions follow as sheets, as ⌥T, ⌥W and ⌥N ask them: a next action its
  * context and project, a waiting for who it waits on, a project its area and first next action. A note opens in its
- * sheet to be written; a checklist opens to be filled; inside a checklist, every line becomes an item.
+ * sheet to be written; a checklist opens to be filled; inside a checklist or a reference list, every line becomes an item.
  */
 export interface PhoneAdder {
   /** The tab's name: where it goes. */
@@ -23,7 +25,12 @@ export interface PhoneAdder {
 const firstLine = (text: string) => text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 
 export function phoneAdder(view: ViewId, inChecklist: ID | null, inRefList: ID | null): PhoneAdder | null {
-  if (inRefList) return null;
+  // Inside a reference list, as inside a checklist, every line becomes an item; a locked list takes + to the Inbox.
+  if (inRefList) {
+    const r = getState().refs.find((x) => x.id === inRefList);
+    if (!r || (r.sealed && !isUnlocked())) return null;
+    return { tab: r.title || "List", run: (_ui, text) => void addToList(r.id, text) };
+  }
   if (inChecklist) {
     const c = getState().checklists.find((x) => x.id === inChecklist);
     if (!c) return null;

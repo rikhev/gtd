@@ -5,13 +5,25 @@ import { Grid, useListNav, type Column } from "../components/Grid.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { setProject } from "../actionCommands.tsx";
-import { askUnlock } from "../lock.ts";
+import { askUnlock, lockWithPassword, removeLock } from "../lock.ts";
+import { renameNote } from "../notes.ts";
 import { linesOf, noteAsList, openRefList, textOf, useRefText, type Line } from "../refList.ts";
-import { plural } from "../store.ts";
+import { named, patchMany, plural } from "../store.ts";
 import type { Ref } from "../../shared/types.ts";
 
 /** A row on screen: a saved line, or the new one being typed (not saved until it has words). */
 type Row = Line & { draft?: boolean };
+
+/** A key of its own for a line, so a tick or the cursor stays with the line when lines move, come or go. */
+let seq = 0;
+const fresh = () => `r${++seq}`;
+
+/** Lines read anew from elsewhere (⌘Z, the pane) keep the keys of unchanged lines; the others get new ones. */
+function keep(before: Line[], read: Line[]): Line[] {
+  const free = new Map<string, string[]>();
+  for (const l of before) free.set(`${l.section}|${l.text}`, [...(free.get(`${l.section}|${l.text}`) ?? []), l.key]);
+  return read.map((l) => ({ ...l, key: free.get(`${l.section}|${l.text}`)?.shift() ?? fresh() }));
+}
 
 const short = (t: string) => `“${t.length > 42 ? `${t.slice(0, 40).trimEnd()}…` : t || "Untitled"}”`;
 
@@ -23,7 +35,17 @@ const short = (t: string) => `“${t.length > 42 ? `${t.slice(0, 40).trimEnd()}�
 export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean }) {
   const ui = useUI();
   const { text, save } = useRefText(r);
-  const lines = useMemo(() => (text === null ? [] : linesOf(text)), [text]);
+  // A save names the keys it wrote, so each line keeps its own through every change made here.
+  const written = useRef<{ text: string; keys: string[] } | null>(null);
+  const before = useRef<Line[]>([]);
+  const lines = useMemo(() => {
+    if (text === null) return [];
+    const read = linesOf(text);
+    const w = written.current;
+    const out = w && w.text === text && w.keys.length === read.length ? read.map((l, i) => ({ ...l, key: w.keys[i] })) : keep(before.current, read);
+    before.current = out;
+    return out;
+  }, [text]);
   const [editing, setEditing] = useState<{ key: string; draft?: { at: number; section: boolean } } | null>(null);
 
   // The new row sits where it will land, until it is named (or left empty, and gone).
@@ -44,9 +66,14 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const write = (next: Pick<Line, "text" | "section">[], label: string, focusAt?: number) => {
-    save(textOf(next), label);
-    if (focusAt !== undefined) window.setTimeout(() => nav.setFocus(`l${Math.max(0, Math.min(focusAt, next.length - 1))}`), 0);
+  /** One save of the list's lines; a new line (no key yet) gets one, and the cursor can go to the line at `focusAt`. */
+  const write = (next: Line[], label: string, focusAt?: number) => {
+    const keyed = next.map((l) => (l.key ? l : { ...l, key: fresh() }));
+    const t = textOf(keyed);
+    written.current = { text: t, keys: keyed.map((l) => l.key) };
+    save(t, label);
+    const to = focusAt === undefined ? undefined : keyed[Math.max(0, Math.min(focusAt, keyed.length - 1))]?.key;
+    if (to) window.setTimeout(() => nav.setFocus(to), 0);
   };
   const add = (section = false) => {
     const i = at(focus?.key);
@@ -71,7 +98,7 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
   };
   /** A list pasted into a row becomes items, one a line, at that row. */
   const pasteLines = (row: Row, pasted: string, current: string) => {
-    const incoming = linesOf(noteAsList(pasted));
+    const incoming = linesOf(noteAsList(pasted)).map((l) => ({ ...l, key: "" }));
     if (incoming.length < 2) return false;
     const i = row.draft ? editing!.draft!.at : at(row.key);
     const next = [...lines];
@@ -121,13 +148,22 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
       if (!keys.has(next[i].key) || j < 0 || j >= next.length || keys.has(next[j].key)) continue;
       [next[i], next[j]] = [next[j], next[i]];
     }
-    const focusKey = focus?.key;
+    // Each line keeps its key, so the cursor and the ticks move with their rows.
     write(next, "Reordered");
-    const to = next.findIndex((l) => l.key === focusKey);
-    // The moved rows keep their selection under their new keys.
-    window.setTimeout(() => nav.setFocus(`l${to}`), 0);
   };
   const back = () => openRefList(null);
+  const renameList = () =>
+    ui.openPicker({
+      type: "text",
+      title: "Rename list",
+      current: r.title,
+      onPick: (v) => {
+        const title = (v ?? "").trim();
+        if (title && title !== r.title) renameNote(r, title);
+      },
+    });
+  const toggleLock = () => (r.sealed ? removeLock(ui, [r.id]) : lockWithPassword(ui, [r.id]));
+  const openDetails = () => ui.openDetail({ kind: "ref", id: r.id }, true);
 
   const commands: Command[] = [
     ...nav.commands,
@@ -140,7 +176,44 @@ export function RefListView({ r, regionActive }: { r: Ref; regionActive: boolean
     { id: "rl.down", row: true, label: "Move row down", group: "List", keys: ["alt+arrowdown"], enabled: Boolean(focus && !focus.draft), run: () => move(1) },
     { id: "rl.project", label: "Set the project it supports", group: "Fields", keys: ["p"], run: () => setProject(ui, "refs", [r.id]) },
     { id: "rl.jump", label: "Jump to the project it supports", group: "List", keys: ["shift+u"], run: () => ui.jumpFromSupport("ref", r.id) },
-    { id: "rl.details", label: "Open its details", group: "List", run: () => ui.openDetail({ kind: "ref", id: r.id }, true) },
+    { id: "rl.details", label: "Open its details", group: "List", run: openDetails },
+    { id: "rl.renamelist", label: "Rename list", group: "List", run: renameList },
+    // ⇧S locks it, or takes the lock off, as on every reference.
+    { id: "rl.lock", label: r.sealed ? "Remove the lock" : "Lock with password", group: "List", keys: ["shift+s"], run: toggleLock },
+    {
+      id: "rl.trashlist",
+      label: "Trash this list",
+      group: "List",
+      run: () => {
+        back();
+        patchMany("refs", [r.id], { status: "trashed" }, `${named("refs", [r.id], "reference")} trashed`);
+      },
+    },
+    {
+      id: "rl.view",
+      label: "Open the View menu",
+      group: "View",
+      keys: ["alt+v"],
+      run: () =>
+        ui.openPicker({
+          type: "list",
+          title: "View",
+          items: [
+            { id: "rename", label: "Rename list", section: "list" },
+            { id: "project", label: "Set project", section: "list" },
+            { id: "lock", label: r.sealed ? "Remove the lock" : "Lock with password", section: "list" },
+            { id: "details", label: "Open its details", section: "list" },
+            { id: "back", label: "Every reference", section: "go" },
+          ],
+          onPick: (id) => {
+            if (id === "rename") window.setTimeout(renameList, 0);
+            if (id === "project") window.setTimeout(() => setProject(ui, "refs", [r.id]), 0);
+            if (id === "lock") window.setTimeout(toggleLock, 0);
+            if (id === "details") openDetails();
+            if (id === "back") back();
+          },
+        }),
+    },
     // After the selection is cleared (nav's Esc), Esc goes back up to every reference.
     { id: "rl.back", label: "Back to every reference", group: "Move", keys: ["escape"], run: back },
   ];
