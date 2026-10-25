@@ -4174,9 +4174,10 @@ textarea.field-text {
     align-items: flex-start;
     padding-top: 26px;
   }
+  /* The box's middle meets the first line's (18px down, 19.5px tall). */
   .grid.is-phone .row:not(.is-section) .cell.c-box {
     align-items: flex-start;
-    padding-top: 6px;
+    padding-top: 17px;
   }
   /* Their words start at the same height on every row, one line or two, so the marker and the first line meet. */
   .grid.is-phone .row:not(.is-section):has(> .cell.c-mark > .ref-bullet) .cell.is-stacked,

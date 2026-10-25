@@ -1280,7 +1280,7 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
                 {stats.longestEnd && stats.longest > stats.current ? <span className="muted-text">, to {formatLong(stats.longestEnd)}</span> : null}
                 <span className="muted-text">
                   {" "}
-                  · now {plural(stats.current, unit)}
+                  · {stats.current === 0 ? "none now" : stats.current === stats.longest ? "the run now" : `now ${plural(stats.current, unit)}`}
                   {stats.current > 0 && atStake(s, item, repeats) ? `, ${stakeLabel(item, repeats).replace(/^M/, "m")}` : ""}
                 </span>
               </p>

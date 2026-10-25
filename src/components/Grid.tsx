@@ -39,7 +39,7 @@ type Stacked<T> = Column<T> & { stack?: Column<T>[]; lead?: Column<T>[] };
  * A phone row's second line has no column heads, so a bare date says nothing ("2026-09-21 2026-10-01"): the dates whose
  * meaning the heading carried say it before the value ("Due 2026-09-29", "Since 2026-09-21 · Follow up 2026-10-01").
  */
-const PHONE_LABEL: Record<string, string> = { due: "Due", follow: "Follow up", since: "Since", back: "Comes back", start: "Do on", defer: "Do on", target: "By", updated: "Updated" };
+const PHONE_LABEL: Record<string, string> = { due: "Due", follow: "Follow up", since: "Since", back: "Comes back", start: "Do on", defer: "Do on", target: "By", updated: "Updated", streak: "Run" };
 /** The order of a phone row's second line: when first, then how long and how hard, then where it belongs (cut short). */
 const PHONE_ORDER = ["due", "defer", "start", "follow", "since", "back", "target", "date", "when", "at", "updated", "left", "time", "energy", "ctx", "who"];
 const phoneRank = (key: string) => (PHONE_ORDER.includes(key) ? PHONE_ORDER.indexOf(key) : PHONE_ORDER.length);
