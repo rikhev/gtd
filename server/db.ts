@@ -27,7 +27,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
   checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id", "repeats_since"],
-  checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at", "days"],
+  checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at", "days", "aim"],
   checklist_ticks: ["id", "item_id", "checklist_id", "day", "created_at"],
   horizons: ["id", "kind", "title", "notes", "area_id", "target", "status", "sort", "created_at", "completed_at", "trashed_at", "trashed_from"],
 };
@@ -195,6 +195,10 @@ if (!(db.prepare("PRAGMA table_info(checklists)").all() as { name: string }[]).s
 // A habit can be done on some weekdays only (strength training Mon, Wed, Fri).
 if (!(db.prepare("PRAGMA table_info(checklist_items)").all() as { name: string }[]).some((c) => c.name === "days")) {
   db.exec("ALTER TABLE checklist_items ADD COLUMN days TEXT");
+}
+// A habit can aim for a run (30 days in a row).
+if (!(db.prepare("PRAGMA table_info(checklist_items)").all() as { name: string }[]).some((c) => c.name === "aim")) {
+  db.exec("ALTER TABLE checklist_items ADD COLUMN aim INTEGER");
 }
 
 /** Owner preferences kept on the server (so every browser agrees). */

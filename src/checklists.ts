@@ -327,6 +327,27 @@ export function longHistory(s: Lists, item: ChecklistItem, repeats: Repeats, t =
 
 export const streakLabel = (n: number, repeats: Repeats) => (n ? plural(n, repeats === "day" ? "day" : "week") : "");
 
+/** The run as its column shows it: "5 days", or "5 of 30" while it is short of what the habit aims for. */
+export const runLabel = (n: number, item: Pick<ChecklistItem, "aim">, repeats: Repeats) => (item.aim && n < item.aim ? `${n} of ${item.aim}` : streakLabel(n, repeats));
+
+/** "30 days in a row", "12 weeks in a row"; "None" while it aims for no run. */
+export const aimLabel = (aim: number | null | undefined, repeats: Repeats) => (aim ? `${plural(aim, repeats === "day" ? "day" : "week")} in a row` : "None");
+
+/** "30", "30 days", "12 weeks": the run aimed for; null is none (nothing typed), undefined not understood. */
+export function parseAim(input: string): number | null | undefined {
+  const t = input.trim().toLowerCase();
+  if (!t || t === "none") return null;
+  const m = t.match(/^(\d+)(?: ?(?:d|days?|w|wks?|weeks?))?(?: in a row)?$/);
+  const n = m ? Number(m[1]) : NaN;
+  return n >= 1 && n <= 9999 ? n : n === 0 ? null : undefined;
+}
+
+/** Sets the run a habit aims for (null: none). */
+export function setAim(item: ChecklistItem, aim: number | null, repeats: Repeats) {
+  if ((item.aim ?? null) === aim) return;
+  mutate(aim ? `${itemName([item])} aims for ${aimLabel(aim, repeats)}` : `${itemName([item])} aims for no run`, [{ type: "patch", table: "checklist_items", id: item.id, data: { aim } }]);
+}
+
 /** A square of the strip, named for its hover: "Tue 29 Sep: done", "Week of 21 Sep: not done", "Sun 27 Sep: a day off". */
 export const historyTitle = (c: { day: string; done: boolean; now: boolean; off?: boolean }, repeats: Repeats) =>
   `${repeats === "day" ? formatLong(c.day) : `Week of ${formatLong(c.day)}`}${c.now ? (repeats === "day" ? " (today)" : " (this week)") : ""}: ${c.done ? "done" : c.off ? "a day off" : "not done"}`;

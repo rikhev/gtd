@@ -9,7 +9,7 @@ import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { actionRowCommands, askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { doneNow, trashNow } from "../fileStuff.ts";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { atStake, daysLabel, daysText, habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, parseDays, progress, progressLabel, repeatsLabel, setChecklistDay, setDays, stakeLabel, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
+import { aimLabel, atStake, daysLabel, daysText, habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, parseAim, parseDays, progress, progressLabel, repeatsLabel, setAim, setChecklistDay, setDays, stakeLabel, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
 import { pickGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
@@ -236,6 +236,7 @@ const FIELD_COMMAND: Record<string, string> = {
   With: "Set who it's with",
   "Follow up": "Set follow-up date",
   Since: "Set waiting since",
+  "Aim for": "Set the run it aims for",
 };
 
 function PickField({ label, children, onOpen, k }: { label: string; children: ReactNode; onOpen: () => void; k?: string }) {
@@ -1107,7 +1108,8 @@ function ChecklistDetail({ c }: { c: Checklist }) {
             ) : (
               (() => {
                 const done = isTicked(s, i);
-                const run = c.repeats ? streakLabel(streak(s, i, c.repeats), c.repeats) : "";
+                const n = c.repeats ? streak(s, i, c.repeats) : 0;
+                const run = c.repeats && (n || i.aim) ? `${streakLabel(n, c.repeats) || "None"} in a row${i.aim ? ` of ${i.aim}` : ""}` : "";
                 const due = c.repeats ? atStake(s, i, c.repeats) : false;
                 return (
                   <li key={i.id}>
@@ -1116,7 +1118,7 @@ function ChecklistDetail({ c }: { c: Checklist }) {
                       role="checkbox"
                       aria-checked={done}
                       className={`mini-row is-tickable ${done ? "is-done" : ""}`}
-                      title={run ? `${run} in a row${due ? ` · ${stakeLabel(i, c.repeats!)}` : ""}` : undefined}
+                      title={run ? `${run}${due ? ` · ${stakeLabel(i, c.repeats!)}` : ""}` : undefined}
                       onClick={() => tickItems([i.id])}
                     >
                       <span className={`done-box ${done ? "is-checked" : ""}`} aria-hidden="true">
@@ -1218,6 +1220,23 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
       },
     });
   const keepsDays = repeats === "day" && !item.section;
+  // A habit can aim for a run (owner's request): typed as a number, "30" or "30 days".
+  const pickAim = () =>
+    repeats &&
+    ui.openPicker({
+      type: "text",
+      title: "Aim for",
+      current: item.aim ? String(item.aim) : "",
+      preview: (v) => {
+        const a = parseAim(v);
+        if (a === undefined) return { ok: false, text: `Try “30” for ${aimLabel(30, repeats)}` };
+        return { ok: true, text: a ? aimLabel(a, repeats) : "No run aimed for" };
+      },
+      onPick: (v) => {
+        const a = parseAim(v);
+        if (a !== undefined) setAim(item, a, repeats);
+      },
+    });
   return (
     <>
       <TextField label={item.section ? "Section" : repeats ? "Habit" : "Item"} value={item.title} onCommit={(v) => patch("checklist_items", item.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
@@ -1229,6 +1248,11 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
       {keepsDays && (
         <PickField label="Repeat" k="R" onOpen={pickDays}>
           {daysLabel(item.days)}
+        </PickField>
+      )}
+      {repeats && !item.section && (
+        <PickField label="Aim for" k="I" onOpen={pickAim}>
+          {aimLabel(item.aim, repeats)}
         </PickField>
       )}
       {stats && repeats && (
@@ -1261,6 +1285,12 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
                 </span>
               </p>
             )}
+            {item.aim ? (
+              <p>
+                Aiming for <strong>{plural(item.aim, unit)}</strong> in a row
+                <span className="muted-text"> · {stats.current >= item.aim ? "reached" : `${plural(item.aim - stats.current, unit)} to go`}</span>
+              </p>
+            ) : null}
           </section>
           {stats.weekdays.length > 0 && (
             <section className="habit-record" aria-label="By weekday">

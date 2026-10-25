@@ -30,7 +30,7 @@ import {
   startOver,
   stakeLabel,
   streak,
-  streakLabel,
+  runLabel,
   tickItems,
   touchChecklist,
   useChecklistDay,
@@ -649,7 +649,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
               const due = atStake(s, i, repeats);
               return (
                 <span className={`num muted-text run ${due ? "is-due" : ""}`} title={due ? `${stakeLabel(i, repeats)}: ${repeats === "day" ? "today" : "this week"} keeps the run` : undefined}>
-                  {streakLabel(streak(s, i, repeats), repeats)}
+                  {runLabel(streak(s, i, repeats), i, repeats)}
                 </span>
               );
             },

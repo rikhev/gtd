@@ -160,8 +160,9 @@ export function exportZip({ day = today(), weekStart = 1 }: { day?: string; week
               .map((k) => (c.repeats === "week" ? weekOf(k.day) : k.day)),
           ).size;
         const dueDays = (days: string | null | undefined) => Array.from({ length: 28 }, (_, n) => addDays(day, -n)).filter(on(days)).length;
-        const record = (i: { id: string; days?: string | null }) =>
-          c.repeats === "week" ? `done in ${kept(i)} of the last 4 weeks` : i.days ? `done on ${kept(i)} of its last ${dueDays(i.days)} days` : `done on ${kept(i)} of the last 28 days`;
+        const aim = (i: { aim?: number | null }) => (i.aim ? `; aiming for ${i.aim} in a row` : "");
+        const record = (i: { id: string; days?: string | null; aim?: number | null }) =>
+          (c.repeats === "week" ? `done in ${kept(i)} of the last 4 weeks` : i.days ? `done on ${kept(i)} of its last ${dueDays(i.days)} days` : `done on ${kept(i)} of the last 28 days`) + aim(i);
         const items = s.checklist_items
           .filter((i) => i.checklist_id === c.id)
           .sort((a, b) => a.sort - b.sort)

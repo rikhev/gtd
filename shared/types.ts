@@ -193,6 +193,8 @@ export interface ChecklistItem {
    * misses. Null is every day.
    */
   days?: string | null;
+  /** On a routine, the run a habit aims for: 30 (days, or weeks on a weekly routine) in a row. Null aims for none. */
+  aim?: number | null;
 }
 
 /**
