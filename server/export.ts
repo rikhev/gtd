@@ -134,7 +134,12 @@ export function exportZip({ day = today(), weekStart = 1 }: { day?: string; week
         const heading = { purpose: "Purpose and principles", vision: "Vision (3–5 years)", goal: "Goals (1–2 years)" }[kind];
         const line = (h: (typeof rows)[number]) => {
           const projects = s.projects.filter((p) => p.goal_id === h.id && p.status === "active").map((p) => p.title);
-          return `- ${h.status === "done" ? "~~" : ""}${h.title}${h.status === "done" ? "~~ (achieved)" : ""}${h.target ? `  _(by ${h.target})_` : ""}${projects.length ? `\n  Projects: ${projects.join("; ")}` : ""}`;
+          // A goal kept by a habit: its length, the habit, and the day the count began.
+          const habit = s.checklist_items.find((i) => i.goal_id === h.id);
+          const weekly = habit && s.checklists.find((c) => c.id === habit.checklist_id)?.repeats === "week";
+          const length = h.length ? `${h.length} ${weekly ? "weeks" : "days"} in a row` : "";
+          const kept = [length, habit ? `kept by “${habit.title}”${h.since ? ` since ${h.since}` : ""}` : ""].filter(Boolean).join(", ");
+          return `- ${h.status === "done" ? "~~" : ""}${h.title}${h.status === "done" ? "~~ (achieved)" : ""}${h.target ? `  _(by ${h.target})_` : ""}${kept ? `  _(${kept})_` : ""}${projects.length ? `\n  Projects: ${projects.join("; ")}` : ""}`;
         };
         return rows.length ? `## ${heading}\n\n${rows.map(line).join("\n")}` : "";
       })
@@ -161,9 +166,13 @@ export function exportZip({ day = today(), weekStart = 1 }: { day?: string; week
               .map((k) => (c.repeats === "week" ? weekOf(k.day) : k.day)),
           ).size;
         const dueDays = (days: string | null | undefined) => Array.from({ length: 28 }, (_, n) => addDays(day, -n)).filter(on(days)).length;
-        const aim = (i: { aim?: number | null }) => (i.aim ? `; aiming for ${i.aim} in a row` : "");
-        const record = (i: { id: string; days?: string | null; aim?: number | null }) =>
-          (c.repeats === "week" ? `done in ${kept(i)} of the last 4 weeks` : i.days ? `done on ${kept(i)} of its last ${dueDays(i.days)} days` : `done on ${kept(i)} of the last 28 days`) + aim(i);
+        // A habit keeping a Horizons goal names it.
+        const goal = (i: { goal_id?: string | null }) => {
+          const g = i.goal_id ? s.horizons.find((h) => h.id === i.goal_id && h.status !== "trashed") : undefined;
+          return g ? `; keeps the goal “${g.title}”` : "";
+        };
+        const record = (i: { id: string; days?: string | null; goal_id?: string | null }) =>
+          (c.repeats === "week" ? `done in ${kept(i)} of the last 4 weeks` : i.days ? `done on ${kept(i)} of its last ${dueDays(i.days)} days` : `done on ${kept(i)} of the last 28 days`) + goal(i);
         const items = s.checklist_items
           .filter((i) => i.checklist_id === c.id)
           .sort((a, b) => a.sort - b.sort)

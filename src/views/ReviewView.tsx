@@ -12,7 +12,7 @@ import { projectEditors } from "./ProjectsView.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { ClarifyView } from "./ClarifyView.tsx";
 import { stuffTitle } from "./InboxView.tsx";
-import { isDue, isTicked, itemsOf, openChecklist, periodOf, progress, progressLabel, repeatsLabel } from "../checklists.ts";
+import { goalCount, goalLabel, goalNote, isDue, isTicked, keeperOf, itemsOf, openChecklist, periodOf, progress, progressLabel, repeatsLabel } from "../checklists.ts";
 import { doneNow, fileStuff, trashNow } from "../fileStuff.ts";
 import { addDays, formatLong, today, daysBetween } from "../../shared/dates.ts";
 import type { Action, ID, Stuff } from "../../shared/types.ts";
@@ -301,7 +301,13 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
           ...s.horizons
             .filter((h) => h.kind === "goal" && h.status === "active")
             .sort((a, b) => a.sort - b.sort)
-            .map((g) => ({ key: g.id, kind: "goal" as const, id: g.id, title: g.title || "Untitled goal", info: plural(serving(g.id), "active project"), date: g.target, note: serving(g.id) ? undefined : "No project serves it" })),
+            .map((g) => {
+              // A goal kept by a habit says where its count stands ("Day 34 of 90 · best 41 days · 3rd try").
+              const keeper = keeperOf(s, g.id);
+              const count = keeper ? goalCount(s, keeper.item, keeper.repeats, g) : null;
+              const kept = count && keeper ? `${goalLabel(count, keeper.repeats)}${count.tries > 1 ? ` · ${goalNote(count, keeper.repeats).split(" · ").slice(1).join(" · ")}` : ""}` : "";
+              return { key: g.id, kind: "goal" as const, id: g.id, title: g.title || "Untitled goal", info: [kept, plural(serving(g.id), "active project")].filter(Boolean).join(" · "), date: g.target, note: serving(g.id) || kept ? undefined : "No project serves it" };
+            }),
           ...[...s.areas]
             .sort((a, b) => a.sort - b.sort)
             .map((a) => ({ key: a.id, kind: "area" as const, id: a.id, title: `#${a.name}`, info: plural(active(a.id), "active project"), date: null, note: active(a.id) ? undefined : "No active project" })),

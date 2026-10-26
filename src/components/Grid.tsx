@@ -23,6 +23,8 @@ export interface Column<T> {
    * before the title, on the title's line, rather than going to the quiet second line with the status marks.
    */
   inline?: boolean;
+  /** On a phone's second line, the word before this row's value, where it differs from the column's usual one. */
+  phoneLabel?: (row: T) => string | null;
   render: (row: T) => ReactNode;
 }
 
@@ -1440,7 +1442,7 @@ export function Grid<T>({ listId, columns: allColumns, groups, getKey, nav, acti
                                 .filter((m) => !m.blank?.(row))
                                 .map((m) => (
                                   <span key={m.key} className={`row-meta-item c-${m.key}`}>
-                                    {PHONE_LABEL[m.key] && <span className="row-meta-label">{PHONE_LABEL[m.key]}</span>}
+                                    {(m.phoneLabel ? m.phoneLabel(row) : PHONE_LABEL[m.key]) && <span className="row-meta-label">{m.phoneLabel ? m.phoneLabel(row) : PHONE_LABEL[m.key]}</span>}
                                     {m.render(row)}
                                   </span>
                                 ))}

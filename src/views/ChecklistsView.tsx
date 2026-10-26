@@ -7,6 +7,7 @@ import { pressedByTouch, useCommands, type Command } from "../keys.ts";
 import { Grid, bakeDrop, stepRows, useListNav, usePersisted, useSort, sortGroups, isGroupKey, type Column, type GridGroup, type Sorters } from "../components/Grid.tsx";
 import { AreaName, DoneBox } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
+import { pickHabitGoal } from "../horizons.ts";
 import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems, createAreaOp, quickAddNextAction } from "../actionCommands.tsx";
 import {
@@ -30,7 +31,10 @@ import {
   startOver,
   stakeLabel,
   streak,
-  runLabel,
+  goalOf,
+  streakLabel,
+  goalLabel,
+  goalNote,
   tickItems,
   touchChecklist,
   useChecklistDay,
@@ -355,7 +359,7 @@ function setArea(ui: UI, ids: ID[]) {
 
 function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive: boolean }) {
   const ui = useUI();
-  const s = useTables("checklist_items", "checklist_ticks");
+  const s = useTables("checklist_items", "checklist_ticks", "horizons");
   const repeats = list.repeats ?? null;
   // A routine can be stepped back to an earlier day (or week) to tick what was done but not ticked then.
   const viewDay = useChecklistDay();
@@ -543,6 +547,7 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
     { id: "ci.rename", row: true, label: "Rename", group: "Checklist", keys: ["f2"], enabled: Boolean(focus), run: () => focus && setEditing({ id: focus.id, fresh: false }) },
     // GTD: a checklist is a trigger for new actions. The item stays as it is; ticking still only ticks.
     { id: "ci.action", row: true, label: "Add a next action", group: "Checklist", keys: ["t"], enabled: Boolean(focus && !focus.section), run: () => focus && quickAddNextAction(ui, focus.title, list.project_id ?? null) },
+    { id: "ci.goal", row: true, label: "Set the goal it keeps", group: "Fields", keys: ["g"], enabled: Boolean(repeats && focus && !focus.section), run: () => focus && pickHabitGoal(ui, focus) },
     { id: "ci.remove", row: true, label: "Remove", group: "Checklist", keys: ["backspace", "delete"], enabled: Boolean(focus), run: () => remove(targets()) },
     { id: "ci.up", row: true, label: focus?.section ? "Move the section up" : "Move row up", group: "Checklist", keys: ["alt+arrowup"], enabled: Boolean(focus), run: () => reorder(-1) },
     { id: "ci.down", row: true, label: focus?.section ? "Move the section down" : "Move row down", group: "Checklist", keys: ["alt+arrowdown"], enabled: Boolean(focus), run: () => reorder(1) },
@@ -642,15 +647,28 @@ function ChecklistItems({ list, regionActive }: { list: Checklist; regionActive:
           {
             key: "streak",
             label: "In a row",
-            width: "72px",
+            // "Day 34 of 90" needs a little more room than a run.
+            width: items.some((i) => goalOf(s, i, repeats)) ? "96px" : "72px",
             align: "end" as const,
-            // A run that hangs on today (yesterday was missed) stands in full ink: never miss twice.
+            // A habit keeping a goal reads as its count, which says what it is ("Day 34 of 90"), on a phone too.
+            phoneLabel: (i: ChecklistItem) => (goalOf(s, i, repeats) ? null : "Run"),
+            // Nothing to say without a run or a goal (a phone's line would read a bare "Run").
+            blank: (i: ChecklistItem) => Boolean(i.section) || (!goalOf(s, i, repeats) && !streak(s, i, repeats)),
+            // A run that hangs on today (yesterday was missed) stands in full ink: never miss twice. A goal's count is
+            // strict, so it has nothing at stake to show: a missed day has already started it again.
             render: (i: ChecklistItem) => {
               if (i.section) return null;
+              const g = goalOf(s, i, repeats);
+              if (g)
+                return (
+                  <span className="num muted-text run" title={`“${g.goal.title || "Untitled goal"}” · ${goalNote(g.count, repeats)}`}>
+                    {goalLabel(g.count, repeats)}
+                  </span>
+                );
               const due = atStake(s, i, repeats);
               return (
                 <span className={`num muted-text run ${due ? "is-due" : ""}`} title={due ? `${stakeLabel(i, repeats)}: ${repeats === "day" ? "today" : "this week"} keeps the run` : undefined}>
-                  {runLabel(streak(s, i, repeats), i, repeats)}
+                  {streakLabel(streak(s, i, repeats), repeats)}
                 </span>
               );
             },

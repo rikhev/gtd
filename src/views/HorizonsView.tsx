@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Compass, Eye, Target } from "lucide-react";
 import { quote, getState, mutate, patchMany, plural, stamp, useTables } from "../store.ts";
+import { today } from "../../shared/dates.ts";
 import { useUI, type UI } from "../ui.tsx";
 import { useCommands, type Command } from "../keys.ts";
 import { Grid, stepRows, useListNav, isGroupKey, type Column, type GridGroup } from "../components/Grid.tsx";
@@ -8,7 +9,8 @@ import { AreaName, DateCell } from "../components/bits.tsx";
 import { EmptyState } from "../components/EmptyState.tsx";
 import { InlineEdit } from "./ActionsView.tsx";
 import { areaItems } from "../actionCommands.tsx";
-import { HORIZON_KINDS, newHorizon } from "../horizons.ts";
+import { HORIZON_KINDS, newHorizon, pickLength } from "../horizons.ts";
+import { goalCount, goalLabel, goalNote, keeperOf, lengthLabel } from "../checklists.ts";
 import type { Horizon, ID, Op } from "../../shared/types.ts";
 
 const ICON = { purpose: Compass, vision: Eye, goal: Target } as const;
@@ -19,7 +21,7 @@ const ICON = { purpose: Compass, vision: Eye, goal: Target } as const;
  */
 export function HorizonsView({ regionActive }: { regionActive: boolean }) {
   const ui = useUI();
-  const s = useTables("horizons", "projects", "areas");
+  const s = useTables("horizons", "projects", "areas", "checklists", "checklist_items", "checklist_ticks");
   const [editing, setEditing] = useState<ID | null>(null);
 
   const groups: GridGroup<Horizon>[] = useMemo(
@@ -56,7 +58,8 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
     const rows = all.filter((h) => ids.includes(h.id));
     if (!rows.length) return;
     const reopen = rows.every((h) => h.status === "done");
-    patchMany("horizons", rows.map((h) => h.id), reopen ? { status: "active", completed_at: null } : { status: "done", completed_at: stamp() }, reopen ? `${plural(rows.length, "horizon")} current again` : rows.length === 1 ? `“${rows[0].title}” achieved` : `${plural(rows.length, "horizon")} achieved`);
+    // A goal kept by a habit, current again, counts again from today.
+    patchMany("horizons", rows.map((h) => h.id), reopen ? { status: "active", completed_at: null, ...(rows.some((h) => h.since) ? { since: today() } : {}) } : { status: "done", completed_at: stamp() }, reopen ? `${plural(rows.length, "horizon")} current again` : rows.length === 1 ? `“${rows[0].title}” achieved` : `${plural(rows.length, "horizon")} achieved`);
   };
   const reorder = (dir: -1 | 1) => {
     const moved = stepRows(groups, (h) => h.id, (h) => h.sort, (h) => h.status === "active", targets(), dir);
@@ -70,6 +73,7 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
     { id: "hz.rename", row: true, label: "Rename", group: "Horizons", keys: ["f2", "enter"], enabled: Boolean(focus), run: () => focus && setEditing(focus.id) },
     { id: "hz.done", row: true, label: "Mark achieved, or current again", group: "Horizons", keys: ["e"], enabled: Boolean(focus), run: () => toggleDone(targets()) },
     { id: "hz.area", row: true, label: "Set the goal's area", group: "Fields", keys: ["a"], enabled: goals().length > 0, run: () => setArea(ui, goals()) },
+    { id: "hz.length", row: true, label: "Set the goal's length", group: "Fields", keys: ["i"], enabled: goals().length > 0, run: () => pickLength(ui, goals()) },
     { id: "hz.target", row: true, label: "Set target date", group: "Fields", keys: ["s"], enabled: goals().length > 0, run: () => setTarget(ui, goals()) },
     { id: "hz.up", row: true, label: "Move row up", group: "Horizons", keys: ["alt+arrowup"], enabled: Boolean(focus), run: () => reorder(-1) },
     { id: "hz.down", row: true, label: "Move row down", group: "Horizons", keys: ["alt+arrowdown"], enabled: Boolean(focus), run: () => reorder(1) },
@@ -98,8 +102,10 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
         const ids = targets();
         // Gone for good, a goal's projects stop naming it (⌘Z brings both back).
         const linked = getState().projects.filter((p) => p.goal_id && ids.includes(p.goal_id));
+        const habits = getState().checklist_items.filter((i) => i.goal_id && ids.includes(i.goal_id));
         mutate(`${hName(ids)} deleted permanently`, [
           ...linked.map((p): Op => ({ type: "patch", table: "projects", id: p.id, data: { goal_id: null } })),
+          ...habits.map((i): Op => ({ type: "patch", table: "checklist_items", id: i.id, data: { goal_id: null } })),
           ...ids.map((id): Op => ({ type: "delete", table: "horizons", id })),
         ]);
       },
@@ -160,7 +166,37 @@ export function HorizonsView({ regionActive }: { regionActive: boolean }) {
       align: "end",
       // How many active projects serve a goal; a goal with none is said so, quietly.
       blank: (h) => h.kind !== "goal",
-      render: (h) => (h.kind !== "goal" ? null : serving(h.id) ? <span className="num muted-text">{serving(h.id)}</span> : <span className="muted-text">none yet</span>),
+      // A goal kept by a habit may need no project at all (90 days of nofap).
+      render: (h) =>
+        h.kind !== "goal" ? null : serving(h.id) ? (
+          <span className="num muted-text">{serving(h.id)}</span>
+        ) : h.length && keeperOf(s, h.id) ? (
+          <span className="dash" aria-hidden="true">–</span>
+        ) : (
+          <span className="muted-text">none yet</span>
+        ),
+    },
+    {
+      key: "length",
+      label: "Length",
+      width: "104px",
+      align: "end",
+      // A goal kept by a habit counts toward its length ("Day 34 of 90"); one without a habit just has its length.
+      blank: (h) => h.kind !== "goal" || !h.length,
+      render: (h) => {
+        if (h.kind !== "goal" || !h.length) return null;
+        const keeper = keeperOf(s, h.id);
+        const count = keeper && h.status === "active" ? goalCount(s, keeper.item, keeper.repeats, h) : null;
+        return count && keeper ? (
+          <span className="num muted-text" title={`Kept by “${keeper.item.title || "Untitled"}” · ${goalNote(count, keeper.repeats)}`}>
+            {goalLabel(count, keeper.repeats)}
+          </span>
+        ) : (
+          <span className="num muted-text" title={keeper || h.status !== "active" ? undefined : "No habit keeps it yet"}>
+            {lengthLabel(h.length, keeper?.repeats)}
+          </span>
+        );
+      },
     },
     { key: "target", label: "By", width: "100px", drop: 1, blank: (h) => !h.target, render: (h) => <DateCell date={h.target} kind="plain" /> },
   ];

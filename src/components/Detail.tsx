@@ -9,9 +9,9 @@ import { isEditable, runWhenReady, useCommands } from "../keys.ts";
 import { actionRowCommands, askContext, editors, linkAppointment, quickAddNextAction, quickAddWaiting, setProject } from "../actionCommands.tsx";
 import { doneNow, trashNow } from "../fileStuff.ts";
 import { projectEditors } from "../views/ProjectsView.tsx";
-import { aimLabel, atStake, daysLabel, daysText, habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, parseAim, parseDays, progress, progressLabel, repeatsLabel, setAim, setChecklistDay, setDays, stakeLabel, startOver, streak, streakLabel, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
+import { atStake, daysLabel, daysText, habitStats, historyTitle, isTicked, itemsOf, longHistory, openChecklist, parseDays, progress, progressLabel, repeatsLabel, setChecklistDay, setDays, stakeLabel, startOver, streak, streakLabel, goalOf, goalLabel, goalNote, tickItems, touchChecklist, useChecklistDay } from "../checklists.ts";
 import { linkSupport } from "../support.ts";
-import { pickGoal } from "../horizons.ts";
+import { pickGoal, pickHabitGoal } from "../horizons.ts";
 import { joinStuff, splitStuff } from "../views/InboxView.tsx";
 import { NotesArea, type Follow, type NotesApi } from "./NotesArea.tsx";
 import { useAutosave } from "../noteSave.ts";
@@ -237,7 +237,6 @@ const FIELD_COMMAND: Record<string, string> = {
   "Follow up": "Set follow-up date",
   Since: "Set waiting since",
   Chased: "Followed up",
-  "Aim for": "Set the run it aims for",
 };
 
 function PickField({ label, children, onOpen, k }: { label: string; children: ReactNode; onOpen: () => void; k?: string }) {
@@ -1117,7 +1116,9 @@ function ChecklistDetail({ c }: { c: Checklist }) {
               (() => {
                 const done = isTicked(s, i);
                 const n = c.repeats ? streak(s, i, c.repeats) : 0;
-                const run = c.repeats && (n || i.aim) ? `${streakLabel(n, c.repeats) || "None"} in a row${i.aim ? ` of ${i.aim}` : ""}` : "";
+                // A habit keeping a goal counts toward it ("Day 34 of 90"); otherwise its run.
+                const g = c.repeats ? goalOf(s, i, c.repeats) : null;
+                const run = g ? goalLabel(g.count, c.repeats!) : c.repeats && n ? `${streakLabel(n, c.repeats)} in a row` : "";
                 const due = c.repeats ? atStake(s, i, c.repeats) : false;
                 return (
                   <li key={i.id}>
@@ -1228,23 +1229,9 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
       },
     });
   const keepsDays = repeats === "day" && !item.section;
-  // A habit can aim for a run (owner's request): typed as a number, "30" or "30 days".
-  const pickAim = () =>
-    repeats &&
-    ui.openPicker({
-      type: "text",
-      title: "Aim for",
-      current: item.aim ? String(item.aim) : "",
-      preview: (v) => {
-        const a = parseAim(v);
-        if (a === undefined) return { ok: false, text: `Try “30” for ${aimLabel(30, repeats)}` };
-        return { ok: true, text: a ? aimLabel(a, repeats) : "No run aimed for" };
-      },
-      onPick: (v) => {
-        const a = parseAim(v);
-        if (a !== undefined) setAim(item, a, repeats);
-      },
-    });
+  // A habit can keep a Horizons goal (owner's request: 90 days of nofap), counted strictly from the ticks.
+  const goal = item.goal_id ? s.horizons.find((h) => h.id === item.goal_id && h.status !== "trashed") : undefined;
+  const kept = repeats && !item.section ? goalOf(s, item, repeats) : null;
   return (
     <>
       <TextField label={item.section ? "Section" : repeats ? "Habit" : "Item"} value={item.title} onCommit={(v) => patch("checklist_items", item.id, { title: v }, `Renamed ${quote(v)}`)} autoFocus className="field-title" />
@@ -1259,14 +1246,24 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
         </PickField>
       )}
       {repeats && !item.section && (
-        <PickField label="Aim for" k="I" onOpen={pickAim}>
-          {aimLabel(item.aim, repeats)}
+        <PickField label="Goal" k="G" onOpen={() => pickHabitGoal(ui, item)}>
+          {goal ? goal.title || "Untitled goal" : "None"}
         </PickField>
       )}
       {stats && repeats && (
         <>
           <section className="habit-record" aria-label="Record">
             <h3 className="detail-h">Record</h3>
+            {kept ? (
+              <p>
+                {unit === "day" ? "Day" : "Week"} <strong>{kept.count.day}</strong> of {plural(kept.count.of, unit)}
+                <span className="muted-text"> · {goalNote(kept.count, repeats).replace(/^B/, "b")}</span>
+              </p>
+            ) : goal?.status === "done" && goal.completed_at ? (
+              <p>
+                Goal reached <span className="muted-text">{formatLong(goal.completed_at.slice(0, 10))}</span>
+              </p>
+            ) : null}
             <p>
               Done <strong>{stats.kept}</strong> of {plural(stats.of, unit)}
               {rate(stats.kept, stats.of)} since {formatLong(stats.since)}
@@ -1293,12 +1290,6 @@ function ChecklistItemDetail({ item }: { item: ChecklistItem }) {
                 </span>
               </p>
             )}
-            {item.aim ? (
-              <p>
-                Aiming for <strong>{plural(item.aim, unit)}</strong> in a row
-                <span className="muted-text"> · {stats.current >= item.aim ? "reached" : `${plural(item.aim - stats.current, unit)} to go`}</span>
-              </p>
-            ) : null}
           </section>
           {stats.weekdays.length > 0 && (
             <section className="habit-record" aria-label="By weekday">

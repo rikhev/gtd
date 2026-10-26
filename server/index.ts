@@ -342,8 +342,9 @@ function purgeTrash() {
       db.prepare(`DELETE FROM ${t} WHERE id = ?`).run(id);
     }
   }
-  // Goals gone for good leave their projects without a goal (they kept naming it while it was in the Trash).
+  // Goals gone for good leave their projects and habits without a goal (they kept naming it while it was in the Trash).
   db.prepare("UPDATE projects SET goal_id = NULL WHERE goal_id IS NOT NULL AND goal_id NOT IN (SELECT id FROM horizons)").run();
+  db.prepare("UPDATE checklist_items SET goal_id = NULL WHERE goal_id IS NOT NULL AND goal_id NOT IN (SELECT id FROM horizons)").run();
   // A checklist goes for good with its items.
   const gone = db.prepare("SELECT id FROM checklists WHERE status = 'trashed' AND trashed_at IS NOT NULL AND trashed_at < ?").all(cutoff) as { id: string }[];
   for (const { id } of gone) {

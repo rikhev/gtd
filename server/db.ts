@@ -27,9 +27,9 @@ export const COLUMNS: Record<TableName, string[]> = {
   reviews: ["id", "completed_at"],
   appointments: ["id", "project_id", "title", "date", "time", "end_time", "feed", "created_at"],
   checklists: ["id", "title", "notes", "area_id", "status", "sort", "created_at", "updated_at", "finished_at", "trashed_at", "trashed_from", "repeats", "project_id", "repeats_since"],
-  checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at", "days", "aim"],
+  checklist_items: ["id", "checklist_id", "title", "section", "checked_at", "sort", "created_at", "days", "aim", "goal_id"],
   checklist_ticks: ["id", "item_id", "checklist_id", "day", "created_at"],
-  horizons: ["id", "kind", "title", "notes", "area_id", "target", "status", "sort", "created_at", "completed_at", "trashed_at", "trashed_from"],
+  horizons: ["id", "kind", "title", "notes", "area_id", "target", "status", "sort", "created_at", "completed_at", "trashed_at", "trashed_from", "length", "since"],
 };
 
 db.exec(`
@@ -199,6 +199,13 @@ if (!(db.prepare("PRAGMA table_info(checklist_items)").all() as { name: string }
 // A habit can aim for a run (30 days in a row).
 if (!(db.prepare("PRAGMA table_info(checklist_items)").all() as { name: string }[]).some((c) => c.name === "aim")) {
   db.exec("ALTER TABLE checklist_items ADD COLUMN aim INTEGER");
+}
+// A habit can keep a goal (90 days of nofap): the goal's length, and the day its count began.
+if (!(db.prepare("PRAGMA table_info(checklist_items)").all() as { name: string }[]).some((c) => c.name === "goal_id")) {
+  db.exec("ALTER TABLE checklist_items ADD COLUMN goal_id TEXT");
+}
+for (const col of ["length INTEGER", "since TEXT"]) {
+  if (!(db.prepare("PRAGMA table_info(horizons)").all() as { name: string }[]).some((c) => c.name === col.split(" ")[0])) db.exec(`ALTER TABLE horizons ADD COLUMN ${col}`);
 }
 
 // A waiting item keeps when it was last chased and how often; a chase made a next action names the item it chases.

@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { routePath, routeView, setRoute } from "./route.ts";
 import { getMeta, getState, mutate, notify, plural, stamp, uid } from "./store.ts";
 import { addDays, formatLong, fromIso, iso, parseRecurrence, recurrenceLabel, today } from "../shared/dates.ts";
-import type { Checklist, ChecklistItem, ChecklistTick, ID, Op, State } from "../shared/types.ts";
+import type { Checklist, ChecklistItem, ChecklistTick, Horizon, ID, Op, State } from "../shared/types.ts";
 
 /**
  * Checklists, as GTD keeps them: a category of their own, apart from Reference (reminders reviewed again and again,
@@ -327,14 +327,82 @@ export function longHistory(s: Lists, item: ChecklistItem, repeats: Repeats, t =
 
 export const streakLabel = (n: number, repeats: Repeats) => (n ? plural(n, repeats === "day" ? "day" : "week") : "");
 
-/** The run as its column shows it: "5 days", or "5 of 30" while it is short of what the habit aims for. */
-export const runLabel = (n: number, item: Pick<ChecklistItem, "aim">, repeats: Repeats) => (item.aim && n < item.aim ? `${n} of ${item.aim}` : streakLabel(n, repeats));
+/* ---------------- goals kept by a habit ---------------- */
 
-/** "30 days in a row", "12 weeks in a row"; "None" while it aims for no run. */
-export const aimLabel = (aim: number | null | undefined, repeats: Repeats) => (aim ? `${plural(aim, repeats === "day" ? "day" : "week")} in a row` : "None");
+/**
+ * A Horizons goal can be kept by a habit (owner's request: 90 days of nofap, 90 days of workouts on Mon, Wed and Fri).
+ * Its count is strict, unlike the habit's own run: it counts the calendar from the day the attempt began, a missed day
+ * the habit is due starts it again the day after, and a day off is no miss. Today not done yet is no miss until it is
+ * over. Everything is read from the ticks, so ticking a forgotten day repairs the attempt.
+ */
+export function goalCount(s: Lists, item: ChecklistItem, repeats: Repeats, goal: Pick<Horizon, "length" | "since">, t = today()) {
+  const of = goal.length;
+  if (!of || !goal.since) return null;
+  const step = repeats === "day" ? 1 : 7;
+  const done = new Set(s.checklist_ticks.filter((k) => k.item_id === item.id).map((k) => periodOf(k.day, repeats)));
+  const now = periodOf(t, repeats);
+  // The periods from one to another (not counting the last).
+  const span = (a: string, b: string) => Math.round((fromIso(b).getTime() - fromIso(a).getTime()) / (86400000 * step));
+  // The last due period of an attempt: it is reached once that one is done.
+  const lastDue = (a: string) => {
+    let d = addDays(a, (of - 1) * step);
+    while (d > a && !isDue(item, repeats, d)) d = addDays(d, -1);
+    return d;
+  };
+  let from = periodOf(goal.since, repeats);
+  let end = lastDue(from);
+  let tries = 1;
+  let best = 0;
+  let reached: string | null = null;
+  for (let d = from; d <= now && !reached; d = addDays(d, step)) {
+    if (!isDue(item, repeats, d)) continue;
+    if (done.has(d)) {
+      if (d === end) reached = d;
+    } else if (d < now) {
+      best = Math.max(best, span(from, d));
+      from = addDays(d, step);
+      end = lastDue(from);
+      tries++;
+    }
+  }
+  const open = !reached && isDue(item, repeats, now) && !done.has(now);
+  const kept = reached ? of : span(from, now) + (open ? 0 : 1);
+  return { day: reached ? of : Math.min(of, span(from, now) + 1), of, from, tries, best: Math.max(best, kept), reached };
+}
 
-/** "30", "30 days", "12 weeks": the run aimed for; null is none (nothing typed), undefined not understood. */
-export function parseAim(input: string): number | null | undefined {
+/** The habit keeping a goal, on a routine that is in use, if there is one. */
+export function keeperOf(s: Lists, goalId: ID) {
+  for (const item of s.checklist_items) {
+    if (item.goal_id !== goalId || item.section) continue;
+    const list = s.checklists.find((c) => c.id === item.checklist_id && c.status === "active" && c.repeats);
+    if (list) return { item, repeats: list.repeats! };
+  }
+  return null;
+}
+
+/** A goal's count for a habit, while the goal is still to be reached (an achieved goal leaves the habit its plain run). */
+export function goalOf(s: Lists & Pick<State, "horizons">, item: ChecklistItem, repeats: Repeats, t = today()) {
+  const goal = item.goal_id ? s.horizons.find((h) => h.id === item.goal_id && h.status === "active") : undefined;
+  const count = goal ? goalCount(s, item, repeats, goal, t) : null;
+  return goal && count ? { goal, count } : null;
+}
+
+const unitOf = (repeats: Repeats | null | undefined) => (repeats === "week" ? "week" : "day");
+
+/** "Day 34 of 90", "Week 3 of 13". */
+export const goalLabel = (c: { day: number; of: number }, repeats: Repeats) => `${repeats === "day" ? "Day" : "Week"} ${c.day} of ${c.of}`;
+
+/** What a goal's count says on hover: "Began Sat 2026-10-24 · best 41 days · 3rd try". */
+export function goalNote(c: NonNullable<ReturnType<typeof goalCount>>, repeats: Repeats) {
+  const nth = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
+  return [`Began ${formatLong(c.from)}`, c.best > c.day ? `best ${plural(c.best, unitOf(repeats))}` : "", c.tries > 1 ? `${nth(c.tries)} try` : ""].filter(Boolean).join(" · ");
+}
+
+/** A goal's length: "90 days", "13 weeks"; "None" without one. */
+export const lengthLabel = (n: number | null | undefined, repeats: Repeats | null | undefined) => (n ? plural(n, unitOf(repeats)) : "None");
+
+/** "90", "90 days", "13 weeks": a goal's length; null is none (nothing typed), undefined not understood. */
+export function parseLength(input: string): number | null | undefined {
   const t = input.trim().toLowerCase();
   if (!t || t === "none") return null;
   const m = t.match(/^(\d+)(?: ?(?:d|days?|w|wks?|weeks?))?(?: in a row)?$/);
@@ -342,10 +410,21 @@ export function parseAim(input: string): number | null | undefined {
   return n >= 1 && n <= 9999 ? n : n === 0 ? null : undefined;
 }
 
-/** Sets the run a habit aims for (null: none). */
-export function setAim(item: ChecklistItem, aim: number | null, repeats: Repeats) {
-  if ((item.aim ?? null) === aim) return;
-  mutate(aim ? `${itemName([item])} aims for ${aimLabel(aim, repeats)}` : `${itemName([item])} aims for no run`, [{ type: "patch", table: "checklist_items", id: item.id, data: { aim } }]);
+/**
+ * Where a habit's count begins when it takes on a goal: the start of its unbroken run of ticks up to today (a habit
+ * kept for 12 days already is on day 13), else today.
+ */
+export function runStart(s: Lists, item: ChecklistItem, repeats: Repeats, t = today()): string {
+  const step = repeats === "day" ? 1 : 7;
+  const done = new Set(s.checklist_ticks.filter((k) => k.item_id === item.id).map((k) => periodOf(k.day, repeats)));
+  const now = periodOf(t, repeats);
+  let start = now;
+  for (let d = now, n = 0; n < 5000; d = addDays(d, -step), n++) {
+    if (!isDue(item, repeats, d)) continue;
+    if (done.has(d)) start = d;
+    else if (d < now) break;
+  }
+  return start;
 }
 
 /** A square of the strip, named for its hover: "Tue 29 Sep: done", "Week of 21 Sep: not done", "Sun 27 Sep: a day off". */
@@ -474,6 +553,18 @@ export function tickItems(ids: ID[], day: string | null = null) {
   );
   const past = r && day ? ` ${dayWords(day, r)}` : "";
   let label = tick ? `${itemName(change)} ticked${past}` : `${itemName(change)} unticked${past}`;
+  // The tick that completes a goal's length marks the goal achieved, in the same ⌘Z; the habit carries on.
+  const reached: string[] = [];
+  if (tick && r) {
+    const after = { ...s, checklist_ticks: [...s.checklist_ticks, ...ops.flatMap((o) => (o.type === "create" && o.table === "checklist_ticks" ? [o.row as unknown as ChecklistTick] : []))] };
+    for (const i of change) {
+      const g = goalOf(after, i, r, today());
+      if (g?.count.reached) {
+        ops.push({ type: "patch", table: "horizons", id: g.goal.id, data: { status: "done", completed_at: at } });
+        reached.push(`“${g.goal.title || "Untitled goal"}” achieved`);
+      }
+    }
+  }
   if (tick && list) {
     const p = progress(s, list.id, t);
     // A habit ticked on its day off finishes nothing: the day's run is the habits due on it.
@@ -484,7 +575,7 @@ export function tickItems(ids: ID[], day: string | null = null) {
       label = r ? `${title(list)}: all ${p.total} done ${dayWords(day, r)}` : `${title(list)}: all ${p.total} ticked. Start over when you run it again.`;
     }
   }
-  mutate(label, ops);
+  mutate([label, ...reached].join(" · "), ops);
 }
 
 function itemName(items: ChecklistItem[]) {

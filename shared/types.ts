@@ -198,8 +198,10 @@ export interface ChecklistItem {
    * misses. Null is every day.
    */
   days?: string | null;
-  /** On a routine, the run a habit aims for: 30 (days, or weeks on a weekly routine) in a row. Null aims for none. */
+  /** Retired (a goal's length took its place); kept in the data but no longer shown. */
   aim?: number | null;
+  /** On a routine, the Horizons goal this habit keeps (90 days of nofap), if any. */
+  goal_id?: ID | null;
 }
 
 /**
@@ -221,6 +223,9 @@ export interface Horizon {
   completed_at: string | null;
   trashed_at?: string | null;
   trashed_from?: string | null;
+  /** A goal kept by a habit: how long it runs (90, in days or, on a weekly routine, weeks), and the day its count began. */
+  length?: number | null;
+  since?: string | null;
 }
 
 /** One day a habit (an item on a repeating checklist) was done. */
