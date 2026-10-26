@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import type { Command } from "./keys.ts";
 import type { CalEvent } from "./calendarFeed.ts";
 import type { UI } from "./ui.tsx";
-import { quote, completeActions, getState, isChase, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
+import { quote, completeActions, followUpOps, getState, isChase, mutate, named, newAction, newProject, notify, patchMany, reopenActions, stamp, uid, areaLabel, bareArea } from "./store.ts";
 import type { Action, ActionStatus, ID, Op } from "../shared/types.ts";
 import { addMonths, daysBetween, formatLong, parseRecurrence, recurrenceLabel, today, formatTime } from "../shared/dates.ts";
 
@@ -296,6 +296,12 @@ export function areaItems() {
 
 const n = (ids: ID[]) => named("actions", ids, "action");
 
+/** 2 → "2nd", 3 → "3rd", 11 → "11th": how many times a waiting item has been chased. */
+export function ordinal(k: number) {
+  const tail = k % 100 >= 11 && k % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][k % 10] ?? "th");
+  return `${k}${tail}`;
+}
+
 /* Field editors shared by list keys and the detail pane. */
 export function editors(ui: UI) {
   const actions = (ids: ID[]) => getState().actions.filter((a) => ids.includes(a.id));
@@ -384,6 +390,27 @@ export function editors(ui: UI) {
     person(ids: ID[]) {
       if (!ids.length) return;
       askPerson(ui, one(ids)?.person ?? null, (who) => patchMany("actions", ids, { person: who }, who ? `${n(ids)} → ${who}'s agenda` : `${n(ids)}: no one`));
+    },
+    /**
+     * Q: followed up (chased) on waiting items. It is logged on each (the day, how many times, a dated line in its
+     * notes), then asks when to chase again; Esc leaves it with no follow-up date.
+     */
+    followedUp(ids: ID[]) {
+      const ops = followUpOps(ids);
+      if (!ops.length) return notify("Only a Waiting For item can be followed up.");
+      const done = ops.map((op) => (op as { id: ID }).id);
+      const a = one(done);
+      mutate(`Followed up on ${n(done)}${a?.chases ? ` · ${ordinal(a.chases + 1)} time` : ""}`, ops);
+      api.nextFollowUp(done);
+    },
+    /** When to chase again, after a follow-up. */
+    nextFollowUp(ids: ID[]) {
+      ui.openPicker({
+        type: "date",
+        title: "Follow up again on",
+        current: null,
+        onPick: (d) => d && patchMany("actions", ids, { followup: d }, `${n(ids)}: follow-up ${formatLong(d)}`),
+      });
     },
     delegate(ids: ID[]) {
       if (!ids.length) return;
@@ -522,7 +549,8 @@ export function editors(ui: UI) {
  * The keys a row that is an action answers to, the same on every list that shows actions (Next Actions, Waiting For,
  * Someday, Agendas, Done, the Calendar, the Weekly Review's steps), so a letter means one thing wherever the action
  * is: Enter opens it, U jumps to its project, F2 renames, V moves, ⇧P makes it a project, C P S D M G R B O set its
- * fields (S sets the date: the follow-up on a waiting item, the day to do it otherwise; D the due date), ⇧F delegates, Delete trashes and ⇧Delete
+ * fields (S sets the date: the follow-up on a waiting item, the day to do it otherwise; D the due date), Q logs a follow-up on
+ * a waiting item, ⇧F delegates, Delete trashes and ⇧Delete
  * deletes for good. Each list adds its own verbs (new, done, reorder) and leaves out with `skip` what it does its
  * own way. `targets` names the actions to act on: a heading under the cursor says so instead of doing nothing.
  */
@@ -568,6 +596,8 @@ export function actionRowCommands(
       : { id: "row.date", label: "Set the day to do it", group: "Fields", keys: ["s"], run: () => ed.date(ids(), "defer") },
     { id: "row.due", label: "Set due date", group: "Fields", keys: ["d"], run: () => ed.date(ids(), "due") },
     ...(waiting ? [{ id: "row.since", label: "Set waiting since", group: "Fields", keys: ["i"], run: () => ed.date(ids(), "waiting_since") }] : []),
+    // Q logs a follow-up wherever a waiting item is, To chase on Next Actions included.
+    { id: "row.chased", label: "Followed up", group: "Fields", keys: ["q"], enabled: focus?.status === "waiting", run: () => ed.followedUp(ids()) },
     // M for minutes: T and W add, everywhere (owner's decision after the critique found T editing here and adding elsewhere).
     { id: "row.time", label: "Set time estimate", group: "Fields", keys: ["m"], run: () => ed.time(ids()) },
     { id: "row.energy", label: "Set energy", group: "Fields", keys: ["g"], run: () => ed.energy(ids()) },
@@ -717,7 +747,8 @@ export function useActionCommands(opts: {
 /**
  * A follow-up that is due is itself a next action in GTD ("@calls Chase Anna about the NDA"). T on a chase words it,
  * asks its context, and files it in the waiting item's project; the waiting item stays in Waiting For, its follow-up
- * date handed over to the new action (so the chase isn't listed twice). One ⌘Z undoes both.
+ * date handed over to the new action (so the chase isn't listed twice). One ⌘Z undoes both. Done, the new action
+ * logs the follow-up on the waiting item, as Q does.
  */
 export function chaseAction(ui: UI, w: Action) {
   ui.openPicker({
@@ -730,7 +761,7 @@ export function chaseAction(ui: UI, w: Action) {
       window.setTimeout(() =>
         askContext(ui, `Context for “${title}”`, (context_id, extra) => {
           // No due date: the follow-up was a reminder, not a deadline (GTD keeps hard dates for what must happen).
-          const a = newAction({ title, context_id, project_id: w.project_id, status: "next" });
+          const a = newAction({ title, context_id, project_id: w.project_id, status: "next", chase_of: w.id });
           mutate(`“${title}” added · follow-up handed over`, [...extra, { type: "create", table: "actions", row: { ...a } }, { type: "patch", table: "actions", id: w.id, data: { followup: null } }]);
         }),
       );

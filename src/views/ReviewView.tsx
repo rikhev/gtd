@@ -272,7 +272,7 @@ export function ReviewView({ regionActive }: { regionActive: boolean }) {
             kind: "action",
             id: a.id,
             title: a.title,
-            info: `${a.waiting_who ?? "?"}${a.waiting_since ? ` · ${waitedFor(daysBetween(a.waiting_since, t))}` : ""}`,
+            info: `${a.waiting_who ?? "?"}${a.waiting_since ? ` · ${waitedFor(daysBetween(a.waiting_since, t))}` : ""}${a.chases ? ` · chased ${a.chases === 1 ? "once" : `${a.chases} times`}` : ""}`,
             date: a.followup,
             note: actionNote(a),
           }));

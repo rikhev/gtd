@@ -24,6 +24,11 @@ export interface Action {
   person?: string | null;
   waiting_since: string | null;
   followup: string | null;
+  /** A waiting item's last follow-up (the day you chased it, YYYY-MM-DD) and how many times it has been chased. */
+  chased?: string | null;
+  chases?: number | null;
+  /** A chase made a next action (T on a chase): the waiting item it chases. Done, it logs the follow-up there. */
+  chase_of?: ID | null;
   recurrence: string | null;
   bring_back: string | null;
   sort: number;

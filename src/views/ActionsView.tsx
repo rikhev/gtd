@@ -162,6 +162,7 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       who: (a) => a.waiting_who,
       since: (a) => a.waiting_since,
       follow: (a) => a.followup,
+      chased: (a) => a.chased,
       back: (a) => a.bring_back,
       when: (a) => a.completed_at,
       area: (a) => {
@@ -543,6 +544,8 @@ export function ActionsView({ mode, regionActive }: { mode: Mode; regionActive: 
       ...(groupBy === "who" ? [] : [{ key: "who", label: "Waiting on", width: "132px", render: (a: Action) => a.waiting_who || <span className="dash" aria-hidden="true">–</span> }]),
       { key: "since", label: "Since", width: "100px", drop: 1, render: (a) => <DateCell date={a.waiting_since} kind="plain" /> },
       { key: "follow", label: "Follow up", width: "100px", blank: (a) => !a.followup, render: (a) => <DateCell date={a.followup} kind="followup" /> },
+      // When it was last chased (Q logs it): what has been done for it, at a glance.
+      { key: "chased", label: "Chased", width: "100px", drop: 1, blank: (a) => !a.chased, render: (a) => <DateCell date={a.chased ?? null} kind="plain" /> },
       projCol,
       { ...ctxCol, optional: true },
       { ...dueCol, optional: true },

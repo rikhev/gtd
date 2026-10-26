@@ -49,7 +49,7 @@ action("Review the granulator maintenance manual draft", { context_id: ctx["@off
 
 action("Signed NDA back from Nordplast", { project_id: P.shred, status: "waiting", waiting_who: "Anna Lind", waiting_since: day(-12), followup: day(-2) });
 action("Quote for the Autodesk renewal", { project_id: P.cad, status: "waiting", waiting_who: "Reseller", waiting_since: day(-4), followup: day(3) });
-action("Tax statement from the bank", { project_id: P.tax, status: "waiting", waiting_who: "Handelsbanken", waiting_since: day(-6) });
+action("Tax statement from the bank", { project_id: P.tax, status: "waiting", waiting_who: "Handelsbanken", waiting_since: day(-6), chased: day(-1), chases: 1, notes: `${day(-1)} · Followed up` });
 
 action("Learn to weld", { status: "someday" });
 action("Kayak the Stockholm archipelago", { status: "someday", bring_back: day(120) });

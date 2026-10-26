@@ -236,6 +236,7 @@ const FIELD_COMMAND: Record<string, string> = {
   With: "Set who it's with",
   "Follow up": "Set follow-up date",
   Since: "Set waiting since",
+  Chased: "Followed up",
   "Aim for": "Set the run it aims for",
 };
 
@@ -447,7 +448,7 @@ function ActionDetail({ a }: { a: Action }) {
         focusId: a.id,
         group: "Details",
         waiting: a.status === "waiting",
-        skip: ["row.open", "row.rename", "row.context", "row.project", "row.date", "row.due", "row.since", "row.time", "row.energy", "row.repeat", "row.bringback", "row.person"],
+        skip: ["row.open", "row.rename", "row.context", "row.project", "row.date", "row.due", "row.since", "row.time", "row.energy", "row.repeat", "row.bringback", "row.person", "row.chased"],
       }).map((c) => ({ ...c, row: false })),
     ],
     { priority: 21, active: paneActive },
@@ -461,11 +462,11 @@ function ActionDetail({ a }: { a: Action }) {
   // doesn't need still shows while it holds something, so nothing set is hidden.
   const NEEDS: Record<string, string[]> = {
     next: ["context", "doon", "due", "time", "energy", "repeat", "person"],
-    waiting: ["who", "followup", "since", "due"],
+    waiting: ["who", "followup", "since", "due", "chased"],
     someday: ["context", "back"],
   };
   const needs = new Set((NEEDS[kind] ?? NEEDS.next).filter((f) => !(done && ["doon", "repeat", "back"].includes(f))));
-  const has: Record<string, unknown> = { context: a.context_id, doon: a.defer, due: a.due, time: a.time_min, energy: a.energy, repeat: a.recurrence, back: a.bring_back, person: a.person, who: a.waiting_who, followup: a.followup, since: a.waiting_since };
+  const has: Record<string, unknown> = { context: a.context_id, doon: a.defer, due: a.due, time: a.time_min, energy: a.energy, repeat: a.recurrence, back: a.bring_back, person: a.person, who: a.waiting_who, followup: a.followup, since: a.waiting_since, chased: a.chased };
   const shown = (f: string) => needs.has(f) || Boolean(has[f]);
   const fields: [string, ReactNode][] = [
     [
@@ -555,17 +556,24 @@ function ActionDetail({ a }: { a: Action }) {
         {a.waiting_since ? formatLong(a.waiting_since) : none}
       </PickField>,
     ],
+    [
+      // The last follow-up and how many there have been; Q logs another (each also a dated line in the notes).
+      "chased",
+      <PickField key="chased" label="Chased" k={a.status === "waiting" ? "Q" : undefined} onOpen={() => ed.followedUp([a.id])}>
+        {a.chased ? `${formatLong(a.chased)}${(a.chases ?? 0) > 1 ? ` · ${a.chases}×` : ""}` : none}
+      </PickField>,
+    ],
   );
   // One grid for every kind (owner's request): a field keeps its place whatever the item is. Row by row: what it
   // belongs to and who or where; when it comes up for you (the day to do it, follow up, or bring back) beside when it
-  // is due; time and energy; how it recurs (or, waiting, since when) beside who it is with. A row keeps an empty cell
+  // is due; time and energy; how it recurs beside who it is with (or, waiting, since when beside when it was last chased). A row keeps an empty cell
   // rather than letting a field slide across, so Due is always on the right. Fields this kind doesn't need but that
   // hold a value follow.
   const rows: [string | null, string | null][] = [
     ["project", waiting ? "who" : "context"],
     [waiting ? "followup" : kind === "someday" ? "back" : "doon", "due"],
     ["time", "energy"],
-    [waiting ? "since" : "repeat", waiting ? null : "person"],
+    [waiting ? "since" : "repeat", waiting ? "chased" : "person"],
   ];
   const byKey = new Map(fields);
   const visible = (f: string | null): f is string => f !== null && (f === "project" || shown(f));

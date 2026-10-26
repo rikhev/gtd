@@ -224,7 +224,7 @@ async function send(ops: Op[]): Promise<boolean> {
 function dropStaleWaiting(ops: Op[]): Op[] {
   return ops.map((op) =>
     op.type === "patch" && op.table === "actions" && (op.data.status === "next" || op.data.status === "someday")
-      ? { ...op, data: { waiting_who: null, waiting_since: null, followup: null, ...op.data } }
+      ? { ...op, data: { waiting_who: null, waiting_since: null, followup: null, chased: null, chases: null, ...op.data } }
       : op,
   );
 }
@@ -426,9 +426,29 @@ export function named(table: "actions" | "projects" | "stuff" | "refs", ids: ID[
   return quote(raw);
 }
 
+/**
+ * Followed up (chased) on waiting items: each keeps the day and how many times, and its notes get a dated line, so what
+ * has been done for it can be read back. The follow-up date has done its job and is cleared (the item leaves To chase).
+ */
+export function followUpOps(ids: ID[]): Op[] {
+  const t = today();
+  return ids
+    .map((id) => find("actions", id))
+    .filter((a): a is Action => Boolean(a && a.status === "waiting"))
+    .map((a) => ({
+      type: "patch",
+      table: "actions",
+      id: a.id,
+      data: { chased: t, chases: (a.chases ?? 0) + 1, followup: null, notes: `${a.notes.trimEnd()}${a.notes.trim() ? "\n" : ""}${t} · Followed up` },
+    }));
+}
+
 export function completeActions(ids: ID[]) {
   const ops: Op[] = [];
   let spawned = 0;
+  // A chase made a next action, done, is the follow-up done: it is logged on the waiting item it chases.
+  const chased = [...new Set(ids.map((id) => find("actions", id)).filter((a) => a && a.status !== "done" && a.chase_of).map((a) => a!.chase_of!))];
+  const chaseOps = followUpOps(chased);
   for (const id of ids) {
     const a = find("actions", id);
     if (!a || a.status === "done") continue;
@@ -475,7 +495,14 @@ export function completeActions(ids: ID[]) {
     ops.push({ type: "patch", table: "actions", id: next.id, data: { status: "next", context_id: ctx } });
     promoted.push(next);
   }
-  mutate(`${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}${promoted.length === 1 ? ` · next up: “${promoted[0].title}”` : promoted.length ? ` · ${promoted.length} planned steps now current` : ""}`, ops);
+  ops.push(...chaseOps);
+  const chasedIds = chaseOps.map((op) => (op as { id: ID }).id);
+  mutate(
+    `${named("actions", ids, "action")} done${spawned ? ` · ${spawned} recurring scheduled` : ""}${promoted.length === 1 ? ` · next up: “${promoted[0].title}”` : promoted.length ? ` · ${promoted.length} planned steps now current` : ""}${chasedIds.length ? ` · followed up on ${named("actions", chasedIds, "item")}` : ""}`,
+    ops,
+  );
+  // Then when to chase again, as Q asks (the screen that has the picker answers).
+  if (chasedIds.length) window.dispatchEvent(new CustomEvent("gtd:followedup", { detail: chasedIds }));
 }
 
 /**

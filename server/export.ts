@@ -20,6 +20,7 @@ function actionLine(s: State, a: Action): string {
   if (a.energy) bits.push(["", "low", "medium", "high"][a.energy] + " energy");
   if (a.waiting_who) bits.push(`waiting on ${a.waiting_who} since ${a.waiting_since ?? "?"}`);
   if (a.followup) bits.push(`follow up ${a.followup}`);
+  if (a.chased) bits.push(`chased ${a.chases === 1 ? "once" : `${a.chases} times`}, last ${a.chased}`);
   if (a.recurrence) {
     const r = parseRecurrence(a.recurrence);
     if (r) bits.push(recurrenceLabel(r).toLowerCase());

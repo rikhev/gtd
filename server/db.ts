@@ -16,7 +16,7 @@ export const COLUMNS: Record<TableName, string[]> = {
   actions: [
     "id", "title", "notes", "project_id", "context_id", "due", "defer", "time_min", "energy", "flagged",
     "status", "waiting_who", "waiting_since", "followup", "recurrence", "bring_back", "sort", "created_at", "completed_at", "updated_at",
-    "done_from", "archived_at", "trashed_at", "trashed_from", "person",
+    "done_from", "archived_at", "trashed_at", "trashed_from", "person", "chased", "chases", "chase_of",
   ],
   projects: ["id", "title", "outcome", "notes", "area_id", "status", "due", "bring_back", "sort", "created_at", "completed_at", "archived_at", "trashed_at", "trashed_from", "start", "purpose", "ideas", "goal_id"],
   stuff: ["id", "text", "kind", "status", "created_at", "processed_at", "trashed_at", "trashed_from", "back_kind", "back_id"],
@@ -201,6 +201,11 @@ if (!(db.prepare("PRAGMA table_info(checklist_items)").all() as { name: string }
   db.exec("ALTER TABLE checklist_items ADD COLUMN aim INTEGER");
 }
 
+// A waiting item keeps when it was last chased and how often; a chase made a next action names the item it chases.
+for (const [name, col] of [["chased", "chased TEXT"], ["chases", "chases INTEGER"], ["chase_of", "chase_of TEXT"]]) {
+  if (!(db.prepare("PRAGMA table_info(actions)").all() as { name: string }[]).some((c) => c.name === name)) db.exec(`ALTER TABLE actions ADD COLUMN ${col}`);
+}
+
 /** Owner preferences kept on the server (so every browser agrees). */
 export function getSetting(key: string, fallback: string): string {
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | undefined;
@@ -255,8 +260,8 @@ if (getSetting("doOnDates", "0") !== "1") {
 }
 
 // Actions back on Next or Someday no longer wait on anyone; clear what earlier versions left behind.
-db.exec(`UPDATE actions SET waiting_who = NULL, waiting_since = NULL, followup = NULL
-  WHERE status IN ('next', 'someday') AND (waiting_who IS NOT NULL OR waiting_since IS NOT NULL OR followup IS NOT NULL)`);
+db.exec(`UPDATE actions SET waiting_who = NULL, waiting_since = NULL, followup = NULL, chased = NULL, chases = NULL
+  WHERE status IN ('next', 'someday') AND (waiting_who IS NOT NULL OR waiting_since IS NOT NULL OR followup IS NOT NULL OR chased IS NOT NULL OR chases IS NOT NULL)`);
 
 // Red belongs to trouble (overdue, stalled, errors), so contexts no longer use it.
 db.exec(`UPDATE contexts SET color = '#536877' WHERE lower(color) = '#c0392b'`);

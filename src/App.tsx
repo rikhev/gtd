@@ -11,7 +11,7 @@ import { UIContext, VIEW_TITLES, type PickerSpec, type Region, type Target, type
 import { Rail, RAIL, PhoneChrome, CaptureBar, SearchBox, Toast, Palette, paletteScope, useHeldModifier } from "./components/Chrome.tsx";
 import { DropZone } from "./components/DropZone.tsx";
 import { endPrint, preparePrint } from "./print.ts";
-import { quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
+import { editors, quickAddNextAction, quickAddWaiting } from "./actionCommands.tsx";
 import { TrashView, rowsOf as trashRows } from "./views/TrashView.tsx";
 import { DoneView } from "./views/DoneView.tsx";
 import { AgendasView } from "./views/AgendasView.tsx";
@@ -554,6 +554,13 @@ export default function App() {
     }),
     [view, go, region, detail, detailTrail, detailPinned, setDetailPinned, picker, searchQuery, revealTarget, viewer],
   );
+
+  // A chase done as a next action is a follow-up logged on its waiting item: ask when to chase again, as Q does.
+  useEffect(() => {
+    const on = (e: Event) => window.setTimeout(() => editors(ui).nextFollowUp((e as CustomEvent<string[]>).detail));
+    window.addEventListener("gtd:followedup", on);
+    return () => window.removeEventListener("gtd:followedup", on);
+  }, [ui]);
 
   const phone = usePhone();
   // On a phone the rail is its own screen, so only the desktop's can be hidden.
